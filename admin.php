@@ -980,6 +980,9 @@ if ($tab === 'upgrade' || $tab === 'security') {
             <p class="sw-label">错一次后要求验证码</p>
             <p class="sw-desc" id="capModeDesc">
               <?= setting('login_captcha', '1') === '1' ? '已开启：第一次输错密码后出现验证码' : '已关闭：输错多少次都只提示密码错误' ?>
+              <?php if (!function_exists('imagecreatetruecolor')): ?>
+                <br>⚠ 当前 PHP 没有 GD 扩展，验证码图片生成不出来 —— 这个开关即使打开也不会生效，登录时不会要求验证码。装好 gd 后自动恢复。
+              <?php endif; ?>
             </p>
           </div>
           <label class="switch">
