@@ -50,7 +50,12 @@ $skipDirs = ['.git', '.workbuddy', 'data', 'node_modules', '__pycache__'];
    留着只会让人误以为站点里有什么需要跑一下。 */
 $skipFiles = ['inc/config.php', '.DS_Store', 'Thumbs.db', 'build.php',
               '.gitattributes', '.gitignore', 'release.php'];
-$skipExt = ['log', 'tmp', 'bak', 'db', 'db-wal', 'db-shm'];
+$skipExt = ['log', 'tmp', 'bak', 'db', 'db-wal', 'db-shm',
+            /* zip 绝对不能进包：交付物本身就是 zip，源码目录里一旦留下
+               上一次的打包产物（vnav.zip / vnav-V1.x.x.zip），下一包就会
+               把它整个塞进去 —— 体积直接翻倍，解压后站点根还多出一个
+               装着旧代码的压缩包，用户根本分不清该用哪个。 */
+            'zip'];
 
 $files = [];
 $it = new RecursiveIteratorIterator(
