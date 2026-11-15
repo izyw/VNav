@@ -1,0 +1,8 @@
+# 统一用 LF 存进仓库，避免 Windows 上 checkout 后再提交时整文件「全变」。
+* text=auto eol=lf
+
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff2 binary
+*.zip   binary
