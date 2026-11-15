@@ -1,0 +1,728 @@
+<?php
+/**
+ * 主页 —— 服务端直出，首屏无需等 JS。
+ *
+ * v1.2.0 的变化：
+ *   1) 登录后可在前台直接编辑：拖动排序、就地改名改址、删除、切隐藏，
+ *      不再跳后台。编辑模式由顶栏铅笔按钮或 Ctrl+E 开关。
+ *   2) 右下角常驻一条快捷键提示（可永久关闭），Ctrl+/ 有完整面板。
+ *   3) 品牌名统一 Vnav。
+ */
+declare(strict_types=1);
+define('HP_ROOT', __DIR__);
+
+/* 简写路径兜底：/admin、/login 这类「不带 .php」的地址。
+   Apache/Nginx 正常配置下不会走到这里（它们按文件匹配，找不到就 404），
+   但 PHP 内置服务器把 /admin 当成 index.php + PATH_INFO=/admin，
+   于是打开的是主页 —— 用户看到「输 admin 打不到登录界面」正是这个原因。
+   这里识别到 PATH_INFO 是已知入口名就 302 过去。
+   只认白名单，不做任意转发（否则等于开了个开放重定向）。 */
+$__pi = trim((string)($_SERVER['PATH_INFO'] ?? ''), '/');
+if ($__pi !== '') {
+    $__shortcuts = ['admin' => 'admin.php', 'login' => 'login.php', 'install' => 'install.php'];
+    if (isset($__shortcuts[$__pi])) {
+        header('Location: ' . $__shortcuts[$__pi], true, 302);
+        exit;
+    }
+}
+unset($__pi, $__shortcuts);
+
+require __DIR__ . '/inc/boot.php';
+require __DIR__ . '/inc/analytics.php';
+require __DIR__ . '/inc/acl.php';
+
+// 访问控制先于一切：被拦的请求不该建 session、不该查库、不该记统计。
+$__isAdmin = is_logged_in();   // 能编辑（登录即可）
+$__isSuper = is_admin();       // 真正的管理员：后台 / 统计 / 访问控制
+$__ip      = hp_client_ip();
+$__acl     = hp_acl_check($__ip, $__isAdmin);
+if (!$__acl['allow']) {
+    // 拦截也留一条记录，否则管理员看不到「有人被挡在外面」
+    hp_log_visit(false, 'blocked');
+    hp_acl_deny((string)$__acl['country']);
+}
+
+hp_compress_start(6);
+
+// 只接受白名单值：数据库里若是历史遗留的脏值，直接回退默认，
+// 否则 html[data-theme='...'] 匹配不到任何规则，整站变量全空（白屏）。
+$layout   = hp_layout_safe(setting('layout', 'card'));
+// 皮肤白名单来自 inc/skins.php —— 单一真源，新增皮肤不必改这里
+$theme    = hp_skin_safe(setting('theme', 'atlas'));
+$accent   = setting('accent', 'amber');
+$accent   = in_array($accent, ['amber', 'coral', 'mint', 'sky', 'violet'], true) ? $accent : 'amber';
+$title    = setting('site_title', 'Vnav');
+$newTab   = setting('open_new_tab', '1') === '1';
+$showDesc = setting('show_desc', '1') === '1';
+$showSrch = setting('show_search', '1') === '1';
+// 引擎白名单来自 inc/engines.php
+$engine   = hp_engine_safe(setting('search_engine', 'bing'));
+$engines  = hp_engines();
+$footer   = setting('footer_note', '');
+// 分组导航：side（左侧）/ tab（顶部标签）/ ''（不启用）
+$groupnav = hp_groupnav_safe(setting('groupnav', 'tab'));
+
+/* 一次查询取全部链接，分组在 PHP 里归并（比 N+1 次查询快得多）。
+   隐藏链接在这里就过滤掉：游客的 HTML 里根本不会出现这些卡片，
+   所以「隐藏」是真的隐藏，而不是靠 CSS 藏起来。 */
+$dataUid = hp_data_uid();
+
+$sql = 'SELECT id, group_id, title, url, icon, icon_kind, descr, hits, hidden
+          FROM links WHERE user_id = ?';
+/* 游客看的是站点默认，里面可能有 admin 设为隐藏的链接 —— 那些不能给游客。
+   登录用户（含 admin）看的是自己那一份，隐藏与否都返回，前台照旧打角标。 */
+if (!is_logged_in()) {
+    $sql .= ' AND hidden = 0';
+}
+$sql .= ' ORDER BY sort ASC, id ASC';
+
+$st = db()->prepare($sql);
+$st->execute([$dataUid]);
+$rows = $st->fetchAll();
+
+$st = db()->prepare('SELECT id, name, icon FROM groups WHERE user_id = ? ORDER BY sort ASC, id ASC');
+$st->execute([$dataUid]);
+$groups = $st->fetchAll();
+
+$byGroup = [];
+foreach ($rows as $r) {
+    $byGroup[(int)($r['group_id'] ?? 0)][] = $r;
+}
+
+// 未分组排最后显示（如果存在分组）
+$ordered = [];
+foreach ($groups as $g) {
+    $gid = (int)$g['id'];
+    if (!empty($byGroup[$gid])) {
+        $ordered[] = [
+            'id'    => $gid,
+            'name'  => $g['name'],
+            // 后台选过的图标优先，空则前台按组名自动匹配（见 hp_group_icon）
+            'icon'  => (string)($g['icon'] ?? ''),
+            'items' => $byGroup[$gid],
+        ];
+    }
+}
+if (!empty($byGroup[0])) {
+    $ordered[] = ['id' => 0, 'name' => count($ordered) ? '未分组' : '', 'icon' => '', 'items' => $byGroup[0]];
+}
+
+// 只有一个分组时，组内导航没有意义，直接不渲染（少一层视觉噪音）
+$useNav = $groupnav !== '' && count($ordered) > 1;
+
+$action  = $engines[$engine]['url'];
+$layouts = hp_layouts();
+$skins   = hp_skins();
+
+// 记一次访问。放在查询之后：统计失败绝不该影响页面渲染，
+// 而且这里已经确认请求能正常走到业务逻辑。
+hp_log_visit(false, '/');
+?>
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="<?= h($theme) ?>" data-accent="<?= h($accent) ?>" data-layout="<?= h($layout) ?>"<?= $useNav ? ' data-gnav="' . h($groupnav) . '"' : '' ?>>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="<?= h($title) ?>">
+<title><?= h($title) ?></title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<?php /* 字体预载只在真正会用到时才发：这两个 woff2 合计 71KB，
+         是首屏最大的两块资源。用 crossorigin 是字体请求的硬要求
+         （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
+<link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/app.css?v=39">
+<?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
+          （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
+          改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
+          body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
+<link rel="stylesheet" href="assets/home.css?v=39">
+<?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
+         它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
+         属性选择器」与「后加载」双重压过 home.css 的结构规则。
+         顺序反了，它就只能改到颜色，改不动结构。 */ ?>
+<link rel="stylesheet" href="assets/skin-atlas.css?v=39">
+<link rel="stylesheet" href="assets/skin-frame.css?v=47">
+<?php if ($__isAdmin): ?>
+<meta name="csrf" content="<?= h(csrf_token()) ?>">
+<?php endif; ?>
+<script>
+/* 偏好要在首屏之前定，否则会先渲染默认形态/皮肤再被 JS 改，出现明显闪烁。
+   这里放一段同步内联脚本，读 localStorage 后立刻写 documentElement.dataset
+   —— 早于 CSS 首帧。白名单从 PHP 注入，新增皮肤不必回来改这段。 */
+(function () {
+  var el = document.documentElement;
+  window.__VNAV = { guest: <?= is_logged_in() ? 'false' : 'true' ?> };
+  try {
+    /* 改名迁移：存储键从 vlinks.* 换成 vnav.*。
+       老用户浏览器里还留着旧键，不搬过来的话，升级后皮肤、布局、
+       引擎选择会全部回到默认 —— 看起来像「设置被重置了」。
+       搬完就删旧键，只跑一次，之后这里是空转。 */
+    for (var i = 0, ks = ['theme', 'layout', 'nav', 'engine', 'tip']; i < ks.length; i++) {
+      var oldKey = 'vlinks.' + ks[i], newKey = 'vnav.' + ks[i];
+      var ov = localStorage.getItem(oldKey);
+      if (ov !== null) {
+        if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, ov);
+        localStorage.removeItem(oldKey);
+      }
+    }
+
+    var keys = <?= json_encode(hp_skin_keys(), JSON_UNESCAPED_UNICODE) ?>;
+    var t = localStorage.getItem('vnav.theme');
+    if (t && keys.indexOf(t) !== -1) el.dataset.theme = t;
+
+    var lkeys = <?= json_encode(hp_layout_keys(), JSON_UNESCAPED_UNICODE) ?>;
+    var l = localStorage.getItem('vnav.layout');
+    if (l && lkeys.indexOf(l) !== -1) el.dataset.layout = l;
+
+    /* 侧栏收起态。和皮肤一样必须在首帧前定，否则会先画出 240px 的
+       侧栏再跳成 68px，主区卡片跟着抖一下。 */
+    if (localStorage.getItem('vnav.nav') === 'mini') el.dataset.nav = 'mini';
+  } catch (e) {}
+})();
+</script>
+</head>
+<body class="hp <?= $__isAdmin ? 'is-admin' : 'is-guest' ?>">
+
+<div class="aurora" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<?php /* 应用壳。Atlas 皮肤下它是 display:contents（完全不参与布局，
+           与改造前逐像素一致）；「程序框」皮肤下它变成一张带边框的圆角
+           容器，顶栏 / 侧栏 / 主区在框内排成三块。 */ ?>
+<div class="shell">
+
+<header class="topbar">
+  <?php /* 三栏栅格：站点名 | 搜索（绝对居中） | 工具。
+           搜索框必须居中而不是靠 margin:auto 挤 —— margin:auto 会让它
+           的位置随左右两侧宽度变化，窗口一窄就偏。用 grid 的
+           1fr auto 1fr 让中间那格永远在正中。 */ ?>
+  <a class="brand" href="./" aria-label="<?= h($title) ?> 首页">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+    </span>
+    <span class="brand-text"><?= h($title) ?></span>
+  </a>
+
+  <?php if ($showSrch): ?>
+    <?php /* 搜索区：左边引擎切换按钮 + 右边输入框，视觉上拼成一个整体。
+             引擎按钮用 <button> 而非 <a>，因为它是「选引擎」不是「去搜索」。 */ ?>
+    <div class="search-wrap">
+      <div class="tb-menu eng-menu" data-menu="engine">
+        <button class="eng-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="mEngine">
+          <span class="eng-logo" data-eng-logo="<?= h($engine) ?>" aria-hidden="true">
+            <?= hp_engine_logo_html($engine, 20) ?>
+          </span>
+          <svg class="tbm-caret" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="sr-only">切换搜索引擎，当前 <?= h($engines[$engine]['label']) ?></span>
+        </button>
+        <div class="tbm-panel tbm-panel--eng" id="mEngine" role="listbox" aria-label="搜索引擎" hidden>
+          <?php foreach ($engines as $ek => $en):
+            $on = $ek === $engine; ?>
+            <button class="tbm-opt" type="button" role="option" data-engine-set="<?= h($ek) ?>"
+                    data-engine-url="<?= h($en['url']) ?>"
+                    <?= $on ? 'data-engine-default-mark="1"' : '' ?>
+                    aria-selected="<?= $on ? 'true' : 'false' ?>">
+              <span class="tbo-ico eng-logo eng-logo--sm" data-eng-logo="<?= h($ek) ?>" aria-hidden="true">
+                <?= hp_engine_logo_html($ek, 24) ?>
+              </span>
+              <span class="tbo-body">
+                <span class="tbo-name"><?= h($en['label']) ?></span>
+                <span class="tbo-hint tbo-hint--default"<?= $on ? '' : ' hidden' ?>>站点默认引擎</span>
+              </span>
+              <svg class="tbo-check" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
+            </button>
+          <?php endforeach; ?>
+          <?php if ($__isAdmin): ?>
+            <?php /* 登录后多一个「设为默认」入口：不必跑后台就能改默认引擎。
+                     游客看不到这一项，因为它需要写设置，游客没有权限。 */ ?>
+            <div class="tbm-sep" role="separator"></div>
+            <button class="tbm-opt tbm-opt--act" type="button" data-engine-default>
+              <span class="tbo-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 6.2 6.4.5-4.9 4.3 1.5 6.3L12 16.9 6.4 20.3l1.5-6.3L3 9.7l6.4-.5z"/></svg>
+              </span>
+              <span class="tbo-body"><span class="tbo-name">把当前引擎设为默认</span></span>
+            </button>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <form class="search" role="search" action="<?= h($action) ?>" method="get" target="_blank">
+        <label for="q" class="sr-only">搜索</label>
+        <svg class="search-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
+        <input id="q" name="q" type="search" placeholder="搜索 <?= h($engines[$engine]['label']) ?>" autocomplete="off" enterkeyhint="search">
+        <?php /* 快捷键提示：Homepage / Dashy 这些起始页都有，用户不用翻
+                 快捷键面板就知道能按 Ctrl+K。聚焦后它淡出，把位置让给输入。
+                 窄屏隐藏 —— 手机没有物理键盘，它只会挡住文字。 */ ?>
+        <kbd class="search-kbd" aria-hidden="true">Ctrl K</kbd>
+      </form>
+    </div>
+  <?php endif; ?>
+
+  <?php /* 布局与皮肤各收成一个下拉按钮。v1.1.0 起按钮上只留图标：
+           文字进 sr-only，屏幕阅读器仍能读到，视觉上只占 44×44。
+           功能一个没少 —— 下拉里依然有名称与说明。 */ ?>
+  <div class="tb-tools">
+
+    <div class="tb-menu" data-menu="layout">
+      <button class="tbm-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="mLayout" title="展示形态：<?= h($layouts[$layout]['label']) ?>">
+        <span class="tbm-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><?= $layouts[$layout]['svg'] ?></svg>
+        </span>
+        <span class="sr-only">展示形态，当前 <?= h($layouts[$layout]['label']) ?></span>
+      </button>
+      <div class="tbm-panel" id="mLayout" role="listbox" aria-label="展示形态" hidden>
+        <?php foreach ($layouts as $k => $lo):
+          $on = $k === $layout; ?>
+          <button class="tbm-opt" type="button" role="option" data-layout-set="<?= h($k) ?>"
+                  aria-selected="<?= $on ? 'true' : 'false' ?>">
+            <span class="tbo-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?= $lo['svg'] ?></svg>
+            </span>
+            <span class="tbo-body">
+              <span class="tbo-name"><?= h($lo['name']) ?></span>
+              <span class="tbo-hint"><?= h($lo['hint']) ?></span>
+            </span>
+            <svg class="tbo-check" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <div class="tb-menu" data-menu="theme">
+      <button class="tbm-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="mTheme" title="界面皮肤：<?= h($skins[$theme]['label']) ?>">
+        <span class="tbm-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><?= $skins[$theme]['svg'] ?></svg>
+        </span>
+        <span class="sr-only">界面皮肤，当前 <?= h($skins[$theme]['label']) ?></span>
+      </button>
+      <div class="tbm-panel" id="mTheme" role="listbox" aria-label="界面皮肤" hidden>
+        <?php
+        // 初始 aria-selected 必须由服务端算好：硬编码后再靠 JS 修正，
+        // 首屏会出现「选中态错位」的闪烁（截图抓到过）。
+        foreach ($skins as $tk => $sk):
+          $on = $tk === $theme; ?>
+          <button class="tbm-opt" type="button" role="option" data-theme-set="<?= h($tk) ?>"
+                  aria-selected="<?= $on ? 'true' : 'false' ?>">
+            <span class="tbo-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?= $sk['svg'] ?></svg>
+            </span>
+            <span class="tbo-body">
+              <span class="tbo-name"><?= h($sk['label']) ?></span>
+              <span class="tbo-hint"><?= h($sk['hint']) ?></span>
+            </span>
+            <svg class="tbo-check" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <?php /* 编辑模式开关。对**所有访问者**开放：
+             登录用户改的是自己账号里的数据，游客改的是本机沙盒 ——
+             两者在 UI 上走同一条路径，区别只在保存位置。 */ ?>
+    <?php /* 放这里而不是后台：
+               用户要求「在主页上直接改」，这一颗就是那个入口。
+               Ctrl+E 同效。
+               图标用一条「铅笔 + 斜杠」的复合形状切换：实心时是铅笔，
+               再点变成「关」，避免用户不知道该点哪里退出。
+               具体由 CSS 的 [aria-pressed] 控制显示哪一枚。 */ ?>
+      <button class="tbm-btn tbm-btn--edit" id="editToggle" type="button"
+              aria-pressed="false" title="编辑模式（Ctrl+E）">
+        <span class="tbm-ico tbm-ico--on" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        </span>
+        <span class="tbm-ico tbm-ico--off" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </span>
+        <span class="sr-only" id="editToggleLabel">编辑模式</span>
+      </button>
+      <?php if ($__isSuper): /* 后台只有 admin 能进；普通账号这里什么都不输出 */ ?>
+      <a class="btn-admin" href="admin.php" title="管理后台">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.55 1z"/></svg>
+        <span class="sr-only">管理后台</span>
+      </a>
+      <?php endif; ?>
+    <?php if (!$__isAdmin): ?>
+      <?php /* 游客 / 普通账号的登录入口。
+               v1.2.2 之前这里什么都没有 —— 用户只能自己去敲 admin.php，
+               而且敲 /admin 还会落到主页（PATH_INFO 被忽略），
+               等于「没有入口也没有捷径」。现在补一颗明确的按钮。
+               窄屏只留图标（文字进 sr-only 会让按钮变成无字方块，
+               所以这里用 CSS 隐藏文字 span，图标 + aria-label 仍然达意）。 */ ?>
+      <a class="tbm-btn tbm-btn--login" href="login.php" title="登录管理后台">
+        <span class="tbm-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        </span>
+        <span class="tbm-login-text">登录</span>
+      </a>
+    <?php endif; ?>
+  </div>
+</header>
+
+    <?php if ($useNav): ?>
+    <?php /* 左侧侧边栏：点击平滑滚动到分组锚点，滚动时高亮当前组。
+              V1.3.8 起每一项都带图标 —— 分类是用户自建的，没有现成图标，
+              所以按组名匹配 inc/groupnav.php 里的内置图标库；
+              一列纯文字的分类栏没有视觉锚点，扫起来很累。
+              图标只加在侧栏，顶部标签保持纯文字（横排更紧凑）。 */ ?>
+    <nav class="gnav gnav--side" id="gnav" data-mode="side" aria-label="分组导航">
+      <?php /* 头部单独一行：分组标题 + 收起按钮。
+               收起后侧栏只剩图标（68px），主区跟着铺开 —— 这是
+               Linear / Notion 的做法，也是「侧栏占地方」这个矛盾
+               唯一能由用户自己解除的开关。 */ ?>
+      <div class="gnav-head">
+        <p class="gnav-title">分组</p>
+        <button class="gnav-fold" type="button" data-nav-fold aria-expanded="true"
+                aria-controls="gnav" aria-label="收起侧栏" title="收起侧栏">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5L8 12l5.5 5.5"/><path d="M18.5 6.5L13 12l5.5 5.5" opacity=".38"/></svg>
+        </button>
+      </div>
+      <div class="gnav-track">
+        <?php foreach ($ordered as $gi => $g):
+          $nm = $g['name'] !== '' ? $g['name'] : '全部'; ?>
+          <a class="gnav-item<?= $gi === 0 ? ' is-active' : '' ?>" href="#g<?= $gi ?>"
+             data-gjump="<?= $gi ?>" data-group="<?= (int)$g['id'] ?>"
+             aria-current="<?= $gi === 0 ? 'true' : 'false' ?>"
+             title="<?= h($nm) ?>">
+            <span class="gnav-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($nm, (string)($g['icon'] ?? '')) ?></svg>
+            </span>
+            <span class="gnav-name"><?= h($nm) ?></span>
+            <span class="gnav-count"><?= count($g['items']) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </div>
+
+      <?php /* 侧栏最下方：版本 + 版权。
+               署名与链接来自后台设置（author_name / author_github）。
+               没填 GitHub 时只显示纯文本 —— 不留一个点不动的假链接。 */ ?>
+      <div class="gnav-foot">
+        <span class="gnav-ver"><?= h(hp_version()) ?></span>
+        <?php if (trim(setting('author_github', '')) !== ''): ?>
+          <a class="gnav-copy" href="<?= h(trim(setting('author_github', ''))) ?>"
+             target="_blank" rel="noopener noreferrer"
+             title="GitHub">© <?= date('Y') ?> <?= h(setting('author_name') !== '' ? setting('author_name') : setting('site_title', 'Vnav')) ?></a>
+        <?php else: ?>
+          <span class="gnav-copy">© <?= date('Y') ?> <?= h(setting('author_name') !== '' ? setting('author_name') : setting('site_title', 'Vnav')) ?></span>
+        <?php endif; ?>
+      </div>
+    </nav>
+    <?php endif; ?>
+
+<main class="stage" id="stage">
+
+  <?php if (!$ordered): ?>
+    <div class="empty">
+      <p class="empty-title">这里还没有东西</p>
+      <p class="empty-sub"><?= $__isAdmin ? '按 Ctrl+V 粘贴任意网址，或者进「管理」页添加。' : '登录后即可添加你的常用站点。' ?></p>
+      <?php /* 普通账号进不了后台，所以这里不能指 admin.php（会 403）。
+               登录后回到首页，用顶栏的编辑按钮或 Ctrl+V 添加。 */ ?>
+      <a class="btn-primary" href="<?= $__isAdmin ? './' : 'login.php' ?>"><?= $__isAdmin ? '去添加' : '登录开始' ?></a>
+    </div>
+  <?php else: ?>
+
+    <div class="groups">
+      <?php
+      /* 每个 <section> 的可访问名只能有一个来源，否则 HTML 里会出现
+         两个 aria-labelledby（后一个被忽略，语义就错了）。
+         V1.3.0：导航统一成「目录」，不再有 tabpanel 语义 —— 所有分组
+         同时可见，标签只是跳转入口。所以这里统一走 aria-labelledby 指 h2，
+         组名是空的（唯一分组）才退回 aria-label。 */
+      foreach ($ordered as $gi => $g):
+        if ($g['name'] !== '') {
+          $a11y = 'aria-labelledby="gh' . $gi . '"';
+        } else {
+          $a11y = 'aria-label="未分组链接"';
+        }
+      ?>
+        <section class="group" id="g<?= $gi ?>" <?= $a11y ?>>
+          <?php if ($g['name'] !== ''): ?>
+            <div class="group-head">
+              <h2 id="gh<?= $gi ?>" class="group-name"><?= h($g['name']) ?></h2>
+              <span class="group-count"><?= count($g['items']) ?></span>
+              <span class="group-rule" aria-hidden="true"></span>
+            </div>
+          <?php endif; ?>
+
+          <ul class="links" data-group="<?= (int)$g['id'] ?>">
+            <?php foreach ($g['items'] as $i => $l):
+              $host = host_of($l['url']);
+              $hue  = hue_of($host);
+              $init = initials_of($l['title']);
+              $isHidden = (int)($l['hidden'] ?? 0) === 1;
+              // 图标文件可能被手动清理/迁移丢失，先确认存在再输出，
+              // 否则页面会留一个破图空框。缺失时自动降级为首字母头像。
+              $hasIcon = $l['icon'] !== ''
+                  && $l['icon_kind'] === 'file'
+                  && is_file(HP_ROOT . '/' . $l['icon']);
+            ?>
+              <li class="link-item<?= $isHidden ? ' is-hidden-link' : '' ?>" style="--i:<?= $i ?>;--hue:<?= $hue ?>" data-id="<?= (int)$l['id'] ?>"
+                  <?php if ($__isAdmin): ?>
+                  data-title="<?= h($l['title']) ?>"
+                  data-url="<?= h($l['url']) ?>"
+                  data-descr="<?= h($l['descr']) ?>"
+                  data-group="<?= (int)($l['group_id'] ?? 0) ?>"
+                  data-hidden="<?= $isHidden ? '1' : '0' ?>"
+                  data-icon="<?= h($l['icon']) ?>"
+                  <?php endif; ?>>
+                <?php /* 拖动把手：只在编辑模式显示。放在 <a> 外面，
+                         否则拖拽时会触发链接跳转（踩过）。 */ ?>
+                <?php if ($__isAdmin): ?>
+                  <span class="drag-handle" aria-hidden="true" tabindex="-1">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+                  </span>
+                <?php endif; ?>
+                <a class="link" href="<?= h($l['url']) ?>" <?= $newTab ? 'target="_blank" rel="noopener noreferrer"' : '' ?>
+                   data-href="<?= h($l['url']) ?>">
+                  <span class="link-icon<?= $hasIcon ? ' has-img' : '' ?>" aria-hidden="true">
+                    <?php if ($hasIcon): ?>
+                      <?php /* 图标是首屏视觉的一部分，且只有几 KB：一律 eager。
+                               用 lazy 会让首屏出现一片空白方块（无头截图与
+                               部分浏览器下尤其明显），得不偿失。 */ ?>
+                      <img src="<?= h($l['icon']) ?>" alt="" width="24" height="24" decoding="async">
+                    <?php else: ?>
+                      <span class="initials"><?= h($init) ?></span>
+                    <?php endif; ?>
+                  </span>
+                  <span class="link-body">
+                    <span class="link-title"><?= h($l['title']) ?></span>
+                    <?php if ($showDesc): ?>
+                      <span class="link-sub"><?= h($l['descr'] !== '' ? $l['descr'] : $host) ?></span>
+                    <?php endif; ?>
+                  </span>
+                  <?php if ($isHidden): ?>
+                    <?php /* 只有登录后才可能看到这个角标，所以它本身就是「私密」提示 */ ?>
+                    <span class="link-priv" title="隐藏链接，仅登录可见" aria-label="隐藏链接">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+                    </span>
+                  <?php endif; ?>
+                  <?php if ($__isAdmin): ?>
+                    <span class="link-edit" data-edit="<?= (int)$l['id'] ?>" role="button" tabindex="0" aria-label="编辑 <?= h($l['title']) ?>">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                    </span>
+                  <?php endif; ?>
+                </a>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        </section>
+      <?php endforeach; ?>
+
+      <?php if ($footer !== ''): ?>
+        <footer class="foot"><?= h($footer) ?></footer>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
+</main>
+</div>
+
+<?php if ($__isAdmin): ?>
+<!-- 粘贴添加浮层：默认隐藏，Ctrl+V 触发。游客态整块不输出，
+     所以未登录的人连这个 DOM 都拿不到，谈不上绕过。 -->
+<div class="paste-scrim" id="pasteScrim" hidden></div>
+<div class="paste-box" id="pasteBox" role="dialog" aria-modal="true" aria-labelledby="pasteTitle" hidden>
+  <div class="paste-head">
+    <h2 id="pasteTitle">快速添加</h2>
+    <button type="button" class="paste-close" id="pasteClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <form class="paste-form" id="pasteForm" novalidate>
+    <div class="paste-preview">
+      <span class="link-icon paste-icon" id="pasteIcon" aria-hidden="true"><span class="initials">…</span></span>
+      <div class="paste-preview-text">
+        <span class="paste-status" id="pasteStatus" aria-live="polite">正在识别…</span>
+        <span class="paste-host" id="pasteHost"></span>
+      </div>
+    </div>
+
+    <label class="f-label" for="pUrl">网址</label>
+    <input class="f-input" id="pUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
+
+    <label class="f-label" for="pTitle">名称</label>
+    <input class="f-input" id="pTitle" name="title" type="text" required maxlength="60" autocomplete="off">
+
+    <label class="f-label" for="pGroup">分组</label>
+    <select class="f-input" id="pGroup" name="group_id">
+      <option value="0">未分组</option>
+      <?php foreach ($groups as $g): ?>
+        <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+      <?php endforeach; ?>
+    </select>
+
+    <?php /* 隐藏开关：滑块。默认关（公开），因为绝大多数链接是给
+             自己看的公开收藏，把「隐藏」做成默认会让人莫名其妙
+             看不到自己刚加的链接。 */ ?>
+    <div class="switch-row switch-row--tight">
+      <div>
+        <p class="sw-label">隐藏链接</p>
+        <p class="sw-desc" id="pHideDesc">关闭时所有访客可见</p>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pHidden" name="hidden">
+        <span class="sw-track" aria-hidden="true"></span>
+        <span class="sr-only">隐藏链接（仅登录后可见）</span>
+      </label>
+    </div>
+
+    <p class="f-error" id="pasteError" role="alert" hidden></p>
+
+    <div class="paste-actions">
+      <button type="button" class="btn-ghost" id="pasteCancel">取消</button>
+      <button type="submit" class="btn-primary" id="pasteSave">
+        <span class="btn-text">添加</span>
+        <span class="spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ 就地编辑浮层 ============
+     卡片上点铅笔走这里，不再跳后台。表单字段和后台那个编辑器
+     保持一致，但少了「分组下拉以外的所有跳转」。 -->
+<div class="paste-scrim" id="editScrim" hidden></div>
+<div class="paste-box edit-box" id="editBox" role="dialog" aria-modal="true" aria-labelledby="editTitle" hidden>
+  <div class="paste-head">
+    <h2 id="editTitle">编辑链接</h2>
+    <button type="button" class="paste-close" id="editClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <form class="paste-form" id="editForm" novalidate>
+    <input type="hidden" id="eId" value="">
+
+    <div class="paste-preview">
+      <span class="link-icon paste-icon" id="editIcon" aria-hidden="true"><span class="initials">…</span></span>
+      <div class="paste-preview-text">
+        <span class="paste-status" id="editStatus">可直接改，改完回车保存</span>
+        <span class="paste-host" id="editHost"></span>
+      </div>
+    </div>
+
+    <label class="f-label" for="eUrl">网址</label>
+    <input class="f-input" id="eUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
+
+    <label class="f-label" for="eTitle">名称</label>
+    <input class="f-input" id="eTitle" name="title" type="text" required maxlength="60" autocomplete="off">
+
+    <label class="f-label" for="eGroup">分组</label>
+    <select class="f-input" id="eGroup" name="group_id">
+      <option value="0">未分组</option>
+      <?php foreach ($groups as $g): ?>
+        <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+      <?php endforeach; ?>
+    </select>
+
+    <div class="switch-row switch-row--tight">
+      <div>
+        <p class="sw-label">隐藏链接</p>
+        <p class="sw-desc" id="eHideDesc">关闭时所有访客可见</p>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="eHidden" name="hidden">
+        <span class="sw-track" aria-hidden="true"></span>
+        <span class="sr-only">隐藏链接（仅登录后可见）</span>
+      </label>
+    </div>
+
+    <p class="f-error" id="editError" role="alert" hidden></p>
+
+    <div class="paste-actions paste-actions--split">
+      <button type="button" class="btn-danger btn-del" id="editDelete">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        删除
+      </button>
+      <div class="paste-actions-right">
+        <button type="button" class="btn-ghost" id="editCancel">取消</button>
+        <button type="submit" class="btn-primary" id="editSave">
+          <span class="btn-text">保存</span>
+          <span class="spinner" hidden aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ============ 快捷键面板（Ctrl+/） ============ -->
+<div class="paste-scrim" id="keysScrim" hidden></div>
+<div class="keys-box" id="keysBox" role="dialog" aria-modal="true" aria-labelledby="keysTitle" hidden>
+  <div class="paste-head">
+    <h2 id="keysTitle">键盘快捷键</h2>
+    <button type="button" class="paste-close" id="keysClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="keys-body">
+    <section class="keys-sec">
+      <h3>添加与搜索</h3>
+      <dl class="keys-list">
+        <div><dt><kbd>Ctrl</kbd><kbd>V</kbd></dt><dd>粘贴网址，直接添加（只在登录后生效）</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>K</kbd></dt><dd>聚焦搜索框</dd></div>
+        <div><dt><kbd>/</kbd></dt><dd>聚焦搜索框（同 Ctrl+K）</dd></div>
+        <div><dt><kbd>Enter</kbd></dt><dd>搜索框内直接搜索</dd></div>
+      </dl>
+    </section>
+    <section class="keys-sec">
+      <h3>编辑</h3>
+      <dl class="keys-list">
+        <div><dt><kbd>Ctrl</kbd><kbd>E</kbd></dt><dd>开关编辑模式（拖动排序、就地改）</dd></div>
+        <div><dt>按住卡片拖动</dt><dd>换位置，松手即保存（手机上长按约 0.3 秒再拖）</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>S</kbd></dt><dd>保存当前编辑</dd></div>
+        <div><dt><kbd>Alt</kbd><kbd>↑</kbd> / <kbd>Alt</kbd><kbd>↓</kbd></dt><dd>把选中的链接上移 / 下移一位</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>Z</kbd></dt><dd>撤销最近一次移动 / 拖动排序 / 删除</dd></div>
+        <div><dt><kbd>Esc</kbd></dt><dd>关掉弹层 / 取消编辑（保留已输入内容）</dd></div>
+      </dl>
+    </section>
+    <section class="keys-sec">
+      <h3>其他</h3>
+      <dl class="keys-list">
+        <div><dt><kbd>Ctrl</kbd><kbd>/</kbd></dt><dd>打开这个面板</dd></div>
+        <div><dt><kbd>?</kbd></dt><dd>同 Ctrl+/</dd></div>
+        <div><dt><kbd>Tab</kbd></dt><dd>依次跳到下一个可操作元素</dd></div>
+        <div><dt><kbd>Enter</kbd></dt><dd>在输入框内：有下一个输入框就跳过去，没有就保存</dd></div>
+      </dl>
+    </section>
+  </div>
+  <p class="keys-foot">输入框内按 Esc 先清空再退出；有未保存改动时会先问一句。</p>
+</div>
+
+<!-- ============ 右下角提示（可永久关闭） ============ -->
+<?php
+/* 只在登录后提示「Ctrl+V 添加」—— 游客按了也加不了，
+   提示他一个做不到的操作只会让人困惑。 */
+?>
+<?php if ($__isAdmin): ?>
+<div class="tip-bubble" id="tipBubble" hidden>
+  <button type="button" class="tip-x" id="tipClose" aria-label="关闭提示">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <p class="tip-title">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M8 10h8M8 14h5"/></svg>
+    按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 直接添加链接
+  </p>
+  <p class="tip-sub">复制任意网址，回到这里粘一下就行。按 <kbd>Ctrl</kbd>+<kbd>/</kbd> 看全部快捷键。</p>
+  <div class="tip-act">
+    <button type="button" class="tip-more" id="tipKeys">看快捷键</button>
+    <button type="button" class="tip-never" id="tipNever">不再提示</button>
+  </div>
+</div>
+<?php endif; ?>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="assets/ui.js?v=39" defer></script>
+<script src="assets/guest.js?v=50" defer></script>
+<script src="assets/app.js?v=39" defer></script>
+<?php else: ?>
+<?php /* 另一个分支（没有分组 / 没有内容）也把三个脚本全加载：
+         guest.js 要负责把本地沙盒里的数据画出来，
+         app.js 负责编辑模式 —— 少了任何一个，这类页面就是只读的。 */ ?>
+<script src="assets/ui.js?v=39" defer></script>
+<script src="assets/guest.js?v=50" defer></script>
+<script src="assets/app.js?v=39" defer></script>
+<?php endif; ?>
+
+</body>
+</html>

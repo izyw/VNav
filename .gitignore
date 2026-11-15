@@ -1,0 +1,23 @@
+# 本地配置：含站点密钥与管理员密码散列，绝不能进仓库。
+# 首次安装由 install.php 从 inc/config.sample.php 生成。
+/inc/config.php
+
+# 运行时数据：数据库、WAL 文件、抓取的站点图标缓存。
+# data/.htaccess 是安全配置，必须保留在仓库里。
+/data/home.db
+/data/home.db-shm
+/data/home.db-wal
+/data/icons/*
+/data/backup/
+/data/snapshots/
+
+# 打包产物
+*.zip
+
+# 发布凭证（见 docs/发布.md）
+/.release-token
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini

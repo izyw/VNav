@@ -1,0 +1,2180 @@
+/* ==========================================================================
+   vnav —— 浏览器主页
+   设计基调：深夜书房。暖琥珀作为唯一强调色，背景是有纵深的墨紫→炭黑渐变，
+   叠一层极淡噪点防色带，卡片用毛玻璃浮起。记忆点＝首屏标题的逐字上浮 + 卡片
+   入场时的错峰揭示（stagger），以及切换形态时整个栅格的形变过渡。
+   ========================================================================== */
+
+/* ---------- 字体 ---------- */
+@font-face {
+  font-family: 'Bricolage';
+  src: url('fonts/bricolage.woff2') format('woff2-variations'),
+       url('fonts/bricolage.woff2') format('woff2');
+  font-weight: 200 800;
+  font-display: swap;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Instrument';
+  src: url('fonts/instrument.woff2') format('woff2-variations'),
+       url('fonts/instrument.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+/* ---------- 主题变量 ---------- */
+:root {
+  --font-display: 'Bricolage', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Instrument', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  /* 键帽专用：等宽才看得出「Ctrl + V 是两个键」 */
+  --font-mono: 'Instrument', ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 26px;
+
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --dur: .38s;
+
+  --pad-x: clamp(16px, 4vw, 56px);
+  --maxw: 1280px;
+}
+
+/* 强调色五选一，只用 --acc 系列。
+   注意：强调色只是「点缀」，皮肤（data-theme）决定整体明暗与底色。
+   任何皮肤下切换强调色，正文对比度都不受影响——这是分层的意义。 */
+[data-accent='amber']  { --acc: #f0b429; --acc-2: #ffd166; --acc-ink: #2b1c00; --acc-glow: 240 180 41; }
+[data-accent='coral']  { --acc: #ff7a5c; --acc-2: #ffa48e; --acc-ink: #35100a; --acc-glow: 255 122 92; }
+[data-accent='mint']   { --acc: #4ade9e; --acc-2: #86efc4; --acc-ink: #00291a; --acc-glow: 74 222 158; }
+[data-accent='sky']    { --acc: #5aa9ff; --acc-2: #8cc6ff; --acc-ink: #00172e; --acc-glow: 90 169 255; }
+[data-accent='violet'] { --acc: #b18cff; --acc-2: #cdb4ff; --acc-ink: #1c0a3d; --acc-glow: 177 140 255; }
+
+/* 浅色皮肤下强调色要压深，否则黄/青在米底上对比不足 4.5。
+   这不是审美微调，是硬指标：按钮上的字必须读得清。
+
+   关键：data-accent 与 data-theme 都挂在 <html> 同一个元素上，
+   所以这里必须用「同元素双属性」选择器，不能写成
+   html[data-theme='paper'] [data-accent='amber']（后代选择器）——
+   那是找 html 内部的子元素，永远匹配不到，实测踩过。
+   同时 specificity 要压过上面的单属性规则，否则不生效。 */
+html[data-theme='paper'][data-accent='amber'],
+html[data-theme='celadon'][data-accent='amber'] { --acc: #96650f; --acc-2: #b3781a; --acc-ink: #fffdf8; --acc-glow: 150 101 15; }
+html[data-theme='paper'][data-accent='coral'],
+html[data-theme='celadon'][data-accent='coral'] { --acc: #c04a2c; --acc-2: #d96a4a; --acc-ink: #fff8f5; --acc-glow: 192 74 44; }
+html[data-theme='paper'][data-accent='mint'],
+html[data-theme='celadon'][data-accent='mint'] { --acc: #1f8a5c; --acc-2: #2ba874; --acc-ink: #f2fff9; --acc-glow: 31 138 92; }
+html[data-theme='paper'][data-accent='sky'],
+html[data-theme='celadon'][data-accent='sky'] { --acc: #2369b8; --acc-2: #3a83d4; --acc-ink: #f5faff; --acc-glow: 35 105 184; }
+html[data-theme='paper'][data-accent='violet'],
+html[data-theme='celadon'][data-accent='violet'] { --acc: #6a44b8; --acc-2: #8560d0; --acc-ink: #faf7ff; --acc-glow: 106 68 184; }
+
+/* ==========================================================================
+   皮肤变量。五套：paper（纸白）/ night（深夜）/ celadon（护眼）/ cyber（赛博）/ auto。
+   每套都必须给全变量——漏一个 var() 就落空，页面会局部变白。
+   auto 的语义是「跟随系统」：默认按 night 渲染，系统偏好浅色时由
+   下面的 prefers-color-scheme 媒体查询切到 paper。
+   ========================================================================== */
+
+/* 深夜书房（默认）—— 墨紫底，绝不是纯灰 */
+html,
+html[data-theme='night'],
+html[data-theme='auto'] {
+  --bg-0: #0d0a13;
+  --bg-1: #14101d;
+  --bg-2: #1b1526;
+  --surface: rgba(30, 24, 42, .62);
+  --surface-solid: #1a1424;
+  --surface-hi: rgba(46, 38, 62, .78);
+  --line: rgba(255, 255, 255, .085);
+  --line-hi: rgba(255, 255, 255, .16);
+  --text: #f4efe6;
+  --text-2: #bbb2c8;
+  --text-3: #8e8599;
+  --shadow: 0 20px 46px -22px rgba(0, 0, 0, .92);
+  --shadow-hi: 0 30px 70px -26px rgba(0, 0, 0, .96);
+  --spot-1: rgba(120, 78, 200, .30);
+  --spot-2: rgba(240, 180, 41, .13);
+  --grain-op: .035;
+  --card-blur: blur(14px) saturate(140%);
+}
+
+/* 纸白 —— 暖米底，不是白。纯白在夜里看久了发刺，米黄能压住屏幕的冷 */
+html[data-theme='paper'] {
+  --bg-0: #f4ede1;
+  --bg-1: #fbf6ec;
+  --bg-2: #ebe0cf;
+  --surface: rgba(255, 253, 248, .82);
+  --surface-solid: #fffdf8;
+  --surface-hi: rgba(255, 255, 255, .97);
+  --line: rgba(70, 52, 32, .14);
+  --line-hi: rgba(70, 52, 32, .26);
+  --text: #241c14;
+  --text-2: #5b4f42;
+  --text-3: #6b5d4d;
+  --shadow: 0 16px 36px -20px rgba(90, 66, 36, .40);
+  --shadow-hi: 0 26px 56px -24px rgba(90, 66, 36, .48);
+  --spot-1: rgba(214, 158, 46, .16);
+  --spot-2: rgba(160, 120, 220, .10);
+  --grain-op: .022;
+  --card-blur: blur(10px) saturate(120%);
+}
+
+/* 护眼青瓷 —— 低蓝光绿调。故意避开那种发灰的「护眼绿」，
+   走青瓷釉面的方向：底是浅豆绿，卡片是更亮的暖白绿。 */
+html[data-theme='celadon'] {
+  --bg-0: #e4ead9;
+  --bg-1: #eef3e4;
+  --bg-2: #d8e0ca;
+  --surface: rgba(248, 251, 241, .84);
+  --surface-solid: #f6f9ef;
+  --surface-hi: rgba(255, 255, 252, .97);
+  --line: rgba(50, 68, 38, .15);
+  --line-hi: rgba(50, 68, 38, .27);
+  --text: #26301f;
+  --text-2: #4e5c44;
+  --text-3: #5a6849;
+  --shadow: 0 16px 36px -20px rgba(52, 70, 40, .34);
+  --shadow-hi: 0 26px 56px -24px rgba(52, 70, 40, .42);
+  --spot-1: rgba(120, 170, 90, .18);
+  --spot-2: rgba(90, 150, 170, .12);
+  --grain-op: .020;
+  --card-blur: blur(10px) saturate(115%);
+}
+
+/* 赛博朋克 —— 近乎纯黑底 + 霓虹青主光 + 洋红副光。
+   这里允许高饱和，因为目标就是「酷炫」，但仍保证正文 18:1 对比。 */
+html[data-theme='cyber'] {
+  --bg-0: #05060e;
+  --bg-1: #0a0c18;
+  --bg-2: #10121f;
+  --surface: rgba(12, 16, 34, .66);
+  --surface-solid: #0b0e1c;
+  --surface-hi: rgba(22, 30, 58, .82);
+  --line: rgba(0, 240, 255, .16);
+  --line-hi: rgba(0, 240, 255, .34);
+  --text: #e8f6ff;
+  --text-2: #9fb3cc;
+  --text-3: #71869f;
+  --shadow: 0 20px 46px -22px rgba(0, 240, 255, .18);
+  --shadow-hi: 0 30px 70px -26px rgba(255, 0, 128, .22);
+  --spot-1: rgba(0, 240, 255, .20);
+  --spot-2: rgba(255, 0, 128, .16);
+  --grain-op: .03;
+  --card-blur: blur(14px) saturate(160%);
+}
+
+/* 跟随系统：系统开浅色 → 当作 paper */
+@media (prefers-color-scheme: light) {
+  html[data-theme='auto'] {
+    --bg-0: #f4ede1;
+    --bg-1: #fbf6ec;
+    --bg-2: #ebe0cf;
+    --surface: rgba(255, 253, 248, .82);
+    --surface-solid: #fffdf8;
+    --surface-hi: rgba(255, 255, 255, .97);
+    --line: rgba(70, 52, 32, .14);
+    --line-hi: rgba(70, 52, 32, .26);
+    --text: #241c14;
+    --text-2: #5b4f42;
+    --text-3: #6b5d4d;
+    --shadow: 0 16px 36px -20px rgba(90, 66, 36, .40);
+    --shadow-hi: 0 26px 56px -24px rgba(90, 66, 36, .48);
+    --spot-1: rgba(214, 158, 46, .16);
+    --spot-2: rgba(160, 120, 220, .10);
+    --grain-op: .022;
+    --card-blur: blur(10px) saturate(120%);
+  }
+  /* 浅色系统下 auto 也要压低强调色 */
+  html[data-theme='auto'][data-accent='amber']  { --acc: #96650f; --acc-2: #b3781a; --acc-ink: #fffdf8; --acc-glow: 150 101 15; }
+  html[data-theme='auto'][data-accent='coral']  { --acc: #c04a2c; --acc-2: #d96a4a; --acc-ink: #fff8f5; --acc-glow: 192 74 44; }
+  html[data-theme='auto'][data-accent='mint']   { --acc: #1f8a5c; --acc-2: #2ba874; --acc-ink: #f2fff9; --acc-glow: 31 138 92; }
+  html[data-theme='auto'][data-accent='sky']    { --acc: #2369b8; --acc-2: #3a83d4; --acc-ink: #f5faff; --acc-glow: 35 105 184; }
+  html[data-theme='auto'][data-accent='violet'] { --acc: #6a44b8; --acc-2: #8560d0; --acc-ink: #faf7ff; --acc-glow: 106 68 184; }
+}
+
+/* ---------- 基础 ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  font-feature-settings: 'ss01' on, 'cv01' on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* 背景纵深：两团光斑 + 极淡噪点。光斑用 fixed 避免滚动重绘 */
+/* 背景光斑故意溢出视口（inset 负值）才够自然，但溢出源必须自己关掉，
+   绝不能靠 body 的 overflow-x:hidden 兜底——那只是视觉裁剪，
+   document.scrollWidth 仍会被撑大，还会污染 position:sticky 的滚动上下文。
+   两个图层都是 position:fixed 且 contain:paint，双重保险。 */
+.aurora {
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  pointer-events: none;
+  contain: paint;
+  background:
+    radial-gradient(38vmax 34vmax at 18% 8%, var(--spot-1), transparent 68%),
+    radial-gradient(32vmax 28vmax at 84% 14%, var(--spot-2), transparent 66%),
+    radial-gradient(46vmax 40vmax at 50% 108%, var(--spot-1), transparent 72%),
+    linear-gradient(168deg, var(--bg-1) 0%, var(--bg-0) 52%, var(--bg-0) 100%);
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  contain: paint;
+  opacity: var(--grain-op);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ==========================================================================
+   赛博朋克皮肤专属氛围层。这是「让人记住的那一点」：
+   - 顶部一条霓虹渐变地平线
+   - 上密下疏的透视网格（用 repeating-linear-gradient 画，零图片）
+   - CRT 扫描线，缓慢下扫
+   全部挂在已有元素的伪元素上，不新增 DOM 节点，也不影响布局宽度。
+   ========================================================================== */
+
+/* 透视网格：压在内容之上但完全不挡交互（pointer-events:none），
+   靠低透明度做「罩在画面上」的观感。
+   之前写 z-index:-1 会被 body 背景盖掉，几乎看不见。 */
+html[data-theme='cyber'] body::after {
+  content: '';
+  position: fixed;
+  left: -10vw;
+  right: -10vw;
+  bottom: -4vh;
+  height: 52vh;
+  z-index: 1;
+  pointer-events: none;
+  opacity: .75;
+  background-image:
+    repeating-linear-gradient(to right, rgba(0, 240, 255, .30) 0 1px, transparent 1px 72px),
+    repeating-linear-gradient(to top, rgba(255, 0, 128, .22) 0 1px, transparent 1px 56px);
+  /* 上疏下密 + 顶部渐隐，模拟地平线透视 */
+  mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, .7) 38%, transparent 82%);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, .7) 38%, transparent 82%);
+  transform: perspective(360px) rotateX(56deg);
+  transform-origin: bottom center;
+}
+
+/* 霓虹地平线：一条会呼吸的青→洋红渐变光带 */
+html[data-theme='cyber'] body::before {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, #00f0ff 22%, #ff0080 78%, transparent);
+  box-shadow: 0 0 18px 2px rgba(0, 240, 255, .55), 0 0 42px 8px rgba(255, 0, 128, .28);
+  opacity: .85;
+}
+
+/* CRT 扫描线：极淡的横纹。
+   踩过的坑：最初为了让扫描线明显，直接把 .grain 的 opacity 提到 .55，
+   但 .grain 同时还带着 feTurbulence 噪点图层——噪点在纯黑底上会叠出
+   一层灰颗粒，把 #05060e 硬生生抬成「发灰的深灰」，霓虹感全无。
+   现在把噪点在图内自己降到 .10，外层 opacity 只服务扫描线，
+   两者不再共用同一个透明度。 */
+html[data-theme='cyber'] .grain {
+  opacity: .9;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      rgba(0, 240, 255, .034) 0 1px,
+      transparent 1px 4px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.09'/%3E%3C/svg%3E");
+}
+
+/* 赛博皮肤的光斑要更「点状」而不是「团状」：
+   两团大光晕会糊成一片灰紫，改成收窄的霓虹光核。 */
+html[data-theme='cyber'] .aurora {
+  background:
+    radial-gradient(26vmax 22vmax at 14% 6%, rgba(0, 240, 255, .20), transparent 62%),
+    radial-gradient(24vmax 20vmax at 88% 10%, rgba(255, 0, 128, .17), transparent 60%),
+    radial-gradient(38vmax 26vmax at 50% 112%, rgba(120, 0, 255, .20), transparent 66%),
+    linear-gradient(168deg, #080a14 0%, #05060e 52%, #04050b 100%);
+}
+
+/* 扫描高光：一条 18vh 高的柔光带，14 秒走一遍全屏。
+   必须包在 prefers-reduced-motion: no-preference 里——前庭敏感的人
+   看到持续移动的光带会不适，这是无障碍底线。 */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme='cyber'] body::before {
+    animation: cyberSweep 14s linear infinite;
+  }
+}
+@keyframes cyberSweep {
+  0%   { transform: translateY(-100vh); }
+  100% { transform: translateY(100vh); }
+}
+/* 上面那条地平线用 body::before，扫描高光改用 .aurora 的伪元素，
+   避免同一条伪元素既要当地平线又要当扫光。 */
+html[data-theme='cyber'] .aurora::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16vh;
+  pointer-events: none;
+  background: linear-gradient(to bottom,
+    transparent,
+    rgba(0, 240, 255, .05) 45%,
+    rgba(0, 240, 255, .09) 50%,
+    rgba(0, 240, 255, .05) 55%,
+    transparent);
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme='cyber'] .aurora::after {
+    animation: cyberScan 9s linear infinite;
+  }
+}
+@keyframes cyberScan {
+  0%   { top: -18vh; }
+  100% { top: 100vh; }
+}
+
+/* 赛博皮肤的卡片霓虹描边写在 .link 之后（见文件后段），这里只留氛围层。 */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* 统一焦点态：键盘一定能看见。
+   注意：a 元素默认 outline 是 none，若只改 outline-offset 而不给
+   outline-style，Chrome 会保留 none，等于完全没有焦点环（实测踩过）。 */
+:where(a, button, input, select, [tabindex]):focus-visible,
+.link:focus-visible {
+  outline-style: solid;
+  outline-width: 2px;
+  outline-color: var(--acc);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+/* 深色皮肤上再补一圈暗影，避免强调色与同色元素重合时看不见 */
+html[data-theme='night'] :where(a, button, input, select, [tabindex]):focus-visible,
+html[data-theme='cyber'] :where(a, button, input, select, [tabindex]):focus-visible,
+html[data-theme='auto'] :where(a, button, input, select, [tabindex]):focus-visible {
+  box-shadow: 0 0 0 5px rgba(0, 0, 0, .45);
+}
+
+/* ---------- 顶栏 ----------
+   三栏栅格：品牌 | 搜索 | 工具。中间那格是 auto，两侧各 1fr，
+   所以搜索框永远在视口正中，不随左右内容宽度漂移。
+   以前用 flex + margin-left:auto 把搜索推过去，结果是「搜索框位置
+   取决于左边品牌多宽」—— 站点名一长就偏。 */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 14px var(--pad-x);
+  background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--line);
+}
+.topbar > .brand   { grid-column: 1; justify-self: start; min-width: 0; }
+.topbar > .search-wrap { grid-column: 2; justify-self: center; }
+.topbar > .tb-tools { grid-column: 3; justify-self: end; }
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  text-decoration: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -.015em;
+  overflow: hidden;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(150deg, var(--acc-2), var(--acc));
+  color: var(--acc-ink);
+  box-shadow: 0 4px 14px -4px rgb(var(--acc-glow) / .8);
+  flex: 0 0 auto;
+}
+.brand-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 搜索区：引擎按钮 + 输入框拼成一个整体 ----------
+   两者共用一个外框（.search-wrap 给出圆角与边框底色），
+   内部用 1px 分隔缝，视觉上是「一个控件两个区」，
+   而不是「一个按钮挨着一个输入框」。 */
+.search-wrap {
+  display: flex;
+  align-items: stretch;
+  width: clamp(240px, 32vw, 440px);
+  min-height: 44px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: border-color .2s, background .2s, box-shadow .2s, width .26s var(--ease-out);
+  /* 不要让 .tb-menu 的 position:relative 溢出到外框之外 */
+  position: relative;
+}
+.search-wrap:hover { border-color: var(--line-hi); }
+.search-wrap:focus-within {
+  border-color: var(--acc);
+  background: var(--surface-hi);
+  box-shadow: 0 0 0 3px rgb(var(--acc-glow) / .16);
+}
+
+/* 引擎切换按钮：吃掉左侧固定宽度，右侧一条竖分隔线 */
+.eng-menu { display: flex; flex: 0 0 auto; }
+.eng-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px 0 11px;
+  border: 0;
+  border-radius: 12px 0 0 12px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  position: relative;
+  transition: background .16s, color .16s;
+}
+.eng-btn::after {
+  /* 分隔线用伪元素而不是 border-right：
+     border 会让按钮的点击区域与视觉边界不一致 */
+  content: '';
+  position: absolute;
+  right: 0; top: 50%;
+  width: 1px; height: 18px;
+  transform: translateY(-50%);
+  background: var(--line);
+}
+.eng-btn:hover { color: var(--text); }
+.eng-menu.is-open .eng-btn {
+  color: var(--text);
+  background: rgb(var(--acc-glow) / .10);
+}
+.eng-menu.is-open .eng-btn::after { background: transparent; }
+.eng-menu.is-open .tbm-caret { transform: rotate(180deg); }
+.eng-btn .tbm-caret { color: var(--text-3); }
+
+/* 引擎图标：官方 logo 直接显示，不套壳。
+   v1.2.2 起这里放的是手绘近似标记 + 每家一个渐变底色 —— 近似的形状需要
+   一块底色帮忙区分「这是谁」。改用官方 logo 后，那块底色反而成了干扰：
+   Google 的四色 G 套在蓝方块上，就已经不是 Google 了。
+   彩色方块统一在这里清掉；下拉项那层 .tbo-ico 的边框与底色也一并取消。 */
+.eng-logo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  flex: 0 0 auto;
+  /* 不能 hidden：Bing 的 b 是竖长的，contain 之后要靠 scale 补足，
+     一 hidden 就把它上下切掉半截（实测只剩一个蓝色方块）。 */
+  overflow: visible;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.eng-img {
+  /* 绝对定位而不是 width/height:100%：
+     .eng-logo 是 grid 容器、行高 auto，img 的百分比高度会与「行高由内容
+     决定」互相依赖，浏览器按循环处理 —— 百分比失效、退回固有比例，
+     Bing 于是被撑到 39px 高，压到下一行。绝对定位直接相对容器定尺寸，
+     绕开这个循环。 */
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+/* 各家 logo 的原始长宽比不一样，contain 之后的视觉重量差得远。
+   Bing 的 viewBox 是 256×388（细长的 b），在方框里只剩三分之二宽，
+   所以补一点放大量。1.15 是上限：再大就会顶穿 44px 的下拉行、
+   压到相邻那一行上去（1.34 实测溢出，Bing 和 Google 叠在一起）。 */
+.eng-logo[data-eng-logo='bing'] .eng-img { transform: scale(1.15); }
+.eng-logo--sm { width: 26px; height: 26px; }
+
+/* 下拉项：去掉 .tbo-ico 给的框与底，只留 logo 本身 */
+.tbo-ico.eng-logo,
+.tbm-opt[aria-selected='true'] .tbo-ico.eng-logo {
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
+/* 输入框：外框已有边框底色，input 自身必须全透明，否则出现双层框 */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.search input {
+  width: 100%;
+  min-height: 42px;      /* 外框已给 44，这里留 1px 上下缝 */
+  padding: 0 12px 0 34px;
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+.search input::placeholder { color: var(--text-3); }
+/* focus 时不再单独描边（外框已经有 focus-within 的强调框） */
+.search input:focus { outline: none; }
+.search input::-webkit-search-cancel-button { filter: grayscale(1); }
+
+/* 引擎下拉面板比常规面板窄，贴着搜索框左侧展开 */
+.tbm-panel--eng { width: 220px; }
+
+/* ---------- 顶栏两个下拉菜单（形态 / 皮肤） ----------
+   9 个图标按钮压成 2 个带文字的下拉入口：功能一个没少，
+   顶栏从"一排控件"退回"两个入口"，视觉噪音大幅下降。
+   两个按钮之间 gap 8px —— 触摸目标互不重叠是硬要求。 */
+/* ---------- 顶栏两个下拉菜单（形态 / 皮肤） ----------
+   v1.1.0 起按钮只留图标：44×44 正方形，文字进 sr-only。
+   为什么去掉文字：顶栏原本被「卡片 + 深夜」这种带文字的按钮占掉
+   200px 宽，窄屏只能靠 display:none 藏字 —— 那不如一开始就不要。
+   信息没丢：图标本身就是该形态/皮肤的可视化示意图，下拉里还有全名。 */
+.tb-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tb-menu { position: relative; }
+
+.tbm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  transition: background .16s, color .16s, border-color .16s;
+}
+.tbm-btn:hover { color: var(--text); background: var(--surface-hi); border-color: var(--line-hi); }
+.tb-menu.is-open .tbm-btn {
+  color: var(--text);
+  border-color: var(--acc);
+  background: var(--surface-hi);
+}
+.tbm-ico { display: grid; place-items: center; color: var(--acc); }
+.tbm-ico svg { display: block; }
+.tbm-caret {
+  color: var(--text-3);
+  transition: transform .2s var(--ease-out);
+}
+.tb-menu.is-open .tbm-caret { transform: rotate(180deg); }
+
+/* 面板由 JS 设 left/top/width（position:fixed）。
+   为什么不用 absolute + right:0：按钮本身可能只距视口右沿 14px，
+   而面板比按钮宽得多，320px 屏上左边缘会跑到视口外（实测踩过）。
+   fixed 之后由 JS 夹在 12px 安全边距内，顺带也不会被 .topbar 的
+   backdrop-filter 裁切。 */
+.tbm-panel {
+  position: fixed;
+  z-index: 60;
+  width: 288px;
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 16px;
+  border: 1px solid var(--line-hi);
+  /* 必须接近不透明。用 94% 时下面的链接卡片会透出来，
+     截图里能清楚看到「常用 2 / 工作 11」压在菜单文字后面，
+     阅读干扰很实在。97% + 强模糊既保留一点玻璃感又读得清。 */
+  background: color-mix(in srgb, var(--surface-solid) 97%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 28px 64px -24px rgba(0, 0, 0, .85);
+}
+html[data-theme='paper'] .tbm-panel,
+html[data-theme='celadon'] .tbm-panel {
+  box-shadow: 0 28px 64px -28px rgba(70, 52, 32, .38);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme='auto'] .tbm-panel { box-shadow: 0 28px 64px -28px rgba(70, 52, 32, .38); }
+}
+
+/* 菜单项：图标 + 两行文字 + 右侧勾。整行 44px 高，
+   手指落在行内任意位置都能选中。 */
+.tbm-opt {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.tbm-opt:hover { background: var(--surface-hi); color: var(--text); }
+.tbm-opt:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.tbm-opt[aria-selected='true'] { color: var(--text); background: rgb(var(--acc-glow) / .10); }
+.tbo-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.tbm-opt[aria-selected='true'] .tbo-ico {
+  border-color: transparent;
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+.tbo-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.tbo-name { font-size: 14px; font-weight: 650; line-height: 1.25; }
+.tbo-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tbo-check { flex: 0 0 auto; color: var(--acc); opacity: 0; }
+.tbm-opt[aria-selected='true'] .tbo-check { opacity: 1; }
+
+/* 「站点默认引擎」那行小字。
+   用强调色 + 略小的字号，和上面 .tbo-hint 的描述文字区分开 ——
+   它表达的是「设置里的状态」，不是「这个是什么」。 */
+.tbo-hint--default {
+  color: var(--acc);
+  font-weight: 600;
+}
+
+.btn-admin, .btn-ghost, .btn-primary, .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform .14s, background .18s, border-color .18s, box-shadow .18s;
+}
+.btn-admin {
+  background: var(--acc);
+  color: var(--acc-ink);
+  box-shadow: 0 6px 18px -8px rgb(var(--acc-glow) / .9);
+}
+.btn-admin:hover { filter: brightness(1.07); }
+.btn-ghost {
+  background: var(--surface);
+  color: var(--text-2);
+  border-color: var(--line);
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--line-hi); background: var(--surface-hi); }
+.btn-primary {
+  background: linear-gradient(180deg, var(--acc-2), var(--acc));
+  color: var(--acc-ink);
+  box-shadow: 0 8px 22px -10px rgb(var(--acc-glow) / .95);
+}
+.btn-primary:hover { filter: brightness(1.06); }
+.btn-danger { background: transparent; color: #ff7d92; border-color: rgba(255,125,146,.35); }
+.btn-danger:hover { background: rgba(255,125,146,.12); }
+.btn-admin:active, .btn-ghost:active, .btn-primary:active, .btn-danger:active { transform: translateY(1px) scale(.99); }
+
+/* 关键：[hidden] 在浏览器默认样式里只是 display:none，优先级极低。
+   上面这几个类一旦写了 display:inline-flex（任何 display 都算），
+   就会把它压掉 —— 于是 <button hidden> 照样显示出来。
+   实测踩过：升级页的「取消」按钮本该隐藏，却一直挂在那儿。
+   全局兜底一条，别指望每个组件自己记得加。 */
+[hidden] { display: none !important; }
+
+/* 禁用态：光靠 disabled 属性不改变外观的话，用户会以为按钮能点。
+   降饱和 + 去阴影 + 禁掉 hover，三件一起做才像"点不动"。 */
+.btn-primary:disabled,
+.btn-ghost:disabled,
+.btn-danger:disabled,
+.btn-admin:disabled {
+  opacity: .46;
+  filter: saturate(.5);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-primary:disabled:hover,
+.btn-ghost:disabled:hover,
+.btn-danger:disabled:hover,
+.btn-admin:disabled:hover { filter: saturate(.5); transform: none; }
+
+/* ---------- 主容器 ----------
+   去掉大标题后，首屏直接就是链接宫格，所以顶部留白收紧到 28~34px：
+   留白太多会把"直接开始用"这一点抵消掉。 */
+.stage {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(22px, 3vw, 34px) var(--pad-x) 96px;
+}
+/* 侧边栏模式下给正文让出左侧通道，否则固定导航会压在卡片上。
+   只在真正显示侧边栏的宽度区间生效（见下方媒体查询）。 */
+@media (min-width: 1180px) {
+  html[data-gnav='side'] .stage { padding-left: 168px; }
+}
+
+/* ---------- 分组导航 ----------
+   两种形态二选一，由后台设置决定，服务端渲染时就定下来
+   （html[data-gnav] 与 .gnav[data-mode] 两个标记同源）。
+
+   tab  ：页面顶部横排标签，点击只看一组
+   side ：桌面左侧固定竖排，点击平滑滚到该组锚点
+   ------------------------------------------------------------------ */
+
+/* 共有部分：计数徽标 + 激活态 */
+.gnav-count {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 20px;
+  background: var(--surface-hi);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  transition: background .16s, color .16s;
+}
+.gnav-item.is-active .gnav-count {
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+
+/* ---- 形态 A：顶部标签 ---- */
+.gnav--tab {
+  margin-bottom: clamp(20px, 3vw, 30px);
+  /* 窄屏标签多时横向滚动，而不是换行把页面顶下去 */
+  margin-inline: calc(var(--pad-x) * -1);
+  padding-inline: var(--pad-x);
+}
+.gnav--tab .gnav-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.gnav--tab .gnav-track::-webkit-scrollbar { display: none; }
+
+.gnav--tab .gnav-item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .16s, color .16s, border-color .16s;
+}
+.gnav--tab .gnav-item:hover {
+  color: var(--text);
+  border-color: var(--line-hi);
+  background: var(--surface-hi);
+}
+/* 选中态用实心强调色，和普通标签拉开明显差距 ——
+   这里是导航的唯一"当前在哪"信号，必须一眼可辨。 */
+.gnav--tab .gnav-item.is-active {
+  background: var(--acc);
+  border-color: transparent;
+  color: var(--acc-ink);
+  box-shadow: 0 6px 18px -8px rgb(var(--acc-glow) / .9);
+}
+
+/* ---- 形态 B：左侧侧边栏 ---- */
+.gnav--side {
+  /* 桌面才显示；窄屏由下面的媒体查询整块隐藏，退回纵向滚动的老行为 */
+  position: fixed;
+  top: 96px;
+  left: max(16px, calc((100vw - var(--maxw)) / 2 - 132px));
+  width: 116px;
+  max-height: calc(100vh - 132px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  z-index: 30;
+}
+.gnav--side::-webkit-scrollbar { display: none; }
+.gnav-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 10px;
+  padding-left: 11px;
+}
+.gnav--side .gnav-track {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gnav--side .gnav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 9px 0 11px;
+  border-radius: 9px;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color .16s, background .16s;
+}
+.gnav--side .gnav-item:hover { color: var(--text); background: var(--surface); }
+/* 左侧一条竖线标出当前位置，比整块染色更克制，不抢视线 */
+.gnav--side .gnav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--acc);
+  transform: translateY(-50%);
+  transition: height .22s var(--ease-out);
+}
+.gnav--side .gnav-item.is-active { color: var(--text); }
+.gnav--side .gnav-item.is-active::before { height: 18px; }
+.gnav--side .gnav-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+kbd {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line-hi);
+  background: var(--surface);
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* ---------- 分组 ---------- */
+.group {
+  margin-bottom: clamp(26px, 3.6vw, 44px);
+  /* 吸顶顶栏高约 73px（padding 14*2 + 44 + 1px 边框）。
+     scroll-margin-top 比它多留 16px 呼吸感，锚点跳转后标题不会被压住。 */
+  scroll-margin-top: 90px;
+}
+/* tab 模式下组标题就是冗余信息（标签上已经写了组名），
+   隐掉能把首屏让给内容 —— 少一行字，卡片上移 40px。 */
+html[data-gnav='tab'] .group-head { display: none; }
+html[data-gnav='tab'] .group { margin-bottom: 0; }
+/* 只有一组时不需要锚点偏移 */
+.group:last-child { margin-bottom: 0; }
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.group-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 0;
+  white-space: nowrap;
+}
+.group-count {
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 1px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.group-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line-hi), transparent);
+}
+
+/* ---------- 链接卡（四种形态的共用基座） ---------- */
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.link-item {
+  /* 记忆点②：错峰入场。同上——可见性是基础态，动画只负责「入场修饰」。 */
+  opacity: 1;
+  min-width: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .link-item {
+    animation: itemIn .5s var(--ease-out) backwards;
+    animation-delay: calc(min(var(--i), 12) * .028s + .12s);
+  }
+}
+@keyframes itemIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 56px;
+  padding: 12px 15px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text);
+  text-decoration: none;
+  transition: transform .22s var(--ease-out), border-color .22s, background .22s, box-shadow .22s;
+  overflow: hidden;
+}
+/* 悬停时左上角透出一层强调色，不抢标题的可读性 */
+.link::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--acc-glow) / .14), transparent 62%);
+  opacity: 0;
+  transition: opacity .26s;
+  pointer-events: none;
+}
+.link:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-hi);
+  background: var(--surface-hi);
+  box-shadow: var(--shadow);
+}
+.link:hover::before { opacity: 1; }
+.link:active { transform: translateY(0) scale(.995); }
+
+/* 赛博皮肤：把卡片换成霓虹描边 + 内发光。写在这里是因为
+   .link 基础样式在上面，同权重下必须后写才生效。 */
+html[data-theme='cyber'] .link {
+  border-color: rgba(0, 240, 255, .18);
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, .06),
+    0 18px 44px -24px rgba(0, 240, 255, .35),
+    inset 0 1px 0 rgba(0, 240, 255, .10);
+}
+html[data-theme='cyber'] .link:hover {
+  border-color: rgba(0, 240, 255, .42);
+  background: rgba(18, 26, 50, .82);
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, .16),
+    0 24px 60px -26px rgba(0, 240, 255, .5),
+    inset 0 1px 0 rgba(0, 240, 255, .18);
+}
+
+.link-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  /* 无图标时用域名色相生成稳定头像，不会一片灰。
+     深色下压到 22% 明度、文字提到 96%，实测最低对比度 7.28:1。
+     注意：头像底与卡片底的对比度天然只有 1.1 左右（同明度区间的不同色相），
+     所以形状边界必须靠描边来保证，不能只靠底色区分。 */
+  background: hsl(var(--hue) 62% 22%);
+  color: hsl(var(--hue) 96% 92%);
+  border: 1px solid hsl(var(--hue) 50% 42% / .85);
+  overflow: hidden;
+  transition: transform .24s var(--ease-spring);
+}
+/* 浅色皮肤（paper / celadon）下把头像换成浅底深字。
+   必须显式列出每个浅色皮肤——用 :is() 会漏掉 auto 在浅色系统下的分支，
+   而 auto 那个分支由下面的媒体查询单独处理。 */
+html[data-theme='paper'] .link-icon,
+html[data-theme='celadon'] .link-icon {
+  background: hsl(var(--hue) 58% 91%);
+  color: hsl(var(--hue) 75% 22%);
+  /* 浅色下用深一点的同色相描边，把头像从卡片上"抠"出来（>=3:1） */
+  border-color: hsl(var(--hue) 48% 62%);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme='auto'] .link-icon {
+    background: hsl(var(--hue) 58% 91%);
+    color: hsl(var(--hue) 75% 22%);
+    border-color: hsl(var(--hue) 48% 62%);
+  }
+}
+.link:hover .link-icon { transform: scale(1.06) rotate(-2.5deg); }
+.link-icon.has-img {
+  /* 多数站点图标是「不透明方形图」（bilibili 是白底方块、百度是蓝白方块），
+     直接铺在深色卡片上会像贴了张膏药。给它们一层浅色衬底并内缩，
+     视觉上变成「徽章」，深浅主题都成立。 */
+  position: relative;
+  background: #f7f4ee;
+  border-color: rgba(255, 255, 255, .16);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+}
+html[data-theme='paper'] .link-icon.has-img,
+html[data-theme='celadon'] .link-icon.has-img {
+  background: #fffdf8;
+  border-color: rgba(70, 52, 32, .16);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme='auto'] .link-icon.has-img {
+    background: #fffdf8;
+    border-color: rgba(70, 52, 32, .16);
+  }
+}
+.link-icon img {
+  /* 铺满容器：图标本身多为白底方形，再内缩就会露出一圈底衬，
+     形成「双层白框」的杂讯感。铺满后由容器的圆角与外框统一收边。
+     不能给父级加 padding 再让 img 用 width:100%——100% 会按 padding
+     之外算，图片直接被推出可视区（踩过）。 */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.initials {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  line-height: 1;
+  /* 双字中文（如「知乎」「文档」）在 40px 图标里必须留边，
+     用缩放而不是 padding，避免挤压容器 */
+  display: block;
+  max-width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  transform: scale(.92);
+  transform-origin: center;
+}
+
+.link-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.link-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.012em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.link-sub {
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 编辑小按钮：视觉图标 15px，但热区撑到 44×44（用负 margin 抵消占位，
+   不改变卡片布局），手指和鼠标都能稳定命中 */
+.link-edit {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -14px -14px -14px -4px;
+  border-radius: 10px;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity .18s, background .16s, color .16s;
+  cursor: pointer;
+}
+.link:hover .link-edit, .link:focus-within .link-edit { opacity: 1; }
+.link-edit:hover { background: var(--surface-solid); color: var(--acc); }
+@media (hover: none) { .link-edit { opacity: 1; } }
+
+/* ---------- 隐藏链接的角标 ----------
+   只有登录用户才会看到这个眼睛图标（游客的 HTML 里连卡片都没有）。
+   它不是装饰，是「这条链接游客看不见」的唯一视觉提示 —— 否则自己
+   加了几条隐藏链接，隔天会以为丢了。 */
+.link-priv {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border-radius: 7px;
+  color: var(--acc);
+  background: rgb(var(--acc-glow) / .12);
+  border: 1px solid rgb(var(--acc-glow) / .26);
+}
+/* 有角标时，编辑按钮不再顶到最右，两者并排 */
+.link-priv + .link-edit { margin-left: 4px; }
+
+/* 隐藏链接的卡片加一道极淡的虚线边，扫一眼就能区分公开与私密 */
+html[data-layout='card'] .link-item.is-hidden-link .link,
+html[data-layout='compact'] .link-item.is-hidden-link .link {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line-hi) 70%, transparent);
+}
+
+/* ==========================================================================
+   形态 1：卡片聚合（card）—— 2~4 列自适应
+   ========================================================================== */
+html[data-layout='card'] .links {
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  gap: 14px;
+}
+html[data-layout='card'] .link {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 132px;
+  padding: 18px;
+  border-radius: var(--r-lg);
+}
+html[data-layout='card'] .link-icon {
+  width: 48px; height: 48px;
+  border-radius: 13px;
+}
+html[data-layout='card'] .initials { font-size: 16px; }
+html[data-layout='card'] .link-body { width: 100%; gap: 3px; }
+html[data-layout='card'] .link-title { font-size: 17px; }
+html[data-layout='card'] .link-edit {
+  position: absolute;
+  /* 44×44 热区贴在卡片内角，不越出圆角 */
+  top: 2px; right: 2px;
+  margin: 0;
+  background: color-mix(in srgb, var(--surface-solid) 80%, transparent);
+}
+
+/* ==========================================================================
+   形态 2：横排菜单（menu）—— 单行胶囊，换行不塌
+   ========================================================================== */
+html[data-layout='menu'] .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+html[data-layout='menu'] .link-item { flex: 0 1 auto; }
+html[data-layout='menu'] .link {
+  min-height: 46px;
+  padding: 7px 15px 7px 8px;
+  border-radius: 999px;
+  gap: 9px;
+}
+html[data-layout='menu'] .link-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+}
+html[data-layout='menu'] .initials { font-size: 12px; }
+html[data-layout='menu'] .link-title { font-size: 15px; }
+html[data-layout='menu'] .link-sub { display: none; }
+html[data-layout='menu'] .link-edit { margin: -6px -9px -6px 0; }
+
+/* ==========================================================================
+   形态 3：紧凑列表（compact）—— 单列密集行，最省纵向空间
+   ========================================================================== */
+html[data-layout='compact'] .links {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+html[data-layout='compact'] .link {
+  min-height: 50px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border-color: transparent;
+  background: transparent;
+  gap: 12px;
+}
+html[data-layout='compact'] .link:hover { background: var(--surface); border-color: var(--line); }
+html[data-layout='compact'] .link-icon { width: 32px; height: 32px; border-radius: 9px; }
+html[data-layout='compact'] .initials { font-size: 12px; }
+html[data-layout='compact'] .link-title { font-size: 15.5px; }
+/* 「紧凑」就该紧凑：描述限一行、省略号收尾，
+   否则长描述会把单行撑到 40+ 字，形态就名不副实了 */
+html[data-layout='compact'] .link-sub {
+  font-size: 12.5px;
+  max-width: 100%;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 宽屏下把描述推到标题右侧同一行，进一步压低行高 */
+@media (min-width: 760px) {
+  html[data-layout='compact'] .link-body {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 14px;
+  }
+  html[data-layout='compact'] .link-title { flex: 0 0 auto; }
+  html[data-layout='compact'] .link-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--text-3);
+  }
+}
+
+/* ==========================================================================
+   形态 4：图标宫格（grid）—— 大图标 + 居中标签，像手机主屏
+   ========================================================================== */
+html[data-layout='grid'] .links {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+html[data-layout='grid'] .link {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 112px;
+  padding: 16px 8px 13px;
+  border-color: transparent;
+  background: transparent;
+  backdrop-filter: none;
+  text-align: center;
+}
+html[data-layout='grid'] .link:hover { background: var(--surface); border-color: var(--line); }
+html[data-layout='grid'] .link-icon {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+}
+html[data-layout='grid'] .initials { font-size: 17px; }
+html[data-layout='grid'] .link-body { align-items: center; gap: 0; }
+html[data-layout='grid'] .link-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  max-width: 100%;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow: hidden;
+}
+html[data-layout='grid'] .link-sub { display: none; }
+html[data-layout='grid'] .link-edit {
+  position: absolute;
+  top: 0; right: 0;
+  margin: 0;
+  background: color-mix(in srgb, var(--surface-solid) 85%, transparent);
+}
+
+/* ---------- 空状态 ---------- */
+.empty {
+  text-align: center;
+  padding: clamp(48px, 9vw, 96px) 24px;
+  border: 1px dashed var(--line-hi);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.empty-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3.4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  margin: 0 0 8px;
+}
+.empty-sub { color: var(--text-2); margin: 0 0 26px; font-size: 15.5px; }
+
+.foot {
+  margin-top: 64px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* ---------- 粘贴添加浮层 ---------- */
+.paste-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 4, 10, .62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } }
+
+.paste-box {
+  position: fixed;
+  z-index: 61;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 22px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 40px 90px -30px #000;
+  animation: popIn .34s var(--ease-spring);
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(.94); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.paste-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.paste-head h2 {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.028em;
+  margin: 0;
+}
+.paste-close {
+  display: grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  margin: -6px -6px -6px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+.paste-close:hover { background: var(--surface-hi); color: var(--text); }
+
+.paste-preview {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px;
+  margin-bottom: 20px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-1) 65%, transparent);
+}
+.paste-icon.has-img { background: transparent; border-color: var(--line); padding: 3px; }
+.paste-preview-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.paste-status { font-size: 14.5px; font-weight: 600; }
+.paste-status.is-loading { color: var(--text-2); }
+.paste-status.is-ok { color: var(--acc); }
+.paste-status.is-warn { color: #ffb86b; }
+.paste-host {
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.f-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 14px 0 6px;
+}
+.f-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  transition: border-color .18s, background .18s;
+}
+.f-input:hover { border-color: var(--line-hi); }
+.f-input:focus { border-color: var(--acc); outline: 2px solid rgb(var(--acc-glow) / .5); outline-offset: 1px; }
+.f-input[aria-invalid='true'] { border-color: #ff7d92; }
+select.f-input { cursor: pointer; }
+
+.f-error {
+  margin: 14px 0 0;
+  padding: 10px 13px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #ffb3c0;
+  background: rgba(255, 125, 146, .12);
+  border: 1px solid rgba(255, 125, 146, .3);
+}
+html[data-theme='paper'] .f-error,
+html[data-theme='celadon'] .f-error { color: #a3122f; background: #fde8ec; border-color: #f5c2cc; }
+
+.paste-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+.paste-actions .btn-ghost { flex: 0 0 auto; }
+.paste-actions .btn-primary { flex: 1; }
+
+/* 编辑浮层的按钮排布：左边删除（危险动作单独放），右边取消+保存 */
+.paste-actions--split {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.paste-actions-right {
+  display: flex;
+  gap: 10px;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+.paste-actions-right .btn-primary { flex: 0 1 auto; min-width: 108px; }
+.btn-del { flex: 0 0 auto; gap: 6px; }
+.btn-del svg { flex: 0 0 auto; }
+
+/* ---------- 开关（滑块） ----------
+   从 admin.css 提到这里：主页的「粘贴添加」浮层也要用同一个滑块，
+   两处各写一遍必然出现「后台是圆角、前台是方角」这种漂移。
+   44px 的触摸区包住 48×27 的轨道，手指好按。 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.switch-row:last-of-type { border-bottom: 0; }
+.switch-row--tight {
+  margin-top: 16px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+.sw-label { margin: 0; font-size: 15px; font-weight: 600; }
+.sw-desc { margin: 2px 0 0; font-size: 13px; color: var(--text-3); }
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sw-track {
+  position: relative;
+  display: block;
+  width: 48px; height: 27px;
+  border-radius: 999px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line-hi);
+  transition: background .22s, border-color .22s;
+}
+.sw-track::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  background: var(--text-2);
+  transition: transform .26s var(--ease-spring), background .22s;
+}
+.switch input:checked + .sw-track { background: var(--acc); border-color: var(--acc); }
+.switch input:checked + .sw-track::after { transform: translateX(21px); background: var(--acc-ink); }
+.switch input:focus-visible + .sw-track { outline: 2px solid var(--acc); outline-offset: 3px; }
+
+.spinner {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, .22);
+  border-top-color: currentColor;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-hi);
+  font-size: 14.5px;
+  font-weight: 550;
+  opacity: 0;
+  transition: opacity .24s, transform .3s var(--ease-out);
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.is-bad { border-color: rgba(255,125,146,.4); color: #ffb3c0; }
+.toast.is-ok { border-color: rgba(124,211,173,.42); color: #9ee7c4; }
+
+/* ==========================================================================
+   编辑模式（v1.2.0）
+   —— 用户要求「在主页上直接改，不要跳后台」。
+   设计取舍：不做「每张卡片常挂一排按钮」那种做法，那会让日常浏览
+   界面变脏。改成「一个总开关 + 打开后整页进入编辑态」：
+   开关一关，界面回到干净的浏览状态。
+   ========================================================================== */
+
+/* 顶栏那颗铅笔：编辑中变成实心强调色，一眼能看出「现在处可改状态」 */
+.tbm-btn--edit[aria-pressed='true'] {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+.tbm-btn--edit[aria-pressed='true']:hover { filter: brightness(1.06); }
+
+/* 关键：.tbm-ico 自己写死了 color:var(--acc)，在实心强调色底上
+   就和背景同色 —— 图标凭空消失，用户以为按钮坏了。
+   这里强制它跟随按钮自身的 color（--acc-ink），别自己再定一次色。
+   v1.2.2 修。 */
+.tbm-btn--edit .tbm-ico { color: inherit; }
+
+/* 两枚图标按 aria-pressed 切换：未编辑是铅笔，编辑中是叉。
+   用 display:none 而不是 opacity —— 后者两枚都会占位，44px 的按钮里
+   会挤出重叠。 */
+.tbm-btn--edit .tbm-ico--off { display: none; }
+.tbm-btn--edit[aria-pressed='true'] .tbm-ico--on { display: none; }
+.tbm-btn--edit[aria-pressed='true'] .tbm-ico--off { display: grid; }
+
+/* 游客的登录入口。它复用 .tbm-btn 的 44×44 底盘，但内容更宽
+   （图标 + 「登录」两字），所以要放开固定宽度。 */
+.tbm-btn--login {
+  width: auto;
+  padding: 0 14px;
+  gap: 7px;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.tbm-btn--login .tbm-ico { color: var(--acc); }
+.tbm-btn--login:hover {
+  color: var(--acc-ink);
+  background: var(--acc);
+  border-color: var(--acc);
+}
+.tbm-btn--login:hover .tbm-ico { color: inherit; }
+/* 窄屏只留图标：文字一藏，按钮自动回到 44×44，不会把顶栏挤爆 */
+@media (max-width: 560px) {
+  .tbm-btn--login { width: 44px; padding: 0; gap: 0; }
+  .tbm-btn--login .tbm-login-text { display: none; }
+}
+
+/* 拖动把手：默认不占位（display:none 会让 grid 少一格，
+   所以用 absolute 浮在卡片左上，编辑模式才显示）。
+   44×44 的热区，视觉只有 14px 的六点。 */
+.drag-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px 0 10px 0;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
+  cursor: grab;
+  touch-action: none; /* 关键：不写这个移动端拖动会变成滚页面 */
+  transition: color .16s, background .16s;
+}
+.drag-handle:hover { color: var(--acc); }
+.drag-handle:active { cursor: grabbing; }
+
+/* 卡片要能定位把手，同时编辑态下不再「点哪跳哪」 */
+.link-item { position: relative; }
+
+body.is-editing .drag-handle { display: grid; }
+
+/* 编辑态：整张卡片都能按住拖，光标给「抓手」而不是「手型」。
+   给抓手是因为这里真的能抓起来，手型会让人以为只是"点一下"。 */
+body.is-editing .link-item { cursor: grab; }
+body.is-editing .link { cursor: grab; }
+/* 卡片里的链接在编辑态不跳转（由 JS preventDefault），
+   给个视觉提示：鼠标悬停时不再有「可点击」的上浮感 */
+body.is-editing .link:hover { transform: none; }
+
+/* 触摸设备上的关键取舍：
+   整卡可拖就不能在卡片上写 touch-action:none —— 那一禁，
+   用户在编辑模式下就没法用手指滑动页面了（手机上一屏放不下全部卡片）。
+
+   所以触摸端走的是「长按起拖」：
+     · 按住不动 260ms → JS 起拖，同时给这张卡临时加 touch-action:none（内联），
+       此后手势归我们；
+     · 手指一动超过 8px → 判定用户在滚屏，放弃起拖，页面照常滚。
+   起手阶段这里必须保持 pan-y（允许纵向滚），
+   真起拖之后由 JS 加内联样式接管，松手时再删掉。
+   带把手的元素不在此列：把手有独立热区，直接 none 不影响滚屏。 */
+body.is-editing .link-item { touch-action: pan-y; }
+body.is-dragging,
+body.is-dragging * { touch-action: none !important; }
+
+/* 必须禁掉卡片里 <a> 的原生拖拽。
+   <a href> 天生 draggable，按下后浏览器会启动 HTML5 拖放：
+   它一启动就把 pointermove 截流了，我们自己的拖动永远收不到移动事件。
+   实测症状：整卡拖动完全没反应，但把手能拖（把手不是链接）。
+   draggable 是 HTML 属性而不是 CSS 属性，CSS 只能管住 -webkit-user-drag，
+   所以真正的开关在 app.js 里（进入编辑模式时给 .link 打 draggable=false）。 */
+body.is-editing .link,
+body.is-editing .link * { -webkit-user-drag: none; }
+
+/* 拖动进行中：全局改用「抓取中」光标，且禁止选中文字。
+   不禁止的话，拖过文字会把整页文字刷成蓝色，松手还留着选区。 */
+body.is-dragging,
+body.is-dragging * { cursor: grabbing !important; }
+body.is-dragging { user-select: none; -webkit-user-select: none; }
+
+/* 选中的卡片：一圈强调色描边，明确「方向键/Alt+↑↓ 作用在它身上」 */
+.link-item.is-selected > .link,
+.link-item.is-selected > .drag-handle ~ .link {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px rgb(var(--acc-glow) / .38), var(--shadow);
+}
+/* 选中时铅笔常显，不用悬停 */
+.link-item.is-selected .link-edit { opacity: 1; background: var(--surface-solid); color: var(--acc); }
+
+/* 拖动中的卡片：半透明 + 轻微回缩，明确「它正被拎起来」。
+   不回缩太多 —— 回缩会让用户觉得卡片"跑了"，反而不好对齐。 */
+.link-item.is-dragging {
+  opacity: .5;
+  z-index: 5;
+  cursor: grabbing;
+}
+.link-item.is-dragging .link {
+  transform: scale(.985);
+  box-shadow: 0 18px 40px -20px rgba(0, 0, 0, .8);
+}
+
+/* 拖动时这张卡同时是「已选中」的（beginDrag 里选了它），
+   两个状态都画实线描边会看起来像"多重边框"。
+   拖动中改虚线 —— 语义上「正在移动」本来就不是「已选定」。 */
+.link-item.is-dragging.is-selected > .link {
+  border-style: dashed;
+  border-color: rgb(var(--acc-glow) / .8);
+  box-shadow: 0 18px 40px -20px rgba(0, 0, 0, .8);
+}
+
+/* 触摸端长按等待中的反馈：卡片微微浮起、描一圈强调色。
+   没有这个，用户按下去 260ms 内什么都看不到，会以为没反应就松手了。 */
+body.is-editing .link-item:active:not(.is-dragging) {
+  /* 只对触摸生效；鼠标端 :active 一闪而过，不影响观感 */
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+@media (hover: none) and (pointer: coarse) {
+  body.is-editing .link-item:active:not(.is-dragging) > .link {
+    transform: scale(.97);
+    border-color: rgb(var(--acc-glow) / .6);
+  }
+}
+
+/* 落点不再用占位线（那条线本身会占一个网格单元，多列下把参照系全带偏），
+   改成直接挪动被拖卡片 + FLIP 让位动画，见 app.js 的 placeCard()。
+   这里只留被拖卡片的视觉态。 */
+
+/* 编辑模式的顶部提示条：只在编辑态出现，说明当前能做什么。
+   这是编辑态唯一的文字说明 —— JS 里不再弹 toast，否则同一句话说两遍。
+   触摸设备上是「长按再拖」，跟鼠标的「直接拖」不同，文案必须分开写，
+   否则手机上的人会照着"直接拖"去做，结果滚了页面。 */
+body.is-editing .stage::before {
+  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  display: block;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgb(var(--acc-glow) / .4);
+  background: rgb(var(--acc-glow) / .07);
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  /* 手机上没地方放那条长提示，换成短句 */
+  body.is-editing .stage::before { content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出'; }
+}
+/* 触摸设备（不管宽度）都用「长按」的说法，因为这里是真触摸而不是窄窗口 */
+@media (hover: none) and (pointer: coarse) {
+  body.is-editing .stage::before { content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出'; }
+}
+
+/* ==========================================================================
+   快捷键面板（Ctrl+/）
+   ========================================================================== */
+.keys-box {
+  position: fixed;
+  z-index: 61;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 22px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 40px 90px -30px #000;
+  animation: popIn .34s var(--ease-spring);
+}
+
+.keys-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 620px) {
+  .keys-body { grid-template-columns: 1fr 1fr; }
+  /* 第三块（其他）跨两列 —— 它只有 4 条，单列排会留大片空白 */
+  .keys-sec:last-child { grid-column: 1 / -1; }
+}
+
+.keys-sec h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+
+.keys-list { margin: 0; display: grid; gap: 9px; }
+.keys-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.keys-list dt {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.keys-list dd {
+  margin: 0;
+  flex: 1 1 auto;
+  text-align: right;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+/* <kbd> 统一长相：凹下去的键帽感，不是普通小方块 */
+.keys-box kbd,
+.tip-bubble kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line-hi);
+  border-bottom-width: 2px;
+  background: var(--surface-hi);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.keys-foot {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+   右下角提示气泡
+   —— 一条，只讲一件事（Ctrl+V）。可关一次，也可永久关。
+   ========================================================================== */
+.tip-bubble {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 55;
+  width: min(320px, calc(100vw - 32px));
+  padding: 15px 16px 13px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 97%, transparent);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, .8);
+  animation: tipIn .5s var(--ease-spring) both;
+}
+@keyframes tipIn {
+  from { opacity: 0; transform: translateY(14px) scale(.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip-bubble, .keys-box { animation: none; }
+}
+
+.tip-bubble::before {
+  /* 一小截强调色竖条，表明这是「提示」而不是正文内容 */
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--acc);
+}
+
+.tip-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  padding-right: 22px;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--text);
+}
+.tip-title svg { flex: 0 0 auto; color: var(--acc); }
+.tip-title kbd { margin: 0 1px; }
+
+.tip-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.tip-sub kbd { font-size: 11px; }
+
+.tip-act {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 11px;
+}
+.tip-more,
+.tip-never {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--acc);
+  min-height: 32px;
+}
+.tip-more:hover,
+.tip-never:hover { text-decoration: underline; }
+.tip-never { color: var(--text-3); font-weight: 500; margin-left: auto; }
+
+.tip-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color .16s, background .16s;
+}
+.tip-x:hover { color: var(--text); background: var(--surface-hi); }
+
+/* 窄屏：贴底部整条，不占半屏 */
+@media (max-width: 520px) {
+  .tip-bubble {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+}
+
+/* 编辑模式下隐藏这条提示。
+   理由有两条：
+     ① 它教的是 Ctrl+V 加链接，跟"整理顺序"是两件事，同时在屏幕上抢注意力；
+     ② 手机上它贴着底部，正好压住最下面一两张卡片 —— 而那恰恰是拖动时
+        最需要看得见、够得着的区域。 */
+body.is-editing .tip-bubble { display: none !important; }
+
+/* 打印时不该出现任何浮层与把手 */
+@media print {
+  .drag-handle, .tip-bubble, .keys-box, .paste-scrim, .toast { display: none !important; }
+}
+
+/* ==========================================================================
+   响应式 —— 移动优先的塌缩规则
+   ========================================================================== */
+@media (max-width: 860px) {
+  .topbar { padding: 10px 16px; gap: 10px; }
+  .brand-text { font-size: 16px; }
+  /* 搜索区收窄，但仍留在中间一栏 */
+  .search-wrap { width: clamp(180px, 40vw, 300px); }
+  .search input { font-size: 15px; }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+
+  /* 顶栏在手机上分两行：第一行品牌 + 工具按钮，第二行整条搜索框。
+     用 grid 显式分区（不用 order + flex-basis），因为 grid 的行高
+     由内容决定，不会出现「搜索框被压成 0 宽」这种事。
+     搜索框仍要独立占一整行 —— 塞进某个 flex 容器里时，换行会把
+     那个容器撑到 min-content（实测被撑到 497px），窄屏必溢出。 */
+  .topbar {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    row-gap: 10px;
+    padding: 10px 14px 12px;
+  }
+  .topbar > .brand     { grid-column: 1; grid-row: 1; }
+  .topbar > .tb-tools  { grid-column: 2; grid-row: 1; }
+  .topbar > .search-wrap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+  }
+  /* 顶栏没有搜索框时（show_search=0），工具按钮要顶到最右 */
+  .topbar:not(:has(.search-wrap)) > .tb-tools { grid-column: 2; grid-row: 1; }
+
+  /* 手机上按钮本就是纯图标，不需要再隐藏文字；保留这条以防
+     将来把文字加回来时不至于在窄屏爆版 */
+  .btn-admin { padding: 0 13px; }
+
+  /* 注：.gnav--side 在窄屏的形态由 max-width:1179px 那段接管，
+     会变成一行横向滚动的分组条，不要在这里 display:none ——
+     那等于把用户选的分组导航整个抹掉。 */
+
+  /* 所有栅格在窄屏一律塌成单列 / 三列
+
+     V1.3.0：主页的新版栅格是自适应的（minmax 自动算列数），
+     这几条固定列数会把它覆盖掉 —— 尤其 grid 被写死 repeat(3, 1fr)，
+     1440px 与 375px 都是 3 列，完全失去自适应。
+     所以限定在主页之外，用 body:not(.hp) 排除。 */
+  html[data-layout='card'] body:not(.hp) .links { grid-template-columns: 1fr; }
+  html[data-layout='menu'] body:not(.hp) .links { gap: 8px; }
+  html[data-layout='grid'] body:not(.hp) .links { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  html[data-layout='grid'] body:not(.hp) .link-icon { width: 46px; height: 46px; }
+  html[data-layout='grid'] body:not(.hp) .link { min-height: 100px; padding: 13px 4px 11px; }
+
+  body:not(.hp) .stage { padding-bottom: 72px; }
+}
+
+/* 侧边栏只在宽屏有位置。1180px 是"正文 1280 上限 + 左侧 168 通道"
+   能同时放下的最小宽度。
+   更窄时不能整块 display:none —— 那样用户设的"分组导航"就凭空消失了，
+   只能靠滚。这里改成吸顶的横向滚动条，功能保住，形态让位。
+
+   V1.3.0：主页已改用 body.hp 独立样式（assets/home.css），
+   断点统一在 1139px。这段老规则若继续生效，1139~1179px 这 40px
+   区间会出现两套侧栏规则互相覆盖，所以用 :not(.hp) 把它限定在
+   主页之外 —— 后台等其它页面仍按原样工作。 */
+@media (max-width: 1179px) {
+  body:not(.hp) .gnav--side {
+    /* 不做 sticky。顶栏本身是 sticky top:0 z-index:40，
+       同位置再吸一层只会被压在下面，滚动时看着像坏掉。
+       静态排一行比"半残的吸顶"干净。 */
+    position: static;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    margin-bottom: 18px;
+    /* 抵消 .stage 的左右内边距，让这行贴到屏幕两边 */
+    margin-inline: calc(var(--pad-x) * -1);
+    padding: 0 var(--pad-x);
+    z-index: 1;
+  }
+  body:not(.hp) .gnav-title { display: none; }
+  body:not(.hp) .gnav--side .gnav-track {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  body:not(.hp) .gnav--side .gnav-track::-webkit-scrollbar { display: none; }
+  body:not(.hp) .gnav--side .gnav-item {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--surface);
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  /* 竖线指示器在这个形态下没意义，改成底部一条短横线 */
+  body:not(.hp) .gnav--side .gnav-item::before {
+    left: 50%;
+    top: auto;
+    bottom: 3px;
+    width: 0;
+    height: 2px;
+    transform: translateX(-50%);
+    transition: width .22s var(--ease-out);
+  }
+  body:not(.hp) .gnav--side .gnav-item.is-active {
+    background: var(--acc);
+    border-color: transparent;
+    color: var(--acc-ink);
+  }
+  body:not(.hp) .gnav--side .gnav-item.is-active::before { height: 0; width: 0; }
+  body:not(.hp) .gnav--side .gnav-item.is-active .gnav-count {
+    background: rgba(0, 0, 0, .22);
+    color: var(--acc-ink);
+  }
+}
+
+/* 超窄屏：横排菜单也要能读 */
+@media (max-width: 380px) {
+  /* V1.3.0：主页宫格已自适应（minmax 会自己降到 2~3 列），
+     这里写死 3 列 + 12px 字号会在 320px 上把标题挤成竖排。
+     限定主页之外。 */
+  html[data-layout='grid'] body:not(.hp) .links { grid-template-columns: repeat(3, 1fr); }
+  html[data-layout='grid'] body:not(.hp) .link-title { font-size: 12px; }
+  body:not(.hp) .brand-text { font-size: 15px; }
+  body:not(.hp) .stage { padding-top: 20px; }
+  /* 320px 下面板不能是固定 288px（会超出视口 32px），
+     JS 已按 clientWidth 夹过宽度，这里再兜一层 */
+  .tbm-panel { width: calc(100vw - 24px); }
+}
+
+/* 打印：不要花里胡哨 */
+@media print {
+  .aurora, .grain, .gnav, .tb-tools, .search-wrap, .link-edit, .link-priv,
+  .paste-scrim, .paste-box, .toast { display: none !important; }
+  /* 打印时顶栏只剩站点名，居中栅格会让它悬在中间，改回靠左 */
+  .topbar { display: flex; justify-content: flex-start; background: none; backdrop-filter: none; }
+  body { background: #fff; color: #000; }
+  html[data-gnav='tab'] .group-head { display: flex; }
+  .group[hidden] { display: block !important; }
+}
+
+/* 尊重系统动效偏好：关掉装饰性动画，内容保持立即可见 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

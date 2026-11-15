@@ -1,0 +1,685 @@
+/* ==========================================================================
+   Frame —— 「程序框」
+   --------------------------------------------------------------------------
+   和 Atlas 是两套并列的设计语言，不是它的配色变体。
+
+   差别不在颜色，在**页面装在哪**：
+     Atlas  页面就是视口，顶栏横贯全屏，侧栏是一条浮在页面上的列。
+     Frame  整个应用装进一张带边框的圆角框里，四周留一圈底色；
+            框内顶栏 / 侧栏 / 主区三块并列，各自有边有界。
+
+   这就是「像一个程序」的来源：桌面应用从来不是铺满屏幕的，它有一个窗口；
+   窗口内部有标题栏、侧栏、内容区，彼此用线分开，而不是靠阴影飘着。
+
+   设计参考：shadcn dashboard、Linear、macOS 窗口。
+   共同点：1px 细线分界、小圆角（6~12px）、几乎没有阴影、黑白灰为主，
+   强调色是黑而不是某个彩色 —— 彩色只出现在该出现的地方（站点图标）。
+
+   实现要点：
+   · 所有规则都带 html[data-theme='frame'] 前缀，且本文件在 skin-atlas.css
+     之后加载，同特异性靠「后写的赢」覆盖；
+   · 变量块同时给出了 --at-* 一整套，避免漏覆盖时 atlas 的规则读到空变量；
+   · 布局靠 .shell 的 grid，侧栏不再是 fixed，而是框内的一列。
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 变量
+   ========================================================================== */
+html[data-theme='frame'] {
+  color-scheme: light;
+
+  /* 下面这组数是把参考站（ui.shadcn.com/examples/dashboard）的样式表
+     下载下来、连同 computed style 一起量出来的，不是凭眼睛调近似值：
+       --radius: .625rem          → 基础圆角 10px
+       .rounded-lg = radius       → 10px   按钮 / 输入框
+       .rounded-xl = radius×1.4   → 14px   外框 / 卡片
+       --border: #e5e5e5
+       --muted:  #f5f5f5          → 悬停底色
+       --sidebar: #fafafa         → 侧栏底色
+     圆角比例是「一个基础值 × 系数」，不是一堆独立的数 —— 这套关系照搬了。 */
+  --fr-page:   #f4f4f5;   /* 框外那圈底 */
+  --fr-app:    #ffffff;   /* 框内 */
+  --fr-side:   #fafafa;   /* 侧栏 */
+  --fr-hover:  #f5f5f5;
+  --fr-active: #f0f0f1;
+  --fr-line:   #e5e5e5;
+  --fr-line-2: #d4d4d4;
+  --fr-ink:    #0a0a0a;
+  --fr-ink-2:  #525252;
+  --fr-ink-3:  #a1a1aa;
+  --fr-ring:   rgba(10, 10, 10, .08);
+
+  --fr-r-app:  14px;   /* rounded-xl */
+  --fr-r-card: 12px;   /* 链接卡只有 76px 高，照搬 14 会显软，取中间值 */
+  --fr-r-sm:   6px;    /* rounded-md × 0.6 */
+
+  /* 参考站用的是 Geist。它需要在系统里已安装才生效，否则落到系统字 —— 
+     不引 webfont 是硬约束（零第三方请求，而且中文字体文件动辄几 MB）。 */
+  --fr-font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
+             "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+  /* ---- 兼容层：把 Atlas 的变量也指到同一组颜色 ----
+     Atlas 的规则（body.hp .link 之类）在 frame 下仍然匹配，若这些变量
+     没定义，它们会读到空值 —— 表现为某个角落突然没有背景或边框。
+     这里整体接管，漏覆盖的地方也只是「颜色按 frame 的来」，不会崩。 */
+  --at-paper:    #f4f4f5;
+  --at-paper-hi: #ffffff;
+  --at-card:     #ffffff;
+  --at-sunken:   #f4f4f5;
+  --at-ink:      #18181b;
+  --at-ink-2:    #52525b;
+  --at-ink-3:    #a1a1aa;
+  --at-rule:     #e6e6e9;
+  --at-rule-2:   #d6d6da;
+  --at-accent:   #18181b;
+  --at-accent-2: #000000;
+  --at-accent-s: rgba(24, 24, 27, .06);
+  --at-scrim:    rgba(244, 244, 245, .7);
+  --at-nav-bg:   #fafafa;
+
+  --at-sh-xs: 0 1px 2px rgba(24, 24, 27, .04);
+  --at-sh-sm: 0 1px 2px rgba(24, 24, 27, .04);
+  --at-sh-md: 0 2px 6px rgba(24, 24, 27, .05);
+  --at-sh-lg: 0 8px 24px -8px rgba(24, 24, 27, .16), 0 2px 6px rgba(24, 24, 27, .06);
+  --at-sh-xl: 0 16px 40px -12px rgba(24, 24, 27, .2);
+
+  --at-ico-bg-s: 0%;  --at-ico-bg-l: 96%;
+  --at-ico-fg-s: 0%;  --at-ico-fg-l: 45%;
+  --at-ico-ln-s: 0%;  --at-ico-ln-l: 90%;
+  --at-ico-inset: none;
+  --at-img-bg: #ffffff;
+
+  --at-font: var(--fr-font);
+  --at-font-d: var(--fr-font);
+  --at-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --at-r-xs: 4px;
+  --at-r-sm: 6px;
+  --at-r-md: 8px;
+  --at-r-lg: 10px;
+  --at-r-xl: 12px;
+
+  --hp-r-card: var(--fr-r-card);
+  --pad-x: 20px;
+
+  /* 强调色接管：app.css 的 [data-accent='amber'] 等会把 --acc 设成黄橙绿，
+     frame 只用黑。这里特异性更高（html[data-theme] 带一个元素名）。 */
+  --acc: #18181b;
+  --acc-2: #3f3f46;
+  --acc-ink: #ffffff;
+  --acc-glow: 24 24 27;
+
+  --bg-0: var(--fr-app);
+  --bg-1: var(--fr-side);
+  --bg-2: var(--fr-hover);
+  --surface: var(--fr-app);
+  --surface-solid: var(--fr-app);
+  --surface-hi: var(--fr-hover);
+  --line: var(--fr-line);
+  --line-hi: var(--fr-line-2);
+  --text: var(--fr-ink);
+  --text-2: var(--fr-ink-2);
+  --text-3: var(--fr-ink-3);
+  --shadow: var(--at-sh-sm);
+  --shadow-hi: var(--at-sh-lg);
+}
+
+/* ==========================================================================
+   2. 页面与壳
+   --------------------------------------------------------------------------
+   视口本身变成一张灰底，应用在中间，四周一圈 12px。
+   小屏上这圈留白要去掉 —— 手机上每一像素都该给内容。
+   ========================================================================== */
+html[data-theme='frame'] body.hp {
+  padding: 12px;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--fr-page);
+  background-image: none;
+  background-attachment: scroll;
+  color: var(--fr-ink);
+  font-family: var(--fr-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Atlas 的背景装饰在框里没有意义 */
+html[data-theme='frame'] body.hp .aurora,
+html[data-theme='frame'] body.hp .grain { display: none; }
+
+html[data-theme='frame'] body.hp .shell {
+  display: grid;
+  /* 240：参考站是 256（w-64），它的分类名是 Dashboard/Lifecycle 这种长词；
+     这里的中文分类两到四个字，240 已经把「名称 …… 计数」撑得很开。 */
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 56px 1fr;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--fr-line);
+  border-radius: var(--fr-r-app);
+  overflow: hidden;
+  background: var(--fr-app);
+  /* 一张几乎看不见的投影，只为了让框从底上「浮起 1mm」。
+     再重就变成卡片了 —— 窗口不需要被举起。 */
+  box-shadow: 0 1px 2px rgba(24, 24, 27, .04), 0 12px 32px -24px rgba(24, 24, 27, .22);
+}
+
+/* ==========================================================================
+   3. 顶栏 —— 框内的第一行，横跨两列
+   ========================================================================== */
+html[data-theme='frame'] body.hp .topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  inset: auto;
+  height: 56px;
+  min-height: 56px;
+  padding: 0 16px;
+  gap: 18px;
+  background: var(--fr-app);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid var(--fr-line);
+  box-shadow: none;
+  z-index: 5;
+}
+
+/* 品牌：方块 + 字，字号收小半号，跟程序标题栏一个量级 */
+html[data-theme='frame'] body.hp .brand {
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .brand-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--fr-ink);
+  box-shadow: none;
+}
+html[data-theme='frame'] body.hp .brand-mark svg { width: 14px; height: 14px; }
+
+/* ==========================================================================
+   4. 侧栏 —— 框内左列，不是浮层
+   ========================================================================== */
+html[data-theme='frame'] body.hp .gnav--side {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-height: none;
+  padding: 10px 8px 14px;
+  border: 0;
+  border-right: 1px solid var(--fr-line);
+  border-radius: 0;
+  background: var(--fr-side);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 1;
+}
+
+html[data-theme='frame'] body.hp .gnav-head {
+  margin: 4px 0 6px;
+  padding: 0 8px;
+}
+html[data-theme='frame'] body.hp .gnav-title {
+  font-family: var(--fr-font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .gnav-fold {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--fr-r-sm);
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .gnav-fold:hover {
+  background: var(--fr-active);
+  color: var(--fr-ink);
+}
+
+html[data-theme='frame'] body.hp .gnav--side .gnav-track { gap: 1px; }
+html[data-theme='frame'] body.hp .gnav--side .gnav-item {
+  min-height: 36px;
+  padding: 0 9px;
+  gap: 9px;
+  border-radius: var(--fr-r-sm);
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--fr-ink-2);
+  transition: background .12s, color .12s;
+}
+html[data-theme='frame'] body.hp .gnav-item:hover {
+  background: var(--fr-hover);
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .gnav-item.is-active {
+  background: var(--fr-active);
+  color: var(--fr-ink);
+  font-weight: 550;
+  box-shadow: none;
+}
+
+/* 图标回归纯线条：Atlas 那枚 28px 灰方块是「侧栏宽、字大」时的体量补偿，
+   在 32px 行高的紧凑列表里反而让每行发重。 */
+html[data-theme='frame'] body.hp .gnav-ico {
+  width: 17px;
+  height: 17px;
+  border-radius: 0;
+  background: none;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .gnav-item:hover .gnav-ico {
+  background: none;
+  color: var(--fr-ink-2);
+}
+html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-ico {
+  background: none;
+  color: var(--fr-ink);
+}
+
+html[data-theme='frame'] body.hp .gnav--side .gnav-count {
+  font-size: 12px;
+  color: var(--fr-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme='frame'] body.hp .gnav--side .gnav-item.is-active .gnav-count {
+  color: var(--fr-ink-2);
+}
+
+/* ==========================================================================
+   5. 主区 —— 框内右列，自己滚动
+   ========================================================================== */
+html[data-theme='frame'] body.hp .stage {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  padding: 22px 24px 40px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--fr-app);
+  /* 必须显式撑满。
+     home.css 给 .stage 写了 `max-width: var(--hp-maxw); margin: 0 auto` ——
+     在普通流里那只是「超宽屏时别拉太长」，但到了 grid 里，**自动外边距会
+     让 stretch 失效**，元素变成内容宽度并居中：实测主区缩到 471px、
+     卡片被挤成单列。这是 grid 与 auto margin 的经典冲突。 */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  justify-self: stretch;
+}
+
+/* 分组标题：去掉圆点与延长线，只留「名字 + 数量」。
+   程序界面里的分组标签就该这么安静。 */
+html[data-theme='frame'] body.hp .group {
+  margin-bottom: 32px;
+  scroll-margin-top: 8px;
+}
+html[data-theme='frame'] body.hp .group-head {
+  /* 必须显式 static。Atlas 给组签写了 position: sticky + top: 顶栏高，
+     在它自己的布局里是用来吸顶的；但 frame 的滚动容器是 .stage 而不是
+     视口，sticky 会按视口的 top 计算，把整行标题往下推 57px、正好压在
+     第一行卡片上（实测 head.y=148 / links.y=127）。 */
+  position: static;
+  min-height: 26px;
+  margin: 0 0 14px;
+  padding: 0;
+  gap: 9px;
+}
+html[data-theme='frame'] body.hp .group-name {
+  font-family: var(--fr-font);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .group-count {
+  font-size: 12.5px;
+  color: var(--fr-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme='frame'] body.hp .group-rule { display: none; }
+/* Atlas 的组名前有一颗 6px 强调色圆点 —— 那是「目录」语气的装饰。
+   窗口界面里分组标签不需要装饰，一个短横线的信息量都是多余的。 */
+html[data-theme='frame'] body.hp .group-name::before { display: none; }
+
+/* ==========================================================================
+   6. 卡片
+   --------------------------------------------------------------------------
+   边框 + 小圆角，零阴影。悬停只做两件事：边框深一档、微微提亮。
+   Atlas 的「抬 2px + 双层柔影」在这里会显得轻浮 —— 窗口里的元素不该飘。
+   ========================================================================== */
+html[data-theme='frame'] body.hp .link {
+  min-height: 88px;
+  padding: 14px 16px;
+  gap: 13px;
+  border: 1px solid var(--fr-line);
+  border-radius: var(--fr-r-card);
+  background: var(--fr-app);
+  /* 参考站的卡片带一层 `0 1px 2px rgba(0,0,0,.05)`：极轻，作用是让白卡在
+     白底上「有一点点厚度」，而不是完全平贴。Atlas 追求的是同一件事，
+     只是它的阴影更散。 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  color: var(--fr-ink);
+  transition: border-color .14s, background .14s, box-shadow .14s;
+}
+html[data-theme='frame'] body.hp .link:hover {
+  border-color: var(--fr-line-2);
+  background: var(--fr-app);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+  transform: none;
+}
+html[data-theme='frame'] body.hp .link:active { background: var(--fr-side); }
+
+html[data-theme='frame'] body.hp .link-icon,
+html[data-theme='frame'][data-layout='card'] body.hp .link-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--fr-side);
+  border: 1px solid var(--fr-line);
+  box-shadow: none;
+}
+html[data-theme='frame'] body.hp .link:hover .link-icon {
+  transform: none;
+  border-color: var(--fr-line-2);
+}
+
+html[data-theme='frame'] body.hp .link-title,
+html[data-theme='frame'][data-layout='card'] body.hp .link-title {
+  font-family: var(--fr-font);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.008em;
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .link-sub {
+  font-family: var(--fr-font);
+  font-size: 12.5px;
+  color: var(--fr-ink-3);
+  letter-spacing: 0;
+}
+html[data-theme='frame'] body.hp .initials {
+  font-family: var(--fr-font);
+  font-weight: 600;
+  letter-spacing: -.02em;
+  border-radius: 8px;
+}
+
+/* 宫格：图标仍是圆角方块，但底色统一到浅灰，不再每家一个色相 */
+html[data-theme='frame'][data-layout='grid'] body.hp .link-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+}
+
+/* ==========================================================================
+   7. 搜索框 —— 方角，不再是胶囊
+   ========================================================================== */
+html[data-theme='frame'] body.hp .search-wrap {
+  width: clamp(300px, 32vw, 460px);
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--fr-line);
+  background: var(--fr-app);
+  box-shadow: none;
+  transition: border-color .14s, box-shadow .14s;
+}
+html[data-theme='frame'] body.hp .search-wrap:focus-within {
+  border-color: var(--fr-line-2);
+  box-shadow: 0 0 0 3px var(--fr-ring);
+}
+html[data-theme='frame'] body.hp .search input {
+  min-height: 36px;
+  /* 左侧只留 12px：放大镜在工作台里是隐藏的（见下一条），
+     左边已经有引擎 logo 表达「这里能搜」，再放一个放大镜是重复的。
+     上一版把放大镜留着、内距又只给 8px，于是它直接压在提示文字上。 */
+  padding: 0 64px 0 12px;
+  border-radius: 0 10px 10px 0;
+  font-family: var(--fr-font);
+  font-size: 14px;
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .search input::placeholder { color: var(--fr-ink-3); }
+/* 放大镜隐藏。Atlas 里它和引擎 logo 在视觉上是叠着的（颜色相近看不出），
+   工作台的 logo 是彩色的，再并排放一个放大镜就成了三个图标挤在 20px 里。
+   参考站的搜索框同样没有放大镜 —— 有 placeholder 就够了。 */
+html[data-theme='frame'] body.hp .search-icon { display: none; }
+html[data-theme='frame'] body.hp .eng-btn {
+  min-height: 34px;
+  padding: 0 5px 0 11px;
+  border-radius: 10px 0 0 10px;
+  color: var(--fr-ink-2);
+}
+html[data-theme='frame'] body.hp .eng-btn:hover { color: var(--fr-ink); }
+html[data-theme='frame'] body.hp .eng-logo { width: 20px; height: 20px; }
+html[data-theme='frame'] body.hp .search-kbd {
+  border-radius: 4px;
+  border: 1px solid var(--fr-line);
+  background: var(--fr-side);
+  color: var(--fr-ink-3);
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* ==========================================================================
+   8. 工具按钮与下拉
+   ========================================================================== */
+html[data-theme='frame'] body.hp .tbm-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--fr-ink-2);
+}
+html[data-theme='frame'] body.hp .tbm-btn:hover {
+  background: var(--fr-hover);
+  border-color: var(--fr-line);
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .tbm-btn[aria-pressed='true'] {
+  background: var(--fr-ink);
+  border-color: var(--fr-ink);
+  color: #fff;
+  box-shadow: none;
+}
+html[data-theme='frame'] body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: #fff; }
+
+html[data-theme='frame'] body.hp .tbm-btn--login {
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
+  border: 1px solid var(--fr-line);
+  background: var(--fr-app);
+  color: var(--fr-ink);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+html[data-theme='frame'] body.hp .tbm-btn--login:hover {
+  background: var(--fr-ink);
+  border-color: var(--fr-ink);
+  color: #fff;
+}
+
+html[data-theme='frame'] body.hp .tbm-panel {
+  border-radius: 10px;
+  border: 1px solid var(--fr-line);
+  background: var(--fr-app);
+  box-shadow: 0 12px 32px -12px rgba(24, 24, 27, .22), 0 2px 6px rgba(24, 24, 27, .06);
+}
+html[data-theme='frame'] body.hp .tbm-opt {
+  border-radius: 6px;
+  font-size: 13px;
+}
+html[data-theme='frame'] body.hp .tbm-opt:hover { background: var(--fr-hover); }
+html[data-theme='frame'] body.hp .tbm-opt[aria-selected='true'] {
+  background: var(--fr-active);
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .tbo-name { font-weight: 500; }
+
+/* ==========================================================================
+   9. 收起态
+   --------------------------------------------------------------------------
+   shell 的列宽是写死的 224px（grid），不走 --hp-nav-w，所以这里要直接改列。
+   ========================================================================== */
+html[data-theme='frame'][data-nav='mini'] body.hp .shell {
+  grid-template-columns: 56px 1fr;
+}
+html[data-theme='frame'][data-nav='mini'] body.hp .gnav--side {
+  padding: 10px 6px 14px;
+}
+
+/* ==========================================================================
+   10. 页脚与空态
+   ========================================================================== */
+html[data-theme='frame'] body.hp .foot {
+  margin-top: 34px;
+  font-size: 12.5px;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .empty-title {
+  font-family: var(--fr-font);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fr-ink);
+}
+html[data-theme='frame'] body.hp .empty-sub { color: var(--fr-ink-3); }
+html[data-theme='frame'] body.hp .btn-primary {
+  border-radius: 8px;
+  background: var(--fr-ink);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* ==========================================================================
+   11. 窄屏
+   --------------------------------------------------------------------------
+   框在小屏上没有意义（四周留白是奢侈品），直接取消：
+   应用重新铺满视口，侧栏回到顶部横条，与 Atlas 的窄屏一致。
+   ========================================================================== */
+@media (max-width: 1139px) {
+  html[data-theme='frame'] body.hp { padding: 0; }
+  html[data-theme='frame'] body.hp .shell {
+    border: 0;
+    border-radius: 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    box-shadow: none;
+  }
+  html[data-theme='frame'] body.hp .topbar {
+    grid-column: 1;
+    grid-row: 1;
+    height: auto;
+    min-height: 56px;
+  }
+  html[data-theme='frame'] body.hp .gnav--side {
+    grid-column: 1;
+    grid-row: 2;
+    position: relative;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--fr-line);
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  html[data-theme='frame'] body.hp .gnav-head { display: none; }
+  html[data-theme='frame'] body.hp .gnav--side .gnav-track {
+    flex-direction: row;
+    gap: 4px;
+  }
+  html[data-theme='frame'] body.hp .gnav--side .gnav-item {
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: var(--fr-r-sm);
+  }
+  html[data-theme='frame'] body.hp .gnav--side .gnav-count { margin-left: 0; }
+  html[data-theme='frame'] body.hp .stage {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 16px 16px 32px;
+  }
+  html[data-theme='frame'] body.hp .group-name { font-size: 14px; }
+}
+
+@media (max-width: 720px) {
+  html[data-theme='frame'] body.hp .topbar {
+    height: auto;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  html[data-theme='frame'] body.hp .search-wrap {
+    width: 100%;
+    min-height: 36px;
+  }
+  html[data-theme='frame'] body.hp .search input { font-size: 16px; }
+}
+
+/* ==========================================================================
+   12. 动效收敛
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme='frame'] body.hp * {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+/* 拖到侧栏分组名上：工作台用近黑实底（它的强调色就是黑） */
+html[data-theme='frame'] body.hp .gnav-item.is-drop-target {
+  background: var(--fr-ink);
+  color: #fff;
+}
+html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-name { color: #fff; }
+html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-ico {
+  background: none;
+  color: #fff;
+}
+html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-count { color: rgba(255, 255, 255, .7); }
+
+/* 侧栏底部：版本 + 版权（工作台用更小的字，和它的紧凑基调一致） */
+html[data-theme='frame'] body.hp .gnav--side {
+  display: flex;
+  flex-direction: column;
+}
+html[data-theme='frame'] body.hp .gnav-foot {
+  margin-top: auto;
+  padding: 14px 9px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .gnav-ver {
+  font-size: 10.5px;
+  letter-spacing: .01em;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .gnav-copy {
+  color: var(--fr-ink-3);
+  text-decoration: none;
+}
+html[data-theme='frame'] body.hp a.gnav-copy:hover {
+  color: var(--fr-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (max-width: 1139px) {
+  html[data-theme='frame'] body.hp .gnav-foot { display: none; }
+}

@@ -1,0 +1,19 @@
+# 本目录是 SQLite 数据库、图标缓存与地理库导入的临时文件。
+# 图标是 <img> 引用的，静态资源不经 PHP，所以只放行 icons/ 里的图片。
+#
+# 注意：这里用「先全拒 + 再放行图片」的写法，
+# 别写成 Require all granted 再靠 FilesMatch 拒 —— 那样 data/tmp/
+# 下正在下载的 90MB gz 文件会变成可公开下载。
+Require all denied
+
+# 只放行 icons/ 子目录里的图片（路径级限制，不是只按后缀）
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # 非 icons/ 路径下的图片请求直接拒掉（例如 data/tmp/xxx.png）
+    RewriteCond %{REQUEST_URI} !/data/icons/
+    RewriteRule \.(png|ico|jpg|jpeg|webp|svg|gif)$ - [F,L]
+</IfModule>
+
+<FilesMatch "\.(png|ico|jpg|jpeg|webp|svg|gif)$">
+    Require all granted
+</FilesMatch>

@@ -1,0 +1,1333 @@
+/* ==========================================================================
+   Vnav 主页视觉系统 · V1.3.0
+   --------------------------------------------------------------------------
+   为什么要单独一个文件，而不是继续改 app.css：
+     app.css 同时被 admin.php 和 login.php 引用（后台与登录页只靠它取
+     设计令牌和按钮/表单样式）。在它身上重写主页视觉，会把后台一起带崩。
+     所以这里新建一份主页专用样式，全部规则挂在 body.hp 之下：
+       · 特异性天然高一级，稳稳压过 app.css 里的同名规则；
+       · 作用域只落在主页，后台与登录页零影响；
+       · JS 依赖的类名（.link / #gnav / .tbm-opt …）一个没改，
+         所以 ui.js 与 app.js 一行都不用动。
+
+   设计主张（V1.3.0 推倒重来的四条）：
+     1. 一页一记忆点 ——「吸顶组签」：分组标题滚动时贴住顶栏，
+        像书架上的横档，任何时候都知道自己正看哪一组。
+     2. 卡片只讲三件事 —— 图标、名称、（可选）一行说明。
+        宫格不再截断长标题，改用更宽的格子 + 允许换行。
+     3. 导航是「目录」不是「筛选」——点击是跳过去，不是把别的藏起来。
+        横排与竖排是同一件事的两种排布，行为完全一致。
+     4. 三套皮肤是三种材质，不是三次换色：
+        纸白＝印刷品（细线、无阴影、小圆角）
+        深夜＝暗玻（毛玻璃、内高光、大圆角）
+        护眼＝青瓷（纸纹、柔描边、中圆角）
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 设计令牌
+   ========================================================================== */
+/* 默认圆角必须声明在 html 上，不能写在 body.hp 里。
+   自定义属性是「就近覆盖」：body.hp 比 html 更靠近元素，
+   写在 body.hp 上的值会盖掉 html[data-theme='...'] 里各皮肤的圆角，
+   于是三套皮肤设的 10 / 15 / 12px 全部失效、一律变成 12px（实测踩过）。
+   所以默认值放这里，皮肤的那几条才真正起作用。 */
+html { --hp-r-card: 12px; }
+
+body.hp {
+  /* 顶栏高度是全局基准：sticky 组签的 top、锚点滚动的偏移、
+     侧栏的起始位置全部由它推出来。改一个数，整站对齐。 */
+  --hp-bar: 60px;
+
+  --hp-r-btn: 11px;
+  --hp-gap: 12px;
+  --hp-maxw: 1340px;
+  --hp-nav-w: 176px;
+
+  /* 组签高度：sticky 标题自己的高度，算 scroll-margin 用 */
+  --hp-ghead: 44px;
+}
+
+/* ==========================================================================
+   2. 五套皮肤的材质【V1.3.2 起已退役，见下方说明】
+   --------------------------------------------------------------------------
+   这一节是 V1.3.0「推倒重来」的核心。以前几套皮肤只换 --bg / --text，
+   阴影、圆角、毛玻璃全是同一套，所以看起来永远是「同一个页面换个颜色」。
+
+   现在每套皮肤给出一组材质令牌：
+     --hp-card-bg      卡片底色
+     --hp-card-line    卡片描边
+     --hp-card-hover   悬停阴影（静态态一律不投影，投影只在悬停时出现）
+     --hp-card-blur    毛玻璃强度（浅色皮肤为 none）
+     --hp-card-inset   内高光（暗色皮肤靠它做「玻璃上沿」）
+     --hp-page-tex     页面纹理（护眼用极淡纸纹）
+
+   ⚠️ V1.3.2 起 paper / night / celadon / cyber 四套全部退役。
+      现在整套视觉只有 Atlas（亮 / 暗 / 跟随系统），定义在
+      assets/skin-atlas.css。下面这些 html[data-theme='xxx'] 块不再会被
+      任何主题匹配，属于历史遗留，保留只为两条底线：
+        1) html 那组仍作兜底 —— 登录页与后台万一没拿到 Atlas 变量时
+           不会白屏（删掉会让变量直接落空）；
+        2) 将来若要回滚，把 inc/skins.php 里对应的 key 加回来即可复活。
+
+      要改主页视觉，请改 assets/skin-atlas.css，不要在这里加东西。
+   ========================================================================== */
+
+/* ---------- 纸白：印刷品。细线、几乎无阴影、小圆角 ---------- */
+html[data-theme='paper'] {
+  --bg-0: #f2eee4;
+  --bg-1: #f8f4ea;
+  --bg-2: #eae3d3;
+  --surface: #fdfbf6;
+  --surface-solid: #fdfbf6;
+  --surface-hi: #fffefa;
+  --line: rgba(58, 44, 26, .13);
+  --line-hi: rgba(58, 44, 26, .25);
+  --text: #211b13;
+  --text-2: #5a4f40;
+  --text-3: #6d6250;
+
+  --acc: #96650f;
+  --acc-2: #b3781a;
+  --acc-ink: #fffdf8;
+  --acc-glow: 150 101 15;
+
+  /* 纸白不要阴影 —— 印刷品靠描边分界，投影会让它变成"浮起来的网页" */
+  --hp-card-bg: #fdfbf6;
+  --hp-card-line: rgba(58, 44, 26, .13);
+  --hp-card-hover: 0 2px 0 rgba(58, 44, 26, .06);
+  --hp-card-blur: none;
+  --hp-card-inset: none;
+  --hp-r-card: 10px;
+  --hp-page-tex: none;
+  --hp-ghost: rgba(58, 44, 26, .045);
+  /* 宫格静止态的托底。浅色皮肤不需要：图标本身有浅底，直接躺在
+     浅色页面上已经有边界感，再加一层反而糊成一片灰方块。 */
+  --hp-grid-bg: transparent;
+  --hp-grid-line: transparent;
+}
+
+/* ---------- 深夜：暗玻。毛玻璃 + 内高光 + 大圆角 ---------- */
+html[data-theme='night'],
+html[data-theme='auto'] {
+  --bg-0: #0e0c14;
+  --bg-1: #14111d;
+  --bg-2: #1a1626;
+  --surface: rgba(255, 255, 255, .045);
+  --surface-solid: #191622;
+  --surface-hi: rgba(255, 255, 255, .075);
+  --line: rgba(255, 255, 255, .085);
+  --line-hi: rgba(255, 255, 255, .17);
+  --text: #f1ece3;
+  --text-2: #bab2c6;
+  --text-3: #938c9f;
+
+  --acc: #f0b429;
+  --acc-2: #ffd166;
+  --acc-ink: #2b1c00;
+  --acc-glow: 240 180 41;
+
+  --hp-card-bg: rgba(255, 255, 255, .045);
+  --hp-card-line: rgba(255, 255, 255, .085);
+  --hp-card-hover: 0 14px 34px -18px rgba(0, 0, 0, .9);
+  --hp-card-blur: blur(18px) saturate(150%);
+  --hp-card-inset: inset 0 1px 0 rgba(255, 255, 255, .055);
+  --hp-r-card: 15px;
+  --hp-page-tex: none;
+  --hp-ghost: rgba(255, 255, 255, .04);
+  /* 暗色皮肤宫格静止态必须有托底：透明度拉到 0 会让图标直接浮在
+     近黑底上，失去「这是一个可点单元」的边界感。2.8% 的白足够
+     形成面，又不至于变成一块块方块。 */
+  --hp-grid-bg: rgba(255, 255, 255, .028);
+  --hp-grid-line: rgba(255, 255, 255, .05);
+}
+
+/* ---------- 护眼：青瓷。纸纹 + 柔描边 + 中圆角 ---------- */
+html[data-theme='celadon'] {
+  --bg-0: #e5ebdc;
+  --bg-1: #edf2e4;
+  --bg-2: #dae2cc;
+  --surface: #f7faf1;
+  --surface-solid: #f7faf1;
+  --surface-hi: #fbfdf6;
+  --line: rgba(56, 74, 42, .14);
+  --line-hi: rgba(56, 74, 42, .26);
+  --text: #1f2718;
+  --text-2: #4b5740;
+  --text-3: #616e52;
+
+  --acc: #1f8a5c;
+  --acc-2: #2ba874;
+  --acc-ink: #f2fff9;
+  --acc-glow: 31 138 92;
+
+  --hp-card-bg: #f7faf1;
+  --hp-card-line: rgba(56, 74, 42, .13);
+  --hp-card-hover: 0 3px 0 rgba(56, 74, 42, .05);
+  /* 极淡的斜向纸纹：45° 上 1 像素的明暗交替，视觉上像水彩纸的纹理。
+     用 % 透明度而不是灰阶，深色下不会变脏。 */
+  --hp-card-blur: none;
+  --hp-card-inset: inset 0 0 0 1px rgba(255, 255, 255, .5);
+  --hp-r-card: 12px;
+  --hp-page-tex: repeating-linear-gradient(45deg,
+      rgba(90, 110, 70, .028) 0 1px,
+      transparent 1px 5px);
+  --hp-ghost: rgba(56, 74, 42, .045);
+  --hp-grid-bg: transparent;
+  --hp-grid-line: transparent;
+}
+
+/* ---------- 赛博：霓虹暗底。玻璃卡 + 霓虹细边 + 最大圆角 ----------
+   这一块是补漏：V1.3.0 首次重写材质时只给 paper / night / celadon 三套
+   写了 --hp-card-* 令牌，漏了 cyber。而 --hp-card-* 没有全局兜底值，
+   于是「赛博」皮肤下主页卡片算出来是 background:transparent +
+   border-color:currentColor（刺眼白框）、圆角退回 6px 初值。
+   实测确认后才补上，不是预防性添加。 */
+html[data-theme='cyber'] {
+  --hp-card-bg: rgba(12, 16, 34, .62);
+  --hp-card-line: rgba(0, 240, 255, .16);
+  --hp-card-hover: 0 16px 40px -22px rgba(0, 240, 255, .22);
+  --hp-card-blur: blur(14px) saturate(160%);
+  --hp-card-inset: inset 0 1px 0 rgba(0, 240, 255, .10);
+  --hp-r-card: 14px;
+  --hp-page-tex: none;
+  --hp-ghost: rgba(0, 240, 255, .05);
+  /* 赛博底是 #05060e 近黑，和深夜同一类问题：不给托底，图标就浮在
+     纯黑上。托底带一点霓虹青，跟这套皮肤的霓虹边呼应。 */
+  --hp-grid-bg: rgba(0, 240, 255, .035);
+  --hp-grid-line: rgba(0, 240, 255, .10);
+}
+
+/* 浅色皮肤下的强调色必须压深，否则黄/青在米底上对比不足 4.5。
+   这不是审美微调，是硬指标。用同元素双属性选择器 —— data-accent 与
+   data-theme 都挂在 <html> 上，写成后代选择器永远匹配不到（踩过）。 */
+html[data-theme='paper'][data-accent='amber'],
+html[data-theme='celadon'][data-accent='amber']  { --acc: #8a5c0d; --acc-2: #a9700f; --acc-ink: #fffdf8; --acc-glow: 138 92 13; }
+html[data-theme='paper'][data-accent='coral'],
+html[data-theme='celadon'][data-accent='coral']  { --acc: #b8442a; --acc-2: #cf5738; --acc-ink: #fff8f5; --acc-glow: 184 68 42; }
+html[data-theme='paper'][data-accent='mint'],
+html[data-theme='celadon'][data-accent='mint']   { --acc: #1c7d53; --acc-2: #22996a; --acc-ink: #f2fff9; --acc-glow: 28 125 83; }
+html[data-theme='paper'][data-accent='sky'],
+html[data-theme='celadon'][data-accent='sky']    { --acc: #1f5fa8; --acc-2: #2a76c6; --acc-ink: #f5faff; --acc-glow: 31 95 168; }
+html[data-theme='paper'][data-accent='violet'],
+html[data-theme='celadon'][data-accent='violet'] { --acc: #5e3ca6; --acc-2: #7349c2; --acc-ink: #faf7ff; --acc-glow: 94 60 166; }
+
+/* 跟随系统：系统浅色时整组切到纸白 */
+@media (prefers-color-scheme: light) {
+  html[data-theme='auto'] {
+    --bg-0: #f2eee4;
+    --bg-1: #f8f4ea;
+    --bg-2: #eae3d3;
+    --surface: #fdfbf6;
+    --surface-solid: #fdfbf6;
+    --surface-hi: #fffefa;
+    --line: rgba(58, 44, 26, .13);
+    --line-hi: rgba(58, 44, 26, .25);
+    --text: #211b13;
+    --text-2: #5a4f40;
+    --text-3: #6d6250;
+
+    --hp-card-bg: #fdfbf6;
+    --hp-card-line: rgba(58, 44, 26, .13);
+    --hp-card-hover: 0 2px 0 rgba(58, 44, 26, .06);
+    --hp-card-blur: none;
+    --hp-card-inset: none;
+    --hp-r-card: 10px;
+    --hp-ghost: rgba(58, 44, 26, .045);
+    /* 系统切浅色时，跟随系统 = 纸白，宫格托底也要跟着退成透明，
+       否则会留下深夜那层白托底，在米底上变成灰色方块。 */
+    --hp-grid-bg: transparent;
+    --hp-grid-line: transparent;
+  }
+  html[data-theme='auto'][data-accent='amber']  { --acc: #8a5c0d; --acc-2: #a9700f; --acc-ink: #fffdf8; --acc-glow: 138 92 13; }
+  html[data-theme='auto'][data-accent='coral']  { --acc: #b8442a; --acc-2: #cf5738; --acc-ink: #fff8f5; --acc-glow: 184 68 42; }
+  html[data-theme='auto'][data-accent='mint']   { --acc: #1c7d53; --acc-2: #22996a; --acc-ink: #f2fff9; --acc-glow: 28 125 83; }
+  html[data-theme='auto'][data-accent='sky']    { --acc: #1f5fa8; --acc-2: #2a76c6; --acc-ink: #f5faff; --acc-glow: 31 95 168; }
+  html[data-theme='auto'][data-accent='violet'] { --acc: #5e3ca6; --acc-2: #7349c2; --acc-ink: #faf7ff; --acc-glow: 94 60 166; }
+}
+
+/* ==========================================================================
+   3. 页面底色与纹理
+   ========================================================================== */
+body.hp {
+  background: var(--bg-0);
+  /* 纵深：一层极缓的斜向渐变 + 一枚顶部暖光。
+     不做大光斑（那是旧版的写法），改成「纸面受光」的方向 ——
+     光源在左上，越往右下越沉，像一张摊在桌上的纸。 */
+  background-image:
+    radial-gradient(120% 80% at 12% -10%, var(--hp-ghost), transparent 60%),
+    linear-gradient(168deg, var(--bg-1) 0%, var(--bg-0) 46%, var(--bg-0) 100%);
+}
+
+/* 护眼皮肤的纸纹单独铺一层，不跟背景渐变混在同一个属性里，
+   否则 repeating-linear-gradient 会被 radial 盖住看不出。 */
+body.hp::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--hp-page-tex);
+}
+
+/* 旧版的 .aurora / .grain 两层在主页上关掉：新的底色体系自己带纵深，
+   留着会叠成一块发灰的雾。元素仍在 DOM 里（不改 HTML 结构），只是不画。
+
+   但赛博皮肤要区别对待 —— 它的「CRT 扫描线」就画在 .grain 上，
+   一刀切会把这个皮肤最关键的质感连同灰雾一起砍掉（实测确认过：
+   关掉后赛博只剩一张纯黑底，跟深夜皮肤几乎分不出来）。
+
+   所以：.aurora 全皮肤关闭（它那团大光斑在主页上确实会把 #05060e
+   抬成发灰的深灰，霓虹感全失）；.grain 只对赛博放行。
+   赛博的扫描线只有 3.4% 不透明度，是极淡横纹，不会改变底色明度。 */
+body.hp .aurora,
+body.hp .grain { display: none; }
+html[data-theme='cyber'] body.hp .grain { display: block; }
+
+/* ==========================================================================
+   4. 顶栏
+   --------------------------------------------------------------------------
+   旧版 73px 高，偏厚；新版 60px。矮一点的好处是首屏能多露出一行卡片，
+   代价是内边距必须精确到 8px 才能把 44px 的按钮塞进去。
+   ========================================================================== */
+body.hp .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--hp-bar);
+  padding: 8px var(--pad-x);
+  background: color-mix(in srgb, var(--bg-0) 84%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid var(--line);
+}
+body.hp .topbar > .brand { grid-column: 1; justify-self: start; min-width: 0; }
+body.hp .topbar > .search-wrap { grid-column: 2; justify-self: center; }
+body.hp .topbar > .tb-tools { grid-column: 3; justify-self: end; }
+
+/* 品牌：一枚方形标记 + 站名。标记用强调色的实心块，
+   靠对比而不是靠渐变找存在感（渐变在小尺寸下看不出层次）。 */
+body.hp .brand {
+  gap: 9px;
+  min-height: 44px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+body.hp .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--acc);
+  color: var(--acc-ink);
+  box-shadow: none;
+}
+body.hp .brand-mark svg { width: 16px; height: 16px; }
+
+/* ==========================================================================
+   5. 搜索框
+   --------------------------------------------------------------------------
+   胶囊形（圆角 999）。整站其他元素都是 10~15px 的方圆角，
+   只有搜索框是纯胶囊 —— 这是有意的：它是全页唯一「随时要打字」的地方，
+   形状上就该和卡片区分开，让人一眼找到入口。
+   ========================================================================== */
+body.hp .search-wrap {
+  width: clamp(260px, 34vw, 460px);
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--hp-card-line);
+  background: var(--hp-card-bg);
+  backdrop-filter: var(--hp-card-blur);
+  -webkit-backdrop-filter: var(--hp-card-blur);
+  transition: border-color .18s, background .18s, box-shadow .2s;
+}
+body.hp .search-wrap:hover { border-color: var(--line-hi); }
+body.hp .search-wrap:focus-within {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgb(var(--acc-glow) / .15);
+}
+body.hp .eng-btn {
+  min-height: 44px;
+  padding: 0 6px 0 13px;
+  border-radius: 999px 0 0 999px;
+}
+body.hp .eng-btn::after {
+  height: 16px;
+  /* 胶囊里的一条细竖线，太短会看不见、太长会切断，16px 是实测合适值 */
+  opacity: .7;
+}
+body.hp .search input {
+  min-height: 42px;
+  padding: 0 16px 0 32px;
+  border-radius: 0 999px 999px 0;
+  font-size: 15.5px;
+}
+body.hp .search-icon { left: 35px; }
+
+/* 引擎标志：26px 圆角方块。旧版 22px 太小，几个品牌符号在 15px 的
+   SVG 视窗里糊成一团。26px 配 17px 的标记，形状辨识度明显好一档。 */
+body.hp .eng-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+body.hp .eng-logo--sm { width: 28px; height: 28px; border-radius: 8px; }
+
+/* ==========================================================================
+   6. 顶栏工具按钮与下拉面板
+   ========================================================================== */
+body.hp .tbm-btn {
+  width: 44px;
+  min-height: 44px;
+  border-radius: var(--hp-r-btn);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+}
+body.hp .tbm-btn:hover {
+  color: var(--text);
+  background: var(--surface-hi);
+  border-color: var(--line-hi);
+}
+body.hp .tbm-ico { color: var(--text-2); }
+body.hp .tb-menu.is-open .tbm-btn { color: var(--acc); border-color: var(--acc); }
+body.hp .tb-menu.is-open .tbm-ico { color: var(--acc); }
+
+body.hp .tbm-panel {
+  padding: 6px;
+  border-radius: 15px;
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  box-shadow: 0 24px 60px -26px rgba(0, 0, 0, .7);
+}
+body.hp .tbm-opt { border-radius: 10px; min-height: 46px; }
+body.hp .tbm-opt[aria-selected='true'] { background: rgb(var(--acc-glow) / .11); }
+body.hp .tbo-ico { border-radius: 8px; }
+body.hp .tbo-name { font-size: 14px; font-weight: 620; }
+body.hp .tbo-hint { font-size: 12px; }
+body.hp .tbo-hint--default { color: var(--acc); font-weight: 620; }
+
+/* 登录按钮：胶囊，强调色描边。游客态顶栏只有它一颗带文字的按钮，
+   形状上就说明「这是入口，不是又一个图标工具」。 */
+body.hp .tbm-btn--login {
+  /* 关键：app.css 里有一条 @media (max-width:560px) 把它压回 width:44px。
+     那条规则的媒体查询在 1440px 下不成立，但 .tbm-btn 的基础 width:44px
+     仍然在生效 —— 不显式覆盖成 auto，padding 撑不开固定宽度，
+     文字只能折成两行（实测 w=44 h=48.4，截图里「登录」竖着排）。
+     再加 flex-shrink:0，防止它在窄屏被 1fr 那一列挤扁。 */
+  width: auto;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0 16px;
+  white-space: nowrap;
+  border-color: color-mix(in srgb, var(--acc) 42%, transparent);
+  color: var(--acc);
+  font-weight: 620;
+}
+body.hp .tbm-btn--login .tbm-ico { color: var(--acc); }
+body.hp .tbm-btn--login:hover {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+body.hp .tbm-btn--login:hover .tbm-ico { color: var(--acc-ink); }
+
+/* 编辑态：整颗按钮变实心强调色，是全页唯一「正在改东西」的信号 */
+body.hp .tbm-btn--edit[aria-pressed='true'] {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: var(--acc-ink); }
+
+/* ==========================================================================
+   7. 分组导航 —— 目录，不是筛选
+   --------------------------------------------------------------------------
+   这是 V1.3.0 改得最狠的一处。
+
+   旧版 tab 模式是「筛选」：点一个标签，其余分组 hidden。问题很实在 ——
+   用户加过的东西突然看不见了，第一反应是「我的链接丢了吗」。
+   收藏夹的心智模型是「目录」：内容全在，我跳过去看。
+
+   所以现在两种形态共用一套行为：
+     点 → 平滑滚到该组；滚动 → 高亮当前组（IntersectionObserver）。
+   区别只在排布：tab 横排吸顶，side 竖排常驻。
+
+   tab 与 side 的 DOM 结构略有不同（tab 用 role=tab，side 用 aria-current），
+   但视觉上共用 .gnav-item 这一套皮肤。
+   ========================================================================== */
+body.hp .gnav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .16s, background .16s, border-color .16s;
+}
+body.hp .gnav-item:hover {
+  color: var(--text);
+  background: var(--hp-ghost);
+}
+/* 当前组：淡底 + 强调色文字 + 左侧一条 3px 短竖条。
+   不用整块实心强调色 —— 侧栏有七八项，全实心会变成一列色块墙。 */
+body.hp .gnav-item.is-active {
+  color: var(--text);
+  background: rgb(var(--acc-glow) / .10);
+  border-color: rgb(var(--acc-glow) / .22);
+}
+body.hp .gnav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  border-radius: 0 3px 3px 0;
+  background: var(--acc);
+  transform: translateY(-50%);
+}
+body.hp .gnav-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.hp .gnav-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 20px;
+  background: var(--hp-ghost);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+body.hp .gnav-item.is-active .gnav-count {
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+
+/* ---------- 形态 A：顶部横排标签（吸顶） ---------- */
+body.hp .gnav--tab {
+  position: sticky;
+  /* 贴在顶栏下沿。用 top 而不是 top:0，否则会盖住顶栏。 */
+  top: var(--hp-bar);
+  z-index: 30;
+  margin: 0 0 clamp(14px, 2vw, 20px);
+  /* 横向铺满视口宽度，左右破出容器的 padding，
+     这样滚动时标签不会在容器边缘「凭空出现」一条缝 */
+  margin-inline: calc(var(--pad-x) * -1);
+  padding: 8px var(--pad-x);
+  background: color-mix(in srgb, var(--bg-0) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid transparent;
+  transition: border-color .2s;
+}
+/* 滚起来之后才画出下边框 —— 静止时有一条线会显得多余 */
+body.hp.is-scrolled .gnav--tab { border-bottom-color: var(--line); }
+
+body.hp .gnav--tab .gnav-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+body.hp .gnav--tab .gnav-track::-webkit-scrollbar { display: none; }
+body.hp .gnav--tab .gnav-item {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 9px;
+}
+body.hp .gnav--tab .gnav-item.is-active::before { display: none; }
+body.hp .gnav--tab .gnav-item.is-active {
+  background: rgb(var(--acc-glow) / .13);
+  border-color: rgb(var(--acc-glow) / .3);
+  color: var(--text);
+}
+
+/* ---------- 形态 B：左侧竖排（常驻） ---------- */
+body.hp .gnav--side {
+  position: fixed;
+  top: calc(var(--hp-bar) + 22px);
+  /* 贴住内容容器的左外侧。容器居中时，左边界 = (100vw - maxw)/2，
+     减去导航宽度和间距就是导航的 left。窄于 maxw 时退化成 16px。 */
+  left: max(16px, calc((100vw - var(--hp-maxw)) / 2 + 4px));
+  width: var(--hp-nav-w);
+  max-height: calc(100dvh - var(--hp-bar) - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  z-index: 30;
+  padding-right: 6px;
+}
+body.hp .gnav--side::-webkit-scrollbar { display: none; }
+body.hp .gnav-title {
+  margin: 0 0 8px;
+  padding-left: 11px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+body.hp .gnav--side .gnav-track {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* 竖排时正文要让出左通道，否则固定导航会压在卡片上。
+   只在真正放得下侧栏的宽度生效 —— 断点与 .gnav--side 的显示断点保持一致，
+   否则会出现「导航已隐藏但正文还缩着」的空缺。 */
+@media (min-width: 1140px) {
+  html[data-gnav='side'] body.hp .stage {
+    padding-left: calc(var(--pad-x) + var(--hp-nav-w) + 12px);
+  }
+}
+
+/* 侧栏放不下时（<1140px），退化成顶部一行横条。
+   这是旧版最大的缺陷：<1180px 直接 display:none，分组导航凭空消失。 */
+@media (max-width: 1139px) {
+  body.hp .gnav--side {
+    position: sticky;
+    top: var(--hp-bar);
+    left: auto;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 8px var(--pad-x);
+    margin-inline: calc(var(--pad-x) * -1);
+    background: color-mix(in srgb, var(--bg-0) 88%, transparent);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border-bottom: 1px solid var(--line);
+    z-index: 30;
+  }
+  body.hp .gnav--side .gnav-title { display: none; }
+  body.hp .gnav--side .gnav-track {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  body.hp .gnav--side .gnav-track::-webkit-scrollbar { display: none; }
+  body.hp .gnav--side .gnav-item {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 13px;
+  }
+  body.hp .gnav--side .gnav-item.is-active::before { display: none; }
+}
+
+/* ==========================================================================
+   8. 主容器与分组
+   ========================================================================== */
+body.hp .stage {
+  max-width: var(--hp-maxw);
+  margin: 0 auto;
+  padding: clamp(16px, 2.4vw, 26px) var(--pad-x) 90px;
+}
+
+body.hp .group {
+  margin-bottom: clamp(18px, 2.6vw, 30px);
+  scroll-margin-top: calc(var(--hp-bar) + var(--hp-ghead) + 14px);
+}
+body.hp .group:last-child { margin-bottom: 0; }
+
+/* ---------- 记忆点：吸顶组签 ----------
+   分组标题在滚动时贴住顶栏下沿，始终告诉你「现在在哪一组」。
+   这是全页唯一一个「一直在动」的设计元素，也是 V1.3.0 的签名。
+
+   实现要点：
+     · z-index 要低于顶栏（40）但高于卡片，否则会被卡片盖住；
+     · 必须自带不透明底色，否则下面的卡片会从字缝里透出来；
+     · inset 负边距让底色横向铺满，看起来像一条横档而不是一块补丁。 */
+body.hp .group-head {
+  position: sticky;
+  top: calc(var(--hp-bar) - 1px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hp-ghead);
+  margin: 0 calc(var(--pad-x) * -0.42) 10px;
+  padding: 0 calc(var(--pad-x) * 0.42);
+  /* 底色只铺「文字那一条」，不铺满整个 44px 高度。
+     实测教训：整块铺 96% 的不透明底色，在深色皮肤上会变成一条
+     明显发灰的横带（浅色皮肤上因为与背景同色系所以看不出来）。
+
+     这里改成径向渐变：中心在左侧文字处、向右迅速淡出。
+     关键是半径要够小（38% 宽、120% 高），否则在深色下仍会看出
+     一条横贯整行的带子；半径小于文字区域宽度时，观感就是
+     「文字自带一小片托底」。 */
+  background: radial-gradient(38% 120% at 4% 50%,
+      color-mix(in srgb, var(--bg-0) 94%, transparent) 0%,
+      color-mix(in srgb, var(--bg-0) 70%, transparent) 38%,
+      transparent 72%);
+}
+body.hp .group-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+body.hp .group-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+body.hp .group-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line-hi), transparent 92%);
+}
+
+/* 旧版在 tab 模式下把组标题整块 display:none，理由是「标签上已经写了组名」。
+   新版反过来：标题必须留着，因为吸顶组签正是它的价值所在。
+   顶栏的标签会随滚动高亮，标题则告诉你「此刻具体在哪」—— 一个指方向，
+   一个给确认，两份信息不重复。 */
+html[data-gnav='tab'] body.hp .group-head { display: flex; }
+
+/* 侧栏模式下组标题保持吸顶，与 tab 模式行为一致。
+   有人会担心多个 sticky 标题互相堆叠 —— 不会：sticky 元素被约束在
+   自己的父容器（.group）内，一组滚出视口时它的标题会跟着离开，
+   不会停在原地压住下一组。
+   两种导航形态下视觉行为一致，是这一版刻意追求的：
+   换导航方式不该让「页面怎么滚」也变掉。 */
+html[data-gnav='side'] body.hp .group-head { display: flex; }
+
+/* ==========================================================================
+   9. 卡片基座
+   --------------------------------------------------------------------------
+   所有形态共用：图标 + 名称 + 一行说明。四种形态只改排布，不改信息结构。
+   ========================================================================== */
+body.hp .links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--hp-gap);
+}
+body.hp .link-item { opacity: 1; min-width: 0; position: relative; }
+
+/* 高度对齐的关键：<li> 才是网格的直接子项，网格拉伸的是它。
+   卡片写在 <li> 里的 <a class="link"> 上，若 <li> 不撑开，
+   .link 的 height:100% 就参照不到有效高度（实测 height:100% 完全没效果，
+   卡片高度差仍是 20.8px）。
+   所以先让 li 撑满网格行，再让 .link 撑满 li —— 两步缺一不可。 */
+body.hp .links > .link-item {
+  display: flex;
+  height: 100%;
+}
+body.hp .link-item > .link {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+/* 入场：只做一次，错峰最多 12 个（再多就变成排队，用户会等得不耐烦） */
+@media (prefers-reduced-motion: no-preference) {
+  body.hp .link-item {
+    animation: hpItemIn .42s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(min(var(--i), 12) * .022s + .06s);
+  }
+}
+@keyframes hpItemIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+body.hp .link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 10px 13px;
+  border-radius: var(--hp-r-card);
+  border: 1px solid var(--hp-card-line);
+  background: var(--hp-card-bg);
+  box-shadow: var(--hp-card-inset);
+  backdrop-filter: var(--hp-card-blur);
+  -webkit-backdrop-filter: var(--hp-card-blur);
+  color: var(--text);
+  text-decoration: none;
+  transition: transform .18s cubic-bezier(.16, 1, .3, 1),
+              border-color .18s, background .18s, box-shadow .18s;
+}
+/* 悬停：抬起 2px + 描边提亮 + 阴影加深。
+   三件一起做才有「这张被拿起来了」的手感；只改一个会显得迟钝。 */
+body.hp .link:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-hi);
+  box-shadow: var(--hp-card-hover), var(--hp-card-inset);
+  z-index: 1;
+}
+body.hp .link:active { transform: translateY(0) scale(.994); }
+
+/* 图标：40px 圆角方块。有图片时用浅底衬出来，
+   没有图片时用域名色相生成稳定的字母头像。 */
+body.hp .link-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: hsl(var(--hue) 42% 88%);
+  color: hsl(var(--hue) 55% 26%);
+  border: 1px solid hsl(var(--hue) 40% 74%);
+  transition: transform .2s cubic-bezier(.34, 1.5, .64, 1);
+}
+html[data-theme='night'] body.hp .link-icon {
+  background: hsl(var(--hue) 30% 20%);
+  color: hsl(var(--hue) 72% 86%);
+  border-color: hsl(var(--hue) 34% 34%);
+}
+body.hp .link:hover .link-icon { transform: scale(1.06); }
+
+body.hp .link-icon.has-img {
+  background: #fff;
+  border-color: rgba(0, 0, 0, .09);
+  box-shadow: none;
+}
+html[data-theme='night'] body.hp .link-icon.has-img {
+  background: #f4f1ea;
+  border-color: rgba(255, 255, 255, .12);
+}
+body.hp .link-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* 白底方形图标铺满会顶到描边，内缩 3px 留一圈呼吸
+     （用 padding 缩 figure 不行，img 的 100% 是按 padding 之外算的） */
+  padding: 3px;
+}
+body.hp .initials {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  line-height: 1;
+  display: block;
+  max-width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  transform: scale(.94);
+}
+
+body.hp .link-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+body.hp .link-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -.011em;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.hp .link-sub {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 编辑铅笔：视觉 15px，热区 44×44（负 margin 抵消占位，不改布局） */
+body.hp .link-edit {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: -12px -12px -12px -4px;
+  border-radius: 9px;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity .16s, background .16s, color .16s;
+}
+body.hp .link:hover .link-edit,
+body.hp .link:focus-within .link-edit { opacity: 1; }
+body.hp .link-edit:hover { background: var(--hp-ghost); color: var(--acc); }
+@media (hover: none) { body.hp .link-edit { opacity: 1; } }
+
+/* 隐藏链接角标：只有登录后才看得到，所以它本身就是「这条游客看不见」 */
+body.hp .link-priv {
+  flex: 0 0 auto;
+  width: 21px;
+  height: 21px;
+  margin-left: auto;
+  border-radius: 6px;
+  color: var(--acc);
+  background: rgb(var(--acc-glow) / .12);
+  border: 1px solid rgb(var(--acc-glow) / .28);
+}
+body.hp .link-priv + .link-edit { margin-left: 2px; }
+
+/* 隐藏链接：虚线边 + 图标降饱和。扫一眼能分出公开与私密。 */
+html[data-layout='card'] body.hp .link-item.is-hidden-link .link,
+html[data-layout='compact'] body.hp .link-item.is-hidden-link .link,
+html[data-layout='grid'] body.hp .link-item.is-hidden-link .link {
+  border-style: dashed;
+}
+html[data-layout='card'] body.hp .link-item.is-hidden-link .link-icon,
+html[data-layout='compact'] body.hp .link-item.is-hidden-link .link-icon,
+html[data-layout='grid'] body.hp .link-item.is-hidden-link .link-icon {
+  filter: saturate(.45);
+}
+
+/* ==========================================================================
+   10. 形态 1：图标宫格（grid）—— 默认形态
+   --------------------------------------------------------------------------
+   这是本次重做的重点。旧版宫格的问题不是审美，是可用性：
+     · 格子只有 96px 宽，标题被 -webkit-line-clamp: 2 硬截断
+       「Agentic Infrastructure」显示成「Agentic / Infrastructur...」
+     · 用户看到的是残句，等于没读到名称
+
+   三条修法：
+     1. 格子加宽到 132px —— 15.5px 字号下两行能放下约 16 个汉字 / 30 个字符
+     2. 去掉 line-clamp，改用 overflow-wrap:anywhere 让长英文词能断行，
+        配 min-height 让每格高度对齐（不靠截断也能整齐）
+     3. 完整名称进 title 属性（后端已输出），悬停可看全称兜底
+   ========================================================================== */
+html[data-layout='grid'] body.hp .links {
+  /* 关键：auto-fill + minmax 会让格子「被迫撑满」整行。
+     1087px 的可用宽 ÷ 132px 最小宽 = 8 列，于是每格被拉到 141.7px，
+     而格内只有一个 48px 图标和一行短标题 —— 左右大片留白，看着发散。
+     用 minmax(120px, 148px) 给上限：格子最多 148px，多出来的宽度
+     变成列尾的空白，网格靠左对齐、密度立刻变紧。
+     justify-content:start 让余量留在右侧而不是均摊到每格。 */
+  grid-template-columns: repeat(auto-fill, minmax(120px, 148px));
+  justify-content: start;
+  gap: 8px;
+}
+html[data-layout='grid'] body.hp .link {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 124px;
+  padding: 16px 10px 13px;
+  /* 静止态用皮肤给的托底令牌。浅色皮肤 = transparent（图标自带浅底，
+     再铺一层只会糊成灰方块）；暗色皮肤 = 极淡白/霓虹青，让图标不浮在纯黑上。 */
+  border-color: var(--hp-grid-line);
+  background: var(--hp-grid-bg);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-align: center;
+  /* 同卡片形态：撑满网格单元，避免标题一行/两行导致每格高度不一 */
+  height: 100%;
+}
+html[data-layout='grid'] body.hp .link:hover {
+  background: var(--hp-card-bg);
+  border-color: var(--hp-card-line);
+  box-shadow: var(--hp-card-hover), var(--hp-card-inset);
+  backdrop-filter: var(--hp-card-blur);
+  -webkit-backdrop-filter: var(--hp-card-blur);
+}
+/* 早先这里按皮肤名硬编码了 night / auto 两套托底，漏了 cyber。
+   现在托底改成 --hp-grid-bg / --hp-grid-line 令牌，由各皮肤自己声明，
+   新增皮肤不会再漏（暗色就给自己一个托底，浅色留 transparent）。 */
+html[data-layout='grid'] body.hp .link-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+html[data-layout='grid'] body.hp .initials { font-size: 17px; }
+html[data-layout='grid'] body.hp .link-body {
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+html[data-layout='grid'] body.hp .link-title {
+  font-size: 14.5px;
+  font-weight: 560;
+  line-height: 1.34;
+  max-width: 100%;
+  /* 关键：显式清掉 app.css 里的 -webkit-line-clamp:2。
+     只写 white-space:normal 不够 —— line-clamp 是独立属性，
+     不重置它照样会在第 2 行末尾切出省略号（实测 clamp 仍为 2）。
+     长英文单词也要能断，否则「Infrastructure」这种词会把格子撑破。 */
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  -webkit-box-orient: initial;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  /* 用 break-word 而不是 anywhere：
+     anywhere 允许在任意字符间断行，会把「干杯~」的波浪号单独甩到下一行
+     （截图里那行孤零零的「~」就是它造成的）。break-word 只在
+     「整个单词实在放不下」时才断，标点会跟着前一个字走。 */
+  overflow-wrap: break-word;
+  word-break: normal;
+  /* 两行的高度下限，让图标在同一水平线上 —— 不靠 line-clamp 也能对齐 */
+  min-height: calc(1.34em * 2);
+}
+html[data-layout='grid'] body.hp .link-sub { display: none; }
+html[data-layout='grid'] body.hp .link-edit {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  background: color-mix(in srgb, var(--bg-0) 88%, transparent);
+}
+html[data-layout='grid'] body.hp .link-priv {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  margin: 0;
+}
+
+/* ==========================================================================
+   11. 形态 2：卡片聚合（card）—— 2~4 列，图标在上
+   ========================================================================== */
+html[data-layout='card'] body.hp .links {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 11px;
+}
+html[data-layout='card'] body.hp .link {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+  min-height: 122px;
+  padding: 15px;
+  /* 圆角完全交给皮肤令牌。这里原本写的是 max(var(--hp-r-card), 13px)，
+     想给卡片形态一个「不小于 13px」的下限，但它把纸白的 10px 和
+     护眼的 12px 一起顶到了 13px —— 皮肤之间唯一的圆角差异就此消失，
+     三套浅色皮肤看起来一样「钝」。下限与「皮肤决定圆角」是直接冲突的，
+     实测确认后移除。 */
+  border-radius: var(--hp-r-card);
+  /* 撑满网格单元的高度。不写这句时 .link 作为 flex 容器按内容定高，
+     标题折一行还是两行会差出 20px，同一排卡片参差不齐（实测差 20.8px）。
+     配合下面的 .link-body 撑开，把「高度对齐」交给网格而不是内容。 */
+  height: 100%;
+}
+html[data-layout='card'] body.hp .link-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+html[data-layout='card'] body.hp .initials { font-size: 15px; }
+html[data-layout='card'] body.hp .link-body { width: 100%; gap: 2px; }
+/* 卡片形态的标题也不许截断。
+   这一版的原则是「屏幕上放得下就完整显示」——宫格已经做到了，
+   卡片若还留着省略号，同一个页面两套规矩，用户会困惑哪条才算数。
+   卡片比宫格宽（最小 240px），允许折到两行足够放下绝大多数站名。 */
+html[data-layout='card'] body.hp .link-title {
+  font-size: 15.5px;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.34;
+}
+/* 描述仍然限两行：它是补充信息，全展开会把卡片拉得高低不齐。
+   这里用 line-clamp 是对的 —— 描述本来就长，截断加省略号是预期行为，
+   而标题截断会让人读不到「这是什么」。 */
+html[data-layout='card'] body.hp .link-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: break-word;
+  line-height: 1.42;
+}
+html[data-layout='card'] body.hp .link-edit {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin: 0;
+  background: color-mix(in srgb, var(--surface-solid) 82%, transparent);
+}
+
+/* ==========================================================================
+   12. 形态 3：横排菜单（menu）—— 单行胶囊
+   ========================================================================== */
+html[data-layout='menu'] body.hp .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+html[data-layout='menu'] body.hp .link-item { flex: 0 1 auto; }
+html[data-layout='menu'] body.hp .link {
+  min-height: 44px;
+  padding: 5px 14px 5px 6px;
+  border-radius: 999px;
+  gap: 8px;
+}
+html[data-layout='menu'] body.hp .link-icon {
+  width: 32px;
+  height: 32px;
+  /* 胶囊里的图标也用胶囊，形状才统一 */
+  border-radius: 999px;
+}
+html[data-layout='menu'] body.hp .initials { font-size: 12px; }
+html[data-layout='menu'] body.hp .link-title { font-size: 14.5px; }
+html[data-layout='menu'] body.hp .link-sub { display: none; }
+html[data-layout='menu'] body.hp .link-edit { margin: -6px -10px -6px 0; }
+
+/* ==========================================================================
+   13. 形态 4：紧凑列表（compact）—— 单列密集行
+   ========================================================================== */
+html[data-layout='compact'] body.hp .links {
+  grid-template-columns: 1fr;
+  gap: 1px;
+}
+html[data-layout='compact'] body.hp .link {
+  min-height: 46px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  gap: 11px;
+}
+html[data-layout='compact'] body.hp .link:hover {
+  background: var(--hp-card-bg);
+  border-color: var(--hp-card-line);
+  box-shadow: var(--hp-card-hover);
+  backdrop-filter: var(--hp-card-blur);
+  -webkit-backdrop-filter: var(--hp-card-blur);
+}
+html[data-layout='compact'] body.hp .link-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+html[data-layout='compact'] body.hp .initials { font-size: 11.5px; }
+html[data-layout='compact'] body.hp .link-title { font-size: 15px; }
+html[data-layout='compact'] body.hp .link-sub { font-size: 12.5px; }
+/* 紧凑形态是唯一的例外：它的设计目标就是「一屏塞下几十条」，
+   行高必须固定，所以标题单行省略是它成立的前提，不是缺陷。
+   宽屏下把描述推到右边同一行，两者都单行，整页压缩到极致。 */
+/* 宽屏把说明推到标题右面同一行，纵向再压一档 */
+@media (min-width: 760px) {
+  html[data-layout='compact'] body.hp .link-body {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+  }
+  html[data-layout='compact'] body.hp .link-title { flex: 0 0 auto; }
+  html[data-layout='compact'] body.hp .link-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px;
+  }
+}
+
+/* ==========================================================================
+   14. 空状态
+   ========================================================================== */
+body.hp .empty {
+  padding: clamp(44px, 8vw, 84px) 24px;
+  border: 1px dashed var(--line-hi);
+  border-radius: 18px;
+  background: transparent;
+}
+
+/* ==========================================================================
+   15. 编辑模式
+   --------------------------------------------------------------------------
+   保持「一个总开关 + 整页进入编辑态」的做法。开关一关界面回到干净的
+   浏览状态，这是 V1.2.0 定下的思路，用户接受，不推翻。
+   ========================================================================== */
+body.hp .drag-handle {
+  border-radius: 9px 0 9px 0;
+  background: color-mix(in srgb, var(--bg-0) 90%, transparent);
+}
+body.hp .drag-handle:hover { color: var(--acc); }
+body.hp .link-item.is-selected > .link {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px rgb(var(--acc-glow) / .3);
+}
+body.hp .link-item.is-selected .link-edit {
+  opacity: 1;
+  background: var(--surface-solid);
+  color: var(--acc);
+}
+body.hp .link-item.is-dragging .link {
+  transform: scale(.985);
+  box-shadow: 0 16px 36px -18px rgba(0, 0, 0, .6);
+}
+body.hp .link-item.is-dragging.is-selected > .link {
+  border-style: dashed;
+  border-color: rgb(var(--acc-glow) / .75);
+}
+
+/* 编辑态提示条：位置从「stage 顶部」挪到「顶栏正下方」，
+   因为 stage::before 会被吸顶组签压住。改用固定定位更稳。 */
+body.hp.is-editing .stage::before {
+  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  position: sticky;
+  top: calc(var(--hp-bar) + 1px);
+  z-index: 25;
+  display: block;
+  margin: 0 0 10px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  border: 1px dashed rgb(var(--acc-glow) / .42);
+  background: color-mix(in srgb, var(--bg-0) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  body.hp.is-editing .stage::before {
+    content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出';
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  body.hp.is-editing .stage::before {
+    content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出';
+  }
+}
+
+/* ==========================================================================
+   16. 浮层与提示
+   --------------------------------------------------------------------------
+   这些是功能层，结构没变，只做材质对齐 —— 让它们跟新皮肤是同一个体系，
+   而不是「主页换了皮、弹窗还是旧的」。
+   ========================================================================== */
+body.hp .paste-box,
+body.hp .keys-box {
+  border-radius: 18px;
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 97%, transparent);
+  box-shadow: 0 32px 76px -30px rgba(0, 0, 0, .6);
+}
+body.hp .paste-scrim {
+  background: color-mix(in srgb, var(--bg-0) 62%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+body.hp .btn-primary {
+  border-radius: var(--hp-r-btn);
+  background: var(--acc);
+  box-shadow: none;
+}
+body.hp .btn-primary:hover { filter: brightness(1.07); }
+body.hp .btn-ghost { border-radius: var(--hp-r-btn); }
+body.hp .f-input {
+  border-radius: var(--hp-r-btn);
+  background: var(--hp-card-bg);
+}
+body.hp .tip-bubble {
+  border-radius: 15px;
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 97%, transparent);
+  box-shadow: 0 20px 48px -22px rgba(0, 0, 0, .55);
+}
+body.hp .toast { border-radius: 11px; }
+
+/* 焦点态：键盘一定能看见。
+   用「强调色 outline + 一圈底色 box-shadow」双层：
+   outline 负责可见性，box-shadow 负责把环从背景上「撬开」——
+   深色皮肤上只有强调色环时，遇到同色系的卡片会糊在一起。
+   app.css 里有一条给深色皮肤加的黑色 box-shadow，
+   在深色底上等于没有，这里用底色反过来画。 */
+body.hp :where(a, button, input, select, [tabindex]):focus-visible,
+body.hp .link:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+  border-radius: var(--hp-r-btn);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg-0) 88%, transparent);
+}
+body.hp .link:focus-visible { border-radius: var(--hp-r-card); }
+
+/* ==========================================================================
+   17. 响应式收敛
+   --------------------------------------------------------------------------
+   三档：
+     ≥1140px  侧栏常驻，正文让出左通道
+     ≥760px   多列网格
+     <760px   单列 / 少列，顶栏收成两行，工具按钮缩成纯图标
+   ========================================================================== */
+
+/* 顶栏：窄屏把品牌文字藏掉，只留标记 —— 搜索框需要空间 */
+@media (max-width: 720px) {
+  body.hp .brand-text { display: none; }
+  body.hp .search-wrap { width: 100%; }
+  body.hp .topbar {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  body.hp .topbar > .search-wrap { justify-self: stretch; }
+}
+
+/* 卡片形态在窄屏降到两列、再降一列 */
+@media (max-width: 560px) {
+  html[data-layout='card'] body.hp .links {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  html[data-layout='grid'] body.hp .links {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 4px;
+  }
+  html[data-layout='grid'] body.hp .link {
+    min-height: 112px;
+    padding: 13px 6px 11px;
+  }
+  html[data-layout='grid'] body.hp .link-icon { width: 44px; height: 44px; }
+  html[data-layout='grid'] body.hp .link-title { font-size: 13.5px; }
+}
+
+/* 触摸目标：所有可点元素不小于 44×44。窄屏的标签按钮 38px 高是唯一例外，
+   所以补一条伪元素把热区撑到 44（视觉仍是 38，不改变布局）。 */
+@media (max-width: 1139px) {
+  body.hp .gnav-item { position: relative; }
+  body.hp .gnav-item::after {
+    content: '';
+    position: absolute;
+    inset: -3px 0;
+  }
+}
+
+/* 减少动效：尊重系统设置，全部关掉位移与淡入 */
+@media (prefers-reduced-motion: reduce) {
+  body.hp .link-item { animation: none !important; }
+  body.hp .link,
+  body.hp .link-icon { transition: none !important; }
+  body.hp .link:hover { transform: none; }
+}

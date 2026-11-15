@@ -1,0 +1,207 @@
+/* 登录页专用布局：左文案 + 右卡片，桌面并排、移动堆叠 */
+
+.auth-body {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 48px);
+}
+
+.auth-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(28px, 5vw, 64px);
+  align-items: center;
+  width: 100%;
+  max-width: 1000px;
+}
+
+.auth-aside { max-width: 34ch; }
+
+.auth-kicker {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--acc);
+  margin: 0 0 18px;
+}
+
+.auth-big {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 6.5vw, 4rem);
+  line-height: .96;
+  letter-spacing: -.045em;
+  font-weight: 750;
+  margin: 0 0 16px;
+  color: var(--text);
+}
+.auth-big em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--acc-2), var(--acc));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.auth-note {
+  color: var(--text-2);
+  font-size: 15.5px;
+  margin: 0;
+  line-height: 1.65;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: clamp(24px, 4vw, 34px);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-hi);
+  background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 40px 90px -32px rgba(0, 0, 0, .85);
+  animation: cardRise .55s var(--ease-out) both;
+}
+@keyframes cardRise {
+  from { opacity: 0; transform: translateY(18px); }
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.028em;
+  margin: 0 0 20px;
+}
+
+.auth-alert {
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  font-size: 14px;
+  color: #ffb3c0;
+  background: rgba(255, 125, 146, .12);
+  border: 1px solid rgba(255, 125, 146, .32);
+}
+html[data-theme='paper'] .auth-alert,
+html[data-theme='celadon'] .auth-alert { color: #a3122f; background: #fde8ec; border-color: #f5c2cc; }
+
+.pw-wrap { position: relative; display: flex; }
+.pw-wrap .f-input { padding-right: 50px; }
+.pw-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px; height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color .16s, background .16s;
+}
+.pw-toggle:hover { color: var(--text); background: var(--surface-hi); }
+
+.auth-submit {
+  width: 100%;
+  margin-top: 24px;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.auth-back {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 14px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.auth-back:hover { color: var(--acc); }
+
+/* ---------- 验证码 ----------
+   只在「密码已错过一次」之后出现，所以它必须一眼能看懂、
+   一按就能换。图片本身 132×46，外面包一层按钮吸到 48px 高，
+   保证触摸目标够大（图片不是交互元素，按钮才是）。 */
+.cap-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+.cap-field { flex: 1 1 auto; min-width: 0; }
+.cap-field .f-input {
+  /* 验证码是大写字母 + 数字，用等宽字距更好认 */
+  letter-spacing: .22em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.cap-img {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 138px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--line-hi);
+  border-radius: 11px;
+  background: var(--surface-solid);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .16s, transform .16s;
+}
+.cap-img:hover { border-color: var(--acc); }
+.cap-img:active { transform: scale(.985); }
+.cap-img:disabled { cursor: progress; }
+.cap-img img {
+  display: block;
+  width: 132px;
+  height: 46px;
+  transition: opacity .2s;
+}
+.cap-hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+/* 320px 下图片和输入框并排会太挤：改成上下堆叠 */
+@media (max-width: 360px) {
+  .cap-row { flex-wrap: wrap; }
+  .cap-field { flex: 1 1 100%; }
+  .cap-img { width: 100%; height: 52px; }
+  .cap-img img { width: 132px; height: 46px; }
+}
+
+@media (min-width: 860px) {
+  .auth-wrap {
+    grid-template-columns: 1.05fr .95fr;
+  }
+}
+@media (max-width: 859px) {
+  .auth-wrap { max-width: 440px; }
+  .auth-aside { text-align: center; max-width: none; }
+  .auth-note { max-width: 40ch; margin-inline: auto; }
+  .auth-card { max-width: none; }
+}
+/* 登录 / 注册切换。做得像一句话而不是第二个按钮：
+   主操作只有一个（登录或注册），切换是次要动作。 */
+.auth-switch {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-3);
+  text-align: center;
+}
+.auth-switch a {
+  color: var(--acc);
+  text-decoration: none;
+  font-weight: 500;
+}
+.auth-switch a:hover { text-decoration: underline; text-underline-offset: 2px; }

@@ -1,0 +1,2 @@
+# 本目录含密码哈希（config.php），任何情况下都不该被浏览器直接读到。
+Require all denied

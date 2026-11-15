@@ -1,0 +1,1755 @@
+/* ==========================================================================
+   Vnav 视觉系统 · Atlas · V1.3.4
+   --------------------------------------------------------------------------
+   一套设计语言，三种呈现：atlas（亮）/ atlas-dark（暗）/ auto（跟随系统）。
+
+   V1.3.4 的依据不是「我觉得」，是把几个公认做得好的开源自托管起始页
+   拉下来逐项对照之后的结果：
+
+     Homer      图标 40px 在左，标题 16 + 描述 13 在右，卡片 76px 高，
+                3 列，圆角 6px，白卡 + 细边框
+     Homarr     白卡 + 细边框（几乎无阴影），圆角 8px，一个鲜明主色
+     Homepage   图标 + 名称 + 状态，圆角 8px，毛玻璃
+     Dashy      卡片紧凑，同样走「图标在左」
+
+   共性非常一致，也正好是我前几版做错的地方：
+     1. 卡片一律「图标在左、文字在右」。眼睛是横向扫图标列的；
+        竖向堆叠会让单卡长到 108px，一屏只能看两行。
+     2. 圆角 6～10px。18px 在 224px 宽的卡片上比例 8%，显得软塌。
+     3. 层次靠 1px 边框，不靠阴影。静止态叠阴影在浅底上只会发灰。
+     4. 分组标题就是一行标题，不吸顶、不做装饰。吸顶要遮内容，而底色是
+        渐变，任何纯色块盖上去都会留下色带（前几版为这个改了三轮）。
+     5. 搜索框带快捷键提示 —— 参考项目都有，是「易用」最划算的一笔。
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 变量
+   ========================================================================== */
+
+/* ---------- 亮底 ---------- */
+html[data-theme='atlas'],
+html[data-theme='auto'] {
+  color-scheme: light;
+
+  /* #f5f5f7 是 Apple 的系统灰。纯白显得空，纯灰显得脏。 */
+  --at-paper:    #f5f5f7;
+  --at-paper-hi: #fbfbfd;
+  --at-card:     #ffffff;
+  --at-sunken:   #f0f0f3;
+  --at-ink:      #1d1d1f;
+  --at-ink-2:    #6e6e73;
+  --at-ink-3:    #86868b;
+  --at-rule:     rgba(0, 0, 0, .08);
+  --at-rule-2:   rgba(0, 0, 0, .16);
+  --at-accent:   #0071e3;
+  --at-accent-2: #0077ed;
+  --at-accent-s: rgba(0, 113, 227, .10);
+  --at-scrim:    rgba(245, 245, 247, .68);
+  /* 侧栏是「背景面」，比系统灰再深一档 —— 反过来（比主区亮）会让白色
+     卡片失去浮起感。只差 3%，但两块面就此分开。 */
+  --at-nav-bg:   #efeff2;
+
+  /* 阴影退到第二线：静止态只靠边框分层，投影只在悬停与浮层出现。
+     参考项目里没有一个是「静止也带明显阴影」的 —— 那会让白卡在浅底上
+     发灰，整个页面显脏。 */
+  --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .04);
+  --at-sh-sm: 0 1px 3px rgba(0, 0, 0, .05), 0 2px 6px -2px rgba(0, 0, 0, .05);
+  --at-sh-md: 0 2px 6px rgba(0, 0, 0, .05), 0 8px 20px -8px rgba(0, 0, 0, .12);
+  --at-sh-lg: 0 4px 10px rgba(0, 0, 0, .06), 0 16px 36px -14px rgba(0, 0, 0, .18);
+  --at-sh-xl: 0 8px 20px rgba(0, 0, 0, .07), 0 28px 64px -22px rgba(0, 0, 0, .24);
+
+  /* 图标色拆成四个数：--hue 是每个卡片自带的，而自定义属性在声明处就会
+     替换 var()，html 上还没有 --hue，整条会失效。 */
+  --at-ico-bg-s: 62%;  --at-ico-bg-l: 95%;
+  --at-ico-fg-s: 56%;  --at-ico-fg-l: 38%;
+  --at-ico-ln-s: 50%;  --at-ico-ln-l: 89%;
+  --at-ico-inset: inset 0 1px 0 rgba(255, 255, 255, .6);
+  --at-img-bg:  #ffffff;
+
+  /* 系统字族：各平台最优渲染，零字体请求。 */
+  --at-font: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+             "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
+             "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --at-font-d: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+               "Segoe UI Variable Display", "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --at-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono",
+             "Roboto Mono", Consolas, monospace;
+
+  --font-display: var(--at-font-d);
+  --font-body: var(--at-font);
+  --font-mono: var(--at-mono);
+
+  /* 圆角 6 / 8 / 10 / 12 / 16 / 胶囊。比 V1.3.3 收紧一档 ——
+     参考项目集中在 6～10px，12px 已是卡片上限。 */
+  /* 比上一版再收一档：卡片 12 → 8px。72px 高的卡片配 12px 圆角，
+     圆角占高度 17%，看着偏"软"；8px 是 11%，利落得多，也更接近
+     WebStack（3px）和一为（8px）那种工程感。 */
+  --at-r-xs: 5px;
+  --at-r-sm: 6px;
+  --at-r-md: 8px;
+  --at-r-lg: 10px;
+  --at-r-xl: 14px;
+  --at-r-pill: 999px;
+
+  --hp-r-card: 8px;
+  --pad-x: clamp(16px, 3vw, 40px);
+
+  --bg-0: var(--at-paper);
+  --bg-1: var(--at-paper-hi);
+  --bg-2: var(--at-sunken);
+  --surface: var(--at-card);
+  --surface-solid: var(--at-card);
+  --surface-hi: #ffffff;
+  --line: var(--at-rule);
+  --line-hi: var(--at-rule-2);
+  --text: var(--at-ink);
+  --text-2: var(--at-ink-2);
+  --text-3: var(--at-ink-3);
+  --shadow: var(--at-sh-sm);
+  --shadow-hi: var(--at-sh-lg);
+  --spot-1: transparent;
+  --spot-2: transparent;
+  --grain-op: 0;
+  --card-blur: none;
+
+  --acc: var(--at-accent);
+  --acc-2: var(--at-accent-2);
+  --acc-ink: #ffffff;
+  --acc-glow: 0 113 227;
+}
+html[data-theme='atlas'][data-accent],
+html[data-theme='auto'][data-accent] {
+  --acc: var(--at-accent);
+  --acc-2: var(--at-accent-2);
+  --acc-ink: #ffffff;
+  --acc-glow: 0 113 227;
+}
+
+/* ---------- 暗底 ---------- */
+html[data-theme='atlas-dark'] {
+  color-scheme: dark;
+
+  --at-paper:    #0b0b0d;
+  --at-paper-hi: #16161a;
+  --at-card:     #1c1c1e;
+  --at-sunken:   #232326;
+  --at-ink:      #f5f5f7;
+  --at-ink-2:    #a1a1a6;
+  --at-ink-3:    #86868b;
+  --at-rule:     rgba(255, 255, 255, .10);
+  --at-rule-2:   rgba(255, 255, 255, .20);
+  --at-accent:   #0a84ff;
+  --at-accent-2: #3d9bff;
+  --at-accent-s: rgba(10, 132, 255, .16);
+  --at-scrim:    rgba(11, 11, 13, .66);
+  --at-nav-bg:   #0e0e11;
+
+  --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .5);
+  --at-sh-sm: 0 1px 3px rgba(0, 0, 0, .55), 0 2px 6px -2px rgba(0, 0, 0, .45);
+  --at-sh-md: 0 2px 6px rgba(0, 0, 0, .5), 0 8px 20px -8px rgba(0, 0, 0, .7);
+  --at-sh-lg: 0 4px 10px rgba(0, 0, 0, .55), 0 16px 36px -14px rgba(0, 0, 0, .8);
+  --at-sh-xl: 0 8px 20px rgba(0, 0, 0, .6), 0 28px 64px -22px rgba(0, 0, 0, .9);
+
+  --at-ico-bg-s: 24%;  --at-ico-bg-l: 23%;
+  --at-ico-fg-s: 60%;  --at-ico-fg-l: 80%;
+  --at-ico-ln-s: 20%;  --at-ico-ln-l: 31%;
+  --at-ico-inset: inset 0 1px 0 rgba(255, 255, 255, .07);
+  --at-img-bg:  #2a2a2e;
+
+  --at-font: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+             "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
+             "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --at-font-d: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+               "Segoe UI Variable Display", "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --at-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono",
+             "Roboto Mono", Consolas, monospace;
+
+  --font-display: var(--at-font-d);
+  --font-body: var(--at-font);
+  --font-mono: var(--at-mono);
+
+  /* 比上一版再收一档：卡片 12 → 8px。72px 高的卡片配 12px 圆角，
+     圆角占高度 17%，看着偏"软"；8px 是 11%，利落得多，也更接近
+     WebStack（3px）和一为（8px）那种工程感。 */
+  --at-r-xs: 5px;
+  --at-r-sm: 6px;
+  --at-r-md: 8px;
+  --at-r-lg: 10px;
+  --at-r-xl: 14px;
+  --at-r-pill: 999px;
+
+  --hp-r-card: 8px;
+  --pad-x: clamp(16px, 3vw, 40px);
+
+  --bg-0: var(--at-paper);
+  --bg-1: var(--at-paper-hi);
+  --bg-2: var(--at-sunken);
+  --surface: var(--at-card);
+  --surface-solid: var(--at-card);
+  --surface-hi: #232326;
+  --line: var(--at-rule);
+  --line-hi: var(--at-rule-2);
+  --text: var(--at-ink);
+  --text-2: var(--at-ink-2);
+  --text-3: var(--at-ink-3);
+  --shadow: var(--at-sh-sm);
+  --shadow-hi: var(--at-sh-lg);
+  --spot-1: transparent;
+  --spot-2: transparent;
+  --grain-op: 0;
+  --card-blur: none;
+
+  --acc: var(--at-accent);
+  --acc-2: var(--at-accent-2);
+  --acc-ink: #ffffff;
+  --acc-glow: 10 132 255;
+}
+html[data-theme='atlas-dark'][data-accent] {
+  --acc: var(--at-accent);
+  --acc-2: var(--at-accent-2);
+  --acc-ink: #ffffff;
+  --acc-glow: 10 132 255;
+}
+
+/* ---------- 跟随系统（必须与 atlas-dark 逐值一致） ---------- */
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] {
+    color-scheme: dark;
+
+    --at-paper:    #0b0b0d;
+    --at-paper-hi: #16161a;
+    --at-card:     #1c1c1e;
+    --at-sunken:   #232326;
+    --at-ink:      #f5f5f7;
+    --at-ink-2:    #a1a1a6;
+    --at-ink-3:    #86868b;
+    --at-rule:     rgba(255, 255, 255, .10);
+    --at-rule-2:   rgba(255, 255, 255, .20);
+    --at-accent:   #0a84ff;
+    --at-accent-2: #3d9bff;
+    --at-accent-s: rgba(10, 132, 255, .16);
+    --at-scrim:    rgba(11, 11, 13, .66);
+    --at-nav-bg:   #0e0e11;
+
+    --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .5);
+    --at-sh-sm: 0 1px 3px rgba(0, 0, 0, .55), 0 2px 6px -2px rgba(0, 0, 0, .45);
+    --at-sh-md: 0 2px 6px rgba(0, 0, 0, .5), 0 8px 20px -8px rgba(0, 0, 0, .7);
+    --at-sh-lg: 0 4px 10px rgba(0, 0, 0, .55), 0 16px 36px -14px rgba(0, 0, 0, .8);
+    --at-sh-xl: 0 8px 20px rgba(0, 0, 0, .6), 0 28px 64px -22px rgba(0, 0, 0, .9);
+
+    --at-ico-bg-s: 24%;  --at-ico-bg-l: 23%;
+    --at-ico-fg-s: 60%;  --at-ico-fg-l: 80%;
+    --at-ico-ln-s: 20%;  --at-ico-ln-l: 31%;
+    --at-ico-inset: inset 0 1px 0 rgba(255, 255, 255, .07);
+    --at-img-bg:  #2a2a2e;
+
+    --bg-0: var(--at-paper);
+    --bg-1: var(--at-paper-hi);
+    --bg-2: var(--at-sunken);
+    --surface: var(--at-card);
+    --surface-solid: var(--at-card);
+    --surface-hi: #232326;
+    --line: var(--at-rule);
+    --line-hi: var(--at-rule-2);
+    --text: var(--at-ink);
+    --text-2: var(--at-ink-2);
+    --text-3: var(--at-ink-3);
+    --shadow: var(--at-sh-sm);
+    --shadow-hi: var(--at-sh-lg);
+    --spot-1: transparent;
+    --spot-2: transparent;
+    --grain-op: 0;
+    --card-blur: none;
+
+    --acc: var(--at-accent);
+    --acc-2: var(--at-accent-2);
+    --acc-ink: #ffffff;
+    --acc-glow: 10 132 255;
+  }
+  html[data-theme='auto'][data-accent] {
+    --acc: var(--at-accent);
+    --acc-2: var(--at-accent-2);
+    --acc-ink: #ffffff;
+    --acc-glow: 10 132 255;
+  }
+}
+
+/* ---------- 布局尺寸：必须挂 body.hp ---------- */
+body.hp {
+  --hp-bar: 58px;
+  --hp-ghead: 34px;
+  --hp-gap: 16px;
+  /* 1560 比 1440 视口宽，所以在 1440 上 stage 会铺满整屏、
+     内容宽度由左右的对称留白决定；到 1920 才由 maxw 接管。 */
+  --hp-maxw: 1560px;
+  /* 240 是「整列」的舒适宽度，不是浮层面板的宽度：
+     内距 12×2 + 图标 28 + 间距 10 + 计数 24 + 名称约 128，
+     六个汉字都不用截断。上一版 180 是在「和卡片抢地方」的前提下的
+     妥协值 —— 现在侧栏独立成列，卡片宽度的算法变了（见 .stage）。 */
+  --hp-nav-w: 240px;
+  /* 侧栏与卡片区之间留出足够的呼吸，太紧会让两栏粘成一块 */
+  --hp-nav-gap: 26px;
+  --hp-r-btn: 8px;
+  --hp-ghost: var(--at-sunken);
+  --hp-card-bg: var(--at-card);
+  --hp-card-line: var(--at-rule);
+  --hp-card-hover: var(--at-sh-md);
+  --hp-card-blur: none;
+  --hp-card-inset: none;
+  --hp-page-tex: none;
+  --hp-grid-bg: transparent;
+  --hp-grid-line: transparent;
+
+  color: var(--at-ink);
+  font-family: var(--at-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 空气感：顶部一团极淡的蓝、右上一点紫。淡到说不出哪里亮，但页面不死板。 */
+  background-color: var(--at-paper);
+  background-image:
+    radial-gradient(1100px 520px at 50% -18%, rgba(0, 113, 227, .06), transparent 70%),
+    radial-gradient(820px 460px at 88% 2%, rgba(120, 90, 255, .045), transparent 72%),
+    linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 46%, var(--at-paper) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+html[data-theme='atlas-dark'] body.hp {
+  background-image:
+    radial-gradient(1100px 520px at 50% -18%, rgba(10, 132, 255, .11), transparent 70%),
+    radial-gradient(820px 460px at 88% 2%, rgba(110, 80, 255, .06), transparent 72%),
+    linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 48%, var(--at-paper) 100%);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] body.hp {
+    background-image:
+      radial-gradient(1100px 520px at 50% -18%, rgba(10, 132, 255, .11), transparent 70%),
+      radial-gradient(820px 460px at 88% 2%, rgba(110, 80, 255, .06), transparent 72%),
+      linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 48%, var(--at-paper) 100%);
+  }
+}
+body.hp::before { background-image: none; }
+body.hp .aurora,
+body.hp .grain { display: none; }
+
+/* ==========================================================================
+   2. 顶栏 —— 58px，静止透明、滚动浮现磨砂
+   ========================================================================== */
+/* 顶栏常驻底色 + 一条底线。
+   之前为了「通透」把它做成完全透明，结果是顶栏、侧栏、卡片全糊在同一片
+   渐变上，三个区域没有任何边界 —— 页面读起来是一整块，没有结构。
+   现在它是一条明确的横带：静止时与页首同色（所以不显厚），但那条 1px 线
+   始终在，区域就分开了；滚动时叠磨砂，内容从线下面穿过。 */
+body.hp .topbar {
+  min-height: var(--hp-bar);
+  padding: 0 var(--pad-x);
+  gap: 20px;
+  background: color-mix(in srgb, var(--at-paper-hi) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--at-rule);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+  transition: background .24s, border-color .24s, box-shadow .24s;
+}
+body.hp.is-scrolled .topbar {
+  background: color-mix(in srgb, var(--at-paper-hi) 92%, transparent);
+  border-bottom-color: var(--at-rule-2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .55),
+    0 1px 12px -6px rgba(0, 0, 0, .10);
+}
+html[data-theme='atlas-dark'] body.hp.is-scrolled .topbar {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+body.hp .brand {
+  gap: 10px;
+  min-height: 38px;
+  font-family: var(--at-font-d);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.022em;
+  color: var(--at-ink);
+}
+body.hp .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(160deg, var(--at-accent-2), var(--at-accent) 70%);
+  color: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 113, 227, .28),
+    0 4px 12px -2px rgba(0, 113, 227, .32),
+    inset 0 1px 0 rgba(255, 255, 255, .28);
+}
+body.hp .brand-mark svg { width: 15px; height: 15px; stroke-width: 2.8; }
+
+/* ==========================================================================
+   3. 搜索 —— 胶囊 + 快捷键提示
+   --------------------------------------------------------------------------
+   快捷键提示是「易用」最划算的一笔：参考项目（Homepage / Dashy）都有，
+   用户不用翻快捷键面板就知道能按 Ctrl+K。聚焦后它淡出，把位置让给输入。
+   ========================================================================== */
+/* ⚠️ 这里不能挂 backdrop-filter。
+   backdrop-filter 会让元素成为 position:fixed 子元素的包含块 ——
+   引擎下拉面板是 fixed 定位（见 ui.js 的 place()），一旦祖先有
+   backdrop-filter，面板的 left 就会相对搜索框计算而不是相对视口。
+   实测：JS 写 left:476px，渲染出来是 952px，整块面板飞出半屏。
+   玻璃感改用略高的底色不透明度补偿，视觉上几乎一致。 */
+body.hp .search-wrap {
+  width: clamp(320px, 34vw, 520px);
+  min-height: 38px;
+  padding: 0;
+  border-radius: var(--at-r-pill);
+  border: 1px solid var(--at-rule);
+  background: color-mix(in srgb, var(--at-card) 94%, transparent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .035);
+  transition: border-color .18s, background .18s, box-shadow .2s;
+}
+body.hp .search-wrap:hover {
+  border-color: var(--at-rule-2);
+  background: var(--at-card);
+}
+body.hp .search-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--at-accent) 55%, transparent);
+  background: var(--at-card);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, .03),
+    0 0 0 4px var(--at-accent-s);
+}
+
+body.hp .eng-btn {
+  min-height: 38px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--at-r-pill) 0 0 var(--at-r-pill);
+  gap: 5px;
+  color: var(--at-ink-2);
+}
+body.hp .eng-btn::after { display: none; }
+body.hp .eng-btn:hover { color: var(--at-ink); }
+body.hp .eng-menu.is-open .eng-btn {
+  background: transparent;
+  color: var(--at-accent);
+}
+
+body.hp .search input {
+  min-height: 36px;
+  /* 右侧留出键帽的位置 */
+  padding: 0 62px 0 24px;
+  border-radius: 0 var(--at-r-pill) var(--at-r-pill) 0;
+  font-family: var(--at-font);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: -.006em;
+  color: var(--at-ink);
+}
+body.hp .search input::placeholder {
+  color: var(--at-ink-3);
+  font-weight: 400;
+}
+body.hp .search-icon {
+  left: 1px;
+  width: 15px;
+  height: 15px;
+  color: var(--at-ink-3);
+  transition: color .15s;
+}
+body.hp .search-wrap:focus-within .search-icon { color: var(--at-accent); }
+
+body.hp .search-kbd {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: var(--at-r-xs);
+  border: 1px solid var(--at-rule);
+  background: var(--at-sunken);
+  color: var(--at-ink-3);
+  font-family: var(--at-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  pointer-events: none;
+  transition: opacity .16s;
+}
+body.hp .search-wrap:focus-within .search-kbd { opacity: 0; }
+
+/* 官方 logo 不需要底色与圆角，尺寸交给 app.css 的 .eng-logo 统一控制，
+   这里只保证在 Atlas 里不会被别的规则塞回一个方块 */
+body.hp .eng-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 0;
+  background: none;
+  border: 0;
+}
+body.hp .eng-logo--sm { width: 26px; height: 26px; border-radius: 0; }
+
+/* ==========================================================================
+   4. 工具按钮与下拉面板
+   ========================================================================== */
+body.hp .tb-tools { gap: 4px; }
+
+body.hp .tbm-btn {
+  position: relative;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: var(--at-r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--at-ink-2);
+  transition: color .16s, background .16s, border-color .16s, box-shadow .16s;
+}
+body.hp .tbm-btn::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+body.hp .tbm-btn:hover {
+  color: var(--at-ink);
+  background: color-mix(in srgb, var(--at-card) 70%, transparent);
+  border-color: var(--at-rule);
+}
+body.hp .tbm-ico { color: inherit; }
+body.hp .tb-menu.is-open .tbm-btn {
+  color: var(--at-accent);
+  background: var(--at-card);
+  border-color: color-mix(in srgb, var(--at-accent) 30%, transparent);
+  box-shadow: 0 0 0 3px var(--at-accent-s);
+}
+body.hp .tb-menu.is-open .tbm-ico { color: inherit; }
+
+body.hp .tbm-panel {
+  padding: 5px;
+  border-radius: var(--at-r-md);
+  border: 1px solid var(--at-rule);
+  /* 这里必须是不透明底色，不能再玩「97% + 磨砂」。
+     磨砂的前提是背景有东西可糊，而模糊只能柔化边缘、挡不住深色文字的
+     骨架 —— 实测 97% 时下面卡片的「哔哩哔哩」「DeepSeek」仍然清晰可读，
+     压在菜单项后面像重影。macOS 的菜单本身也是实的。 */
+  background: var(--at-card);
+  box-shadow: var(--at-sh-lg), 0 0 0 1px var(--at-rule);
+}
+/* 引擎菜单的宽度必须在这里显式给。
+   app.css 里 `.tbm-panel--eng { width: 220px }` 写在第 569 行，
+   而通用的 `.tbm-panel { width: 288px }` 在第 624 行 —— 两者特异性相同，
+   后写的赢，于是引擎面板一直被撑到 288，盖住大半个搜索框。
+   240 够放「图标 26 + 名称 + 一句提示」。 */
+body.hp .tbm-panel--eng { width: 240px; }
+
+body.hp .tbm-opt {
+  min-height: 44px;
+  border-radius: var(--at-r-xs);
+  padding: 0 10px;
+  gap: 10px;
+}
+body.hp .tbm-opt:hover { background: color-mix(in srgb, var(--at-sunken) 80%, transparent); }
+body.hp .tbm-opt[aria-selected='true'] { background: var(--at-accent-s); }
+body.hp .tbm-opt[aria-selected='true'] .tbo-name { color: var(--at-accent); }
+body.hp .tbo-ico { border-radius: 6px; color: var(--at-ink-2); }
+body.hp .tbo-name {
+  font-size: 13.5px;
+  font-weight: 550;
+  letter-spacing: -.01em;
+}
+body.hp .tbo-hint {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: var(--at-ink-3);
+}
+body.hp .tbo-hint--default { color: var(--at-accent); font-weight: 550; }
+
+body.hp .tbm-btn--login {
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 15px;
+  border-radius: var(--at-r-pill);
+  border-color: color-mix(in srgb, var(--at-accent) 34%, transparent);
+  color: var(--at-accent);
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--at-accent) 6%, transparent);
+}
+body.hp .tbm-btn--login .tbm-ico { color: inherit; }
+body.hp .tbm-btn--login:hover {
+  background: var(--at-accent);
+  border-color: var(--at-accent);
+  color: #fff;
+  box-shadow: 0 4px 12px -3px rgba(0, 113, 227, .45);
+}
+body.hp .tbm-btn--login:hover .tbm-ico { color: #fff; }
+
+body.hp .tbm-btn--edit[aria-pressed='true'] {
+  background: var(--at-accent);
+  border-color: var(--at-accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--at-accent-s), 0 4px 12px -3px rgba(0, 113, 227, .45);
+}
+body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: #fff; }
+
+/* ==========================================================================
+   5. 分组导航 —— 分段控件
+   ========================================================================== */
+body.hp .gnav-item {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: var(--at-r-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--at-ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+  transition: color .16s, background .16s, border-color .16s, box-shadow .16s;
+}
+body.hp .gnav-item:hover {
+  color: var(--at-ink);
+  background: color-mix(in srgb, var(--at-card) 62%, transparent);
+}
+body.hp .gnav-item.is-active {
+  color: var(--at-ink);
+  background: var(--at-card);
+  border-color: var(--at-rule);
+  box-shadow: var(--at-sh-xs);
+}
+body.hp .gnav-item.is-active::before { display: none; }
+
+body.hp .gnav-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--at-r-pill);
+  background: color-mix(in srgb, var(--at-ink) 6%, transparent);
+  color: var(--at-ink-3);
+  font-family: var(--at-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+body.hp .gnav-item.is-active .gnav-count {
+  background: var(--at-accent-s);
+  color: var(--at-accent);
+}
+
+body.hp .gnav--tab {
+  top: var(--hp-bar);
+  margin: 0 0 16px;
+  margin-inline: calc(var(--pad-x) * -1);
+  padding: 8px var(--pad-x);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid transparent;
+  transition: background .24s, border-color .24s;
+}
+body.hp.is-scrolled .gnav--tab {
+  background: color-mix(in srgb, var(--at-paper-hi) 78%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom-color: var(--at-rule);
+}
+body.hp .gnav--tab .gnav-track { gap: 6px; }
+body.hp .gnav--tab .gnav-item {
+  min-height: 32px;
+  padding: 0 13px;
+  gap: 7px;
+  border-radius: var(--at-r-pill);
+  justify-content: flex-start;
+}
+body.hp .gnav--tab .gnav-item.is-active {
+  background: var(--at-card);
+  border-color: var(--at-rule);
+  color: var(--at-ink);
+  box-shadow: var(--at-sh-xs);
+}
+
+/* 左侧分类栏 —— 这是中文导航站（WebStack / 一为）的标准形态：
+   分类常驻可见、随时跳转，比顶部标签更「随时可用」。
+   每项前面一颗状态点：未选中是灰点，选中变蓝并换成白底胶囊。
+   纯装饰的圆点比图标克制，因为分类是用户自建的，没有现成图标可用。 */
+/* 侧栏 = 从顶栏下沿一直到底的一整列，不是浮在页面上的圆角卡片。
+   参考 shadcn dashboard 与 Linear：左侧一列竖到底、右侧一条 1px 竖线
+   分界、没有圆角和投影。圆角 + 投影会把它变回「一张卡片」，那就还是
+   和主区挤在同一片底色上 —— 只有整列到底，它才是一条独立的面。
+   底色用 --at-nav-bg（比主区深 3%），两个面靠色差 + 竖线双重分界。 */
+body.hp .gnav--side {
+  top: var(--hp-bar);
+  left: 0;
+  bottom: 0;
+  width: var(--hp-nav-w);
+  max-height: none;
+  padding: 18px 12px 24px;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--at-rule);
+  background: var(--at-nav-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 25;
+}
+
+/* 头部一行：分组标题 + 收起按钮 */
+body.hp .gnav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding-left: 10px;
+}
+body.hp .gnav-fold {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--at-ink-3);
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+body.hp .gnav-fold:hover {
+  background: color-mix(in srgb, var(--at-ink) 7%, transparent);
+  color: var(--at-ink);
+}
+body.hp .gnav-fold svg { transition: transform .2s cubic-bezier(.2,.8,.3,1); }
+body.hp .gnav-title {
+  margin: 0;
+  padding-left: 0;
+  font-family: var(--at-font);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--at-ink-3);
+}
+body.hp .gnav--side .gnav-track { gap: 3px; }
+body.hp .gnav--side .gnav-item {
+  /* 撑满栏宽：计数才会稳定贴在右端，形成「图标 + 名称 …… 数量」的目录行 */
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: var(--at-r-sm);
+  border-left: 0;
+  border-bottom: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+/* V1.3.8 起侧栏用图标代替小圆点：分类名是自建的，图标按名字匹配内置库。
+   图标坐在一枚 24px 的浅灰方块里 —— 单一描边图标在 140px 宽的栏里太轻，
+   加个底色块才有「这是一个分类」的体量感，选中时方块转蓝。 */
+body.hp .gnav-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--at-ink) 5%, transparent);
+  color: var(--at-ink-3);
+  transition: background .16s, color .16s;
+}
+body.hp .gnav-item:hover .gnav-ico {
+  background: color-mix(in srgb, var(--at-ink) 8%, transparent);
+  color: var(--at-ink-2);
+}
+body.hp .gnav-item.is-active .gnav-ico {
+  background: var(--at-accent-s);
+  color: var(--at-accent);
+}
+body.hp .gnav--side .gnav-item::before { content: none; }
+body.hp .gnav--side .gnav-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.hp .gnav--side .gnav-count {
+  margin-left: auto;
+  font-size: 11px;
+  background: transparent;
+  padding: 0;
+  color: var(--at-ink-3);
+}
+body.hp .gnav--side .gnav-item.is-active .gnav-count {
+  background: transparent;
+  color: var(--at-accent);
+}
+body.hp .gnav--side .gnav-item.is-active {
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* ---------- 收起态：只剩图标，主区跟着铺开 ----------
+   68 = 图标 28 + 内距 10×2 + 两侧留白。收起后主区的 padding-left
+   自动变成 68+26，因为两边读的是同一个 --hp-nav-w。 */
+html[data-nav='mini'] body.hp { --hp-nav-w: 68px; }
+html[data-nav='mini'] body.hp .gnav--side { padding: 18px 10px 24px; }
+html[data-nav='mini'] body.hp .gnav-title,
+html[data-nav='mini'] body.hp .gnav-name,
+html[data-nav='mini'] body.hp .gnav-count { display: none; }
+html[data-nav='mini'] body.hp .gnav-head { justify-content: center; padding-left: 0; }
+html[data-nav='mini'] body.hp .gnav-fold svg { transform: rotate(180deg); }
+html[data-nav='mini'] body.hp .gnav--side .gnav-item {
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+}
+
+/* ==========================================================================
+   6. 主容器与分组标题
+   --------------------------------------------------------------------------
+   分组标题回归「圆点 + 标题 + 计数」：不吸顶、不做药丸、不加编号。
+
+   参考项目（Homer / Homarr / Homepage）没有一个给分组标题做吸顶 ——
+   吸顶必须遮挡下方内容，而页面底色是渐变，任何纯色块盖上去都会比周围
+   深或浅，留下一条色带。前几版为这个色带改了三轮，最后发现正确解法是
+   「不要吸顶」。定位靠顶部标签高亮就够了。
+   ========================================================================== */
+/* 应用壳。Atlas 不画框，所以它必须完全不参与布局 —— display:contents
+   让这个 div 不生成盒子，顶栏 / 侧栏 / 主区仍然是 <body> 的直接子元素，
+   与加壳之前逐像素一致。程序框皮肤会把它变成一张真的容器。 */
+body.hp .shell { display: contents; }
+
+body.hp .stage {
+  padding: clamp(18px, 2.6vw, 28px) var(--pad-x) 100px;
+}
+/* 侧栏模式下正文让出左通道。不能只靠 padding 简写：home.css 用
+   html[data-gnav='side'] body.hp .stage 单独补了 padding-left，
+   而简写与它同特异性、又后加载，会把 padding-left 一并重置。 */
+@media (min-width: 1140px) {
+  /* 主区只让出侧栏那一列，右侧回到正常的 pad-x。
+     上一版为了「内容居中于视口」在右边也留同样宽的通道 —— 那是拿
+     卡片宽度去换视觉对称：1440 下左右各留 246，可用宽只剩 948。
+     分开之后侧栏是一条独立的面，主区在自己的地盘里居中就够，
+     可用宽回到 1134，卡片从 225 涨到 271（+20%）。 */
+  html[data-gnav='side'] body.hp .stage {
+    padding-left: calc(var(--hp-nav-w) + var(--hp-nav-gap));
+    padding-right: var(--pad-x);
+  }
+}
+
+body.hp .group {
+  margin-bottom: clamp(28px, 3.4vw, 40px);
+  scroll-margin-top: calc(var(--hp-bar) + 16px);
+}
+html[data-gnav='tab'] body.hp .group {
+  scroll-margin-top: calc(var(--hp-bar) + 52px + 16px);
+}
+
+body.hp .group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hp-ghead);
+  margin: 0 0 10px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+body.hp .group-head::before { content: none; }
+
+/* 组名前一颗 6px 圆点：比箭头安静，比编号自然 */
+body.hp .group-name {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-family: var(--at-font-d);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.021em;
+  color: var(--at-ink);
+  white-space: nowrap;
+}
+body.hp .group-name::before {
+  content: '';
+  display: block;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: var(--at-accent);
+}
+body.hp .group-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--at-r-pill);
+  border: 0;
+  background: color-mix(in srgb, var(--at-ink) 6%, transparent);
+  color: var(--at-ink-3);
+  font-family: var(--at-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+body.hp .group-rule { flex: 1; height: 1px; background: transparent; }
+
+/* ==========================================================================
+   7. 卡片基座 —— 横向：图标在左，文字在右
+   --------------------------------------------------------------------------
+   这是这一版最关键的结构改动。
+
+   V1.3.0～V1.3.3 的卡片是竖向的（图标在上、标题在下、域名在最下），
+   单卡长到 108px，一屏只能看两行；224px 的宽度里只有一行短标题，大片
+   空白 —— 那是「丑」最直接的来源：不是配色问题，是密度问题。
+
+   Homer / Homarr / Homepage / Dashy 无一例外用横向结构：眼睛沿图标列
+   竖向扫，命中后再往右读文字，和书签栏的心智完全一致。同宽度下
+   卡片高度从 108 降到 68，一屏多出一整行。
+   ========================================================================== */
+body.hp .links { gap: var(--hp-gap); }
+
+body.hp .link {
+  /* 必须显式写 display/flex-direction：home.css 里有
+     html[data-layout='card'] body.hp .link { flex-direction: column }，
+     与这里的权重相同。如果只在 card 段里省略方向、指望「默认就是 row」，
+     那条 column 会继续生效 —— 实测结果就是图标跑到标题上面、
+     描述溢出到卡片外面。基座先钉死横向，宫格再自己覆盖成竖向。 */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 13px;
+  min-height: 84px;
+  padding: 14px 16px;
+  border-radius: var(--hp-r-card);
+  border: 1px solid var(--at-rule);
+  background: var(--at-card);
+  /* 静止态不投影：白卡在浅底上叠阴影会发灰，整个页面显脏。
+     层次交给 1px 边框，悬停时才浮起来。 */
+  box-shadow: none;
+  color: var(--at-ink);
+  transition: transform .2s cubic-bezier(.2, .8, .3, 1),
+              box-shadow .2s, border-color .2s;
+}
+body.hp .link:hover {
+  transform: translateY(-1px);
+  border-color: var(--at-rule-2);
+  box-shadow: var(--at-sh-md);
+}
+body.hp .link:active {
+  transform: translateY(0);
+  box-shadow: none;
+  background: var(--at-sunken);
+  transition-duration: .08s;
+}
+
+/* 图标 36px / 圆角 10px（约 28%）。饱和 62% 保证靠颜色记得住站点，
+   亮度 95% 让它安静地待在白卡上，不抢标题。 */
+body.hp .link-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: hsl(var(--hue) var(--at-ico-bg-s) var(--at-ico-bg-l));
+  color: hsl(var(--hue) var(--at-ico-fg-s) var(--at-ico-fg-l));
+  border: 1px solid hsl(var(--hue) var(--at-ico-ln-s) var(--at-ico-ln-l));
+  box-shadow: var(--at-ico-inset);
+  transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
+}
+body.hp .link:hover .link-icon { transform: scale(1.04); }
+
+body.hp .link-icon.has-img {
+  background: var(--at-img-bg);
+  border-color: var(--at-rule);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+body.hp .link-icon img { padding: 4px; }
+body.hp .initials {
+  font-family: var(--at-font-d);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1;
+  display: block;
+  max-width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  transform: none;
+}
+
+body.hp .link-body { gap: 2px; }
+body.hp .link-title {
+  font-family: var(--at-font);
+  font-size: 14.5px;
+  font-weight: 560;
+  letter-spacing: -.012em;
+  line-height: 1.36;
+  color: var(--at-ink);
+}
+/* 描述：真实描述优先（后端已输出），没有时回落域名。12px 灰 —— 它是注释。 */
+body.hp .link-sub {
+  font-family: var(--at-font);
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: -.003em;
+  line-height: 1.42;
+  color: var(--at-ink-3);
+}
+
+body.hp .link-edit {
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px -6px -2px;
+  border-radius: var(--at-r-xs);
+  color: var(--at-ink-3);
+}
+body.hp .link-edit:hover {
+  background: var(--at-sunken);
+  color: var(--at-accent);
+}
+body.hp .link-priv {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: var(--at-r-pill);
+  color: var(--at-accent);
+  background: var(--at-accent-s);
+  border: 1px solid color-mix(in srgb, var(--at-accent) 22%, transparent);
+}
+body.hp .link-priv + .link-edit { margin-left: 2px; }
+
+html[data-layout='card'] body.hp .link-item.is-hidden-link .link,
+html[data-layout='compact'] body.hp .link-item.is-hidden-link .link,
+html[data-layout='grid'] body.hp .link-item.is-hidden-link .link {
+  border-style: dashed;
+}
+html[data-layout='card'] body.hp .link-item.is-hidden-link .link-icon,
+html[data-layout='compact'] body.hp .link-item.is-hidden-link .link-icon,
+html[data-layout='grid'] body.hp .link-item.is-hidden-link .link-icon {
+  filter: saturate(.35);
+}
+
+/* 入场：上浮 6px + 淡入，错峰 18ms */
+@media (prefers-reduced-motion: no-preference) {
+  body.hp .link-item {
+    animation: atRise .4s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(min(var(--i), 12) * .018s + .04s);
+  }
+}
+@keyframes atRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   8. 形态 1 · 卡片聚合（card）
+   --------------------------------------------------------------------------
+   4 列 × 68px。268px 最小列宽是实测值：1160 的可用宽度除以 268 得 4.3，
+   正好 4 列、每列 282px —— 够放「图标 36 + 14px 标题 + 12px 描述」。
+   ========================================================================== */
+html[data-layout='card'] body.hp .links {
+  /* 1440 视口：主区让出侧栏 240 + 间距 26，右侧 40，
+     可用宽 = 1440 - 266 - 40 = 1134。要落成 4 列，最小列宽就得大于
+     1134 / 4.4 ≈ 258 —— 用 268 刚好 4 列、每列 271（4×268+3×16=1120）。
+     这个数不能凭感觉给：给 214 会排成 5 列、每列 216，比上一版还窄。 */
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 16px;
+}
+html[data-layout='card'] body.hp .link {
+  /* 这一句不能省。home.css 里 html[data-layout='card'] body.hp .link
+     是 flex-direction: column，权重与本段相同 —— 只在基座（权重更低）
+     写 row 是压不住它的，实测两次都是图标仍然跑到标题上方。 */
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 13px;
+  min-height: 84px;
+  padding: 14px 16px;
+  height: 100%;
+  border-radius: var(--hp-r-card);
+}
+html[data-layout='card'] body.hp .link-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+}
+html[data-layout='card'] body.hp .initials { font-size: 15.5px; }
+html[data-layout='card'] body.hp .link-body {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+/* 标题与描述都单行省略。横向结构里这是正确的选择 —— 竖向卡片截断标题
+   是缺陷（读不到名字），横向卡片有 200px+ 的宽度，单行能放下 12 个汉字。 */
+html[data-layout='card'] body.hp .link-title {
+  font-size: 14.5px;
+  font-weight: 560;
+  display: block;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+html[data-layout='card'] body.hp .link-sub {
+  display: block;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+html[data-layout='card'] body.hp .link-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin: 0;
+  background: color-mix(in srgb, var(--at-card) 92%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ==========================================================================
+   9. 形态 2 · 图标宫格（grid）
+   --------------------------------------------------------------------------
+   唯一保留竖向结构的形态，因为它是「手机主屏」的隐喻：大图标居中、
+   名称在下。静止无框，悬停浮出白卡。
+   ========================================================================== */
+html[data-layout='grid'] body.hp .links {
+  grid-template-columns: repeat(auto-fill, minmax(108px, 128px));
+  justify-content: start;
+  gap: 8px;
+}
+html[data-layout='grid'] body.hp .link {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 108px;
+  padding: 15px 8px 11px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  height: 100%;
+  text-align: center;
+}
+html[data-layout='grid'] body.hp .link:hover {
+  background: var(--at-card);
+  border-color: var(--at-rule);
+  box-shadow: var(--at-sh-sm);
+  transform: none;
+}
+html[data-layout='grid'] body.hp .link:active {
+  background: var(--at-card);
+  box-shadow: none;
+}
+/* 宫格图标按 iOS 主屏比例：48px / 11px（约 23%） */
+html[data-layout='grid'] body.hp .link-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+}
+html[data-layout='grid'] body.hp .initials { font-size: 18px; }
+html[data-layout='grid'] body.hp .link-body {
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+html[data-layout='grid'] body.hp .link-title {
+  font-size: 12.5px;
+  font-weight: 520;
+  line-height: 1.32;
+  max-width: 100%;
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  -webkit-box-orient: initial;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  word-break: normal;
+  min-height: calc(1.32em * 2);
+}
+html[data-layout='grid'] body.hp .link-sub { display: none; }
+html[data-layout='grid'] body.hp .link-edit {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin: 0;
+  background: color-mix(in srgb, var(--at-card) 92%, transparent);
+}
+html[data-layout='grid'] body.hp .link-priv {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  margin: 0;
+}
+
+/* ==========================================================================
+   10. 形态 3 · 横排菜单（menu）
+   ========================================================================== */
+html[data-layout='menu'] body.hp .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+html[data-layout='menu'] body.hp .link {
+  min-height: 36px;
+  padding: 4px 14px 4px 5px;
+  border-radius: var(--at-r-pill);
+  gap: 8px;
+}
+html[data-layout='menu'] body.hp .link-icon {
+  width: 26px;
+  height: 26px;
+  /* 胶囊里的图标也用圆形，形状才统一 */
+  border-radius: var(--at-r-pill);
+}
+html[data-layout='menu'] body.hp .initials { font-size: 11px; }
+html[data-layout='menu'] body.hp .link-title {
+  font-size: 13px;
+  font-weight: 520;
+}
+html[data-layout='menu'] body.hp .link-sub { display: none; }
+html[data-layout='menu'] body.hp .link-edit {
+  margin: -4px -9px -4px 0;
+  width: 28px;
+  height: 28px;
+}
+
+/* ==========================================================================
+   11. 形态 4 · 紧凑列表（compact）
+   --------------------------------------------------------------------------
+   整组一张圆角卡片，内部是行 + 细线。这是 iOS 系统设置列表的结构。
+   ========================================================================== */
+html[data-layout='compact'] body.hp .links {
+  grid-template-columns: 1fr;
+  gap: 0;
+  background: var(--at-card);
+  border: 1px solid var(--at-rule);
+  border-radius: var(--at-r-lg);
+  overflow: hidden;
+}
+html[data-layout='compact'] body.hp .link {
+  min-height: 44px;
+  padding: 7px 14px;
+  /* 不用 border:0 再单给 border-bottom：border:0 只把宽度归零，颜色会退回
+     currentColor（近黑），一旦某处补了宽度就冒出黑框。这里四边同色。 */
+  border: 0 solid var(--at-rule);
+  border-bottom-width: 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 11px;
+}
+html[data-layout='compact'] body.hp .link-item:last-child > .link {
+  border-bottom-color: transparent;
+}
+html[data-layout='compact'] body.hp .link:hover {
+  background: color-mix(in srgb, var(--at-sunken) 55%, transparent);
+  border-color: var(--at-rule);
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+}
+html[data-layout='compact'] body.hp .link:active {
+  background: var(--at-sunken);
+  transform: none;
+}
+html[data-layout='compact'] body.hp .link-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+html[data-layout='compact'] body.hp .initials { font-size: 11px; }
+html[data-layout='compact'] body.hp .link-title {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+html[data-layout='compact'] body.hp .link-sub { font-size: 12px; }
+
+/* 宽屏把说明推到标题右边同一行。间距必须在这里重给：上面 .link-body 的
+   gap:2px 是按「上下两行」定的，横向并排时 2px 会让「GitHub」和
+   「github.com」黏成一个词（实测黏过）。横向要 12px。 */
+@media (min-width: 760px) {
+  html[data-layout='compact'] body.hp .link-body {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+  }
+  html[data-layout='compact'] body.hp .link-title { flex: 0 0 auto; }
+  html[data-layout='compact'] body.hp .link-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* ==========================================================================
+   12. 空状态
+   ========================================================================== */
+body.hp .empty {
+  padding: clamp(56px, 9vw, 100px) 24px;
+  border: 1px dashed var(--at-rule-2);
+  border-radius: var(--at-r-xl);
+  background: color-mix(in srgb, var(--at-card) 55%, transparent);
+}
+body.hp .empty-title {
+  font-family: var(--at-font-d);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -.022em;
+}
+body.hp .empty-sub {
+  font-size: 13.5px;
+  color: var(--at-ink-3);
+}
+body.hp .btn-primary {
+  border-radius: var(--at-r-sm);
+  background: var(--at-accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 550;
+  box-shadow: 0 1px 2px rgba(0, 113, 227, .25), 0 6px 16px -6px rgba(0, 113, 227, .5);
+}
+body.hp .btn-primary:hover {
+  background: var(--at-accent-2);
+  filter: none;
+  box-shadow: 0 2px 4px rgba(0, 113, 227, .28), 0 10px 24px -8px rgba(0, 113, 227, .55);
+}
+
+/* ==========================================================================
+   13. 编辑模式
+   ========================================================================== */
+body.hp .drag-handle {
+  border-radius: var(--at-r-xs) 0 var(--at-r-xs) 0;
+  background: color-mix(in srgb, var(--at-card) 92%, transparent);
+  color: var(--at-ink-3);
+}
+body.hp .drag-handle:hover { color: var(--at-accent); }
+
+body.hp .link-item.is-selected > .link {
+  border-color: color-mix(in srgb, var(--at-accent) 60%, transparent);
+  box-shadow: 0 0 0 3px var(--at-accent-s);
+}
+body.hp .link-item.is-selected .link-edit {
+  opacity: 1;
+  background: var(--at-card);
+  color: var(--at-accent);
+}
+body.hp .link-item.is-dragging .link {
+  transform: scale(.985);
+  box-shadow: var(--at-sh-xl);
+  border-color: var(--at-rule-2);
+}
+body.hp .link-item.is-dragging.is-selected > .link {
+  border-style: dashed;
+  border-color: var(--at-accent);
+}
+
+body.hp.is-editing .stage::before {
+  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  position: sticky;
+  top: calc(var(--hp-bar) + 1px);
+  z-index: 25;
+  display: block;
+  margin: 0 0 12px;
+  padding: 10px 15px;
+  border-radius: var(--at-r-md);
+  border: 1px solid color-mix(in srgb, var(--at-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--at-accent) 7%, var(--at-card));
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  color: var(--at-ink-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  box-shadow: var(--at-sh-sm);
+}
+@media (max-width: 640px) {
+  body.hp.is-editing .stage::before {
+    content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出';
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  body.hp.is-editing .stage::before {
+    content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出';
+  }
+}
+
+/* ==========================================================================
+   14. 浮层
+   --------------------------------------------------------------------------
+   越靠近「用户临时打开的界面」，圆角越大、阴影越深 —— Apple 的层级惯例。
+   ========================================================================== */
+body.hp .paste-box,
+body.hp .keys-box {
+  border-radius: var(--at-r-xl);
+  border: 1px solid var(--at-rule);
+  background: color-mix(in srgb, var(--at-card) 96%, transparent);
+  backdrop-filter: saturate(180%) blur(28px);
+  -webkit-backdrop-filter: saturate(180%) blur(28px);
+  box-shadow: var(--at-sh-xl);
+}
+body.hp .paste-scrim {
+  background: var(--at-scrim);
+  backdrop-filter: saturate(140%) blur(6px);
+  -webkit-backdrop-filter: saturate(140%) blur(6px);
+}
+body.hp .paste-head h2 {
+  font-family: var(--at-font-d);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -.022em;
+}
+body.hp .paste-close { border-radius: var(--at-r-pill); }
+body.hp .paste-close:hover { background: var(--at-sunken); }
+body.hp .f-label {
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: .01em;
+  color: var(--at-ink-2);
+}
+body.hp .f-input {
+  border-radius: var(--at-r-sm);
+  border-color: var(--at-rule);
+  background: var(--at-sunken);
+  font-family: var(--at-font);
+  font-size: 14px;
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+body.hp .f-input:focus {
+  border-color: color-mix(in srgb, var(--at-accent) 55%, transparent);
+  background: var(--at-card);
+  box-shadow: 0 0 0 4px var(--at-accent-s);
+}
+body.hp .btn-ghost {
+  border-radius: var(--at-r-sm);
+  border-color: var(--at-rule-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+body.hp .btn-ghost:hover {
+  background: var(--at-sunken);
+  border-color: var(--at-rule-2);
+  color: var(--at-ink);
+}
+body.hp .paste-box .btn-primary {
+  border-radius: var(--at-r-sm);
+  font-size: 13px;
+}
+body.hp .tip-bubble {
+  border-radius: var(--at-r-lg);
+  border: 1px solid var(--at-rule);
+  background: color-mix(in srgb, var(--at-card) 96%, transparent);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--at-sh-lg);
+}
+body.hp .tip-title { font-size: 12.5px; font-weight: 600; }
+body.hp .tip-sub {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--at-ink-3);
+}
+body.hp .toast {
+  border-radius: var(--at-r-pill);
+  border: 1px solid color-mix(in srgb, var(--at-ink) 12%, transparent);
+  background: color-mix(in srgb, var(--at-ink) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #fff;
+  font-size: 12.5px;
+  padding-left: 16px;
+  padding-right: 16px;
+  box-shadow: var(--at-sh-lg);
+}
+body.hp kbd {
+  border-radius: 5px;
+  border: 1px solid var(--at-rule-2);
+  background: var(--at-card);
+  box-shadow: inset 0 -1px 0 var(--at-rule);
+  font-family: var(--at-mono);
+  font-size: 10.5px;
+  padding: 1px 5px;
+  color: var(--at-ink-2);
+}
+body.hp .keys-sec h3 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--at-ink-3);
+}
+body.hp .keys-list dd {
+  font-size: 13px;
+  color: var(--at-ink-2);
+}
+
+/* ==========================================================================
+   15. 焦点与选择
+   ========================================================================== */
+body.hp :where(a, button, input, select, [tabindex]):focus-visible,
+body.hp .link:focus-visible {
+  outline: 2px solid var(--at-accent);
+  outline-offset: 2px;
+  border-radius: var(--at-r-sm);
+  box-shadow: 0 0 0 5px var(--at-accent-s);
+}
+body.hp .link:focus-visible { border-radius: var(--hp-r-card); }
+body.hp ::selection {
+  background: color-mix(in srgb, var(--at-accent) 20%, transparent);
+  color: var(--at-ink);
+}
+
+/* ==========================================================================
+   16. 响应式
+   ========================================================================== */
+@media (max-width: 1139px) {
+  /* 侧栏放不下时退化成顶部一条横向滚动条。
+     必须把整列模式设的 left/bottom/width/border-right 全部收回，
+     否则 fixed 的「整列」会盖住半个屏幕。 */
+  body.hp .gnav--side {
+    position: sticky;
+    top: var(--hp-bar);
+    left: auto;
+    bottom: auto;
+    width: auto;
+    max-height: none;
+    padding: 8px var(--pad-x);
+    border-right: 0;
+    border-bottom: 1px solid var(--at-rule);
+    background: color-mix(in srgb, var(--at-paper-hi) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: none;
+    overflow: visible;
+    z-index: 30;
+  }
+  body.hp .gnav-head { display: none; }
+  body.hp .gnav--side .gnav-title { display: none; }
+  body.hp .gnav--side .gnav-track {
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  body.hp .gnav--side .gnav-track::-webkit-scrollbar { display: none; }
+  /* 横条形态下必须把 width 收回 auto：竖排时为了「名称……计数」对齐
+     给过 width:100%，到了横排会把整行占满，只剩第一个分组可见
+     （实测：手机上只看到「常用 8」，其余分组全被挤到屏幕外）。 */
+  body.hp .gnav--side .gnav-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 32px;
+    padding: 0 13px;
+    border-radius: var(--at-r-pill);
+  }
+  body.hp .gnav--side .gnav-count { margin-left: 0; }
+  /* 横条形态与「收起」无关：条子里名称必须照常显示 */
+  html[data-nav='mini'] body.hp .gnav-name,
+  html[data-nav='mini'] body.hp .gnav-count { display: flex; }
+  html[data-nav='mini'] body.hp .gnav--side .gnav-item {
+    justify-content: flex-start;
+    padding: 0 13px;
+    gap: 7px;
+  }
+}
+
+/* 窄屏：三个子项全部显式写死行列。只改 columns 会拼出「grid-column 来自
+   新样式、grid-row 来自 app.css」的错位搜索框（实测 185px 宽）。 */
+@media (max-width: 720px) {
+  body.hp .brand-text { display: none; }
+  body.hp .topbar {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 0 12px;
+  }
+  body.hp .topbar > .brand    { grid-column: 1; grid-row: 1; justify-self: start; }
+  body.hp .topbar > .tb-tools { grid-column: 2; grid-row: 1; justify-self: end; }
+  body.hp .topbar > .search-wrap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+  }
+  body.hp .search input { font-size: 16px; } /* 防 iOS 聚焦缩放 */
+  /* 窄屏不要键帽：手机没有物理键盘，它只会挡住输入 */
+  body.hp .search-kbd { display: none; }
+  body.hp .search input { padding-right: 14px; }
+}
+
+@media (max-width: 560px) {
+  /* 窄屏卡片保持横向、降到单列 —— 横向结构在小屏更好读 */
+  html[data-layout='card'] body.hp .links {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  html[data-layout='card'] body.hp .link { min-height: 64px; }
+  html[data-layout='grid'] body.hp .links {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 2px;
+  }
+  html[data-layout='grid'] body.hp .link {
+    min-height: 100px;
+    padding: 13px 4px 9px;
+  }
+  html[data-layout='grid'] body.hp .link-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+  html[data-layout='grid'] body.hp .link-title { font-size: 12px; }
+  body.hp .link-edit { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.hp .link-item { animation: none !important; }
+  body.hp .link,
+  body.hp .link-icon,
+  body.hp .tbm-btn { transition: none !important; }
+  body.hp .link:hover { transform: none; }
+  body.hp .link:hover .link-icon { transform: none; }
+}
+
+/* ==========================================================================
+   17. 管理侧：登录页跟随同一套语言
+   ========================================================================== */
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-card {
+  border-radius: var(--at-r-xl);
+  border: 1px solid var(--at-rule);
+  background: var(--at-card);
+  box-shadow: var(--at-sh-xl);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-kicker {
+  font-family: var(--at-font);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .14em;
+  color: var(--at-accent);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-big {
+  font-family: var(--at-font-d);
+  letter-spacing: -.045em;
+  font-weight: 700;
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-note {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--at-ink-2);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-title {
+  font-family: var(--at-font-d);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -.026em;
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-submit {
+  border-radius: var(--at-r-sm);
+  background: var(--at-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 550;
+  box-shadow: 0 1px 2px rgba(0, 113, 227, .25), 0 8px 20px -8px rgba(0, 113, 227, .55);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-submit:hover {
+  background: var(--at-accent-2);
+  filter: none;
+  box-shadow: 0 2px 4px rgba(0, 113, 227, .3), 0 12px 26px -8px rgba(0, 113, 227, .6);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-alert { border-radius: var(--at-r-sm); }
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-back { border-radius: var(--at-r-xs); }
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-input {
+  border-radius: var(--at-r-sm);
+  border-color: var(--at-rule);
+  background: var(--at-sunken);
+  font-family: var(--at-font);
+  font-size: 14px;
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-input:focus {
+  border-color: color-mix(in srgb, var(--at-accent) 55%, transparent);
+  background: var(--at-card);
+  box-shadow: 0 0 0 4px var(--at-accent-s);
+}
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-label {
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: .01em;
+  color: var(--at-ink-2);
+}
+
+/* ==========================================================================
+   拖到侧栏分组名上 —— 落点高亮
+   --------------------------------------------------------------------------
+   整项翻成强调色实底，是拖动过程中页面上最醒目的一处：
+   用户得一眼确认「松手就是这一组」。用描边或浅底都不够，
+   因为拖动时手指/光标就在上面，浅底会被盖住看不出。
+   ========================================================================== */
+body.hp .gnav-item.is-drop-target {
+  background: var(--at-accent);
+  border-color: var(--at-accent);
+  color: #fff;
+  box-shadow: var(--at-sh-sm);
+}
+body.hp .gnav-item.is-drop-target .gnav-name { color: #fff; }
+body.hp .gnav-item.is-drop-target .gnav-ico {
+  background: rgba(255, 255, 255, .20);
+  color: #fff;
+}
+body.hp .gnav-item.is-drop-target .gnav-count {
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+}
+
+/* ==========================================================================
+   侧栏底部：版本 + 版权
+   --------------------------------------------------------------------------
+   侧栏改成 flex 列，靠 margin-top:auto 把它顶到最下方 ——
+   分组多的时候它在内容之下（跟着滚），分组少的时候它在栏底，
+   两种情况都不会浮在中间。
+   ========================================================================== */
+body.hp .gnav--side {
+  display: flex;
+  flex-direction: column;
+}
+body.hp .gnav-foot {
+  margin-top: auto;
+  padding: 16px 10px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--at-ink-3);
+}
+body.hp .gnav-ver {
+  font-family: var(--at-mono);
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  color: var(--at-ink-3);
+  opacity: .85;
+}
+body.hp .gnav-copy {
+  color: var(--at-ink-3);
+  text-decoration: none;
+  transition: color .14s;
+}
+body.hp a.gnav-copy:hover {
+  color: var(--at-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* 窄屏侧栏退化成横向滚动条，底部这行在横条里没有位置 */
+@media (max-width: 1139px) {
+  body.hp .gnav-foot { display: none; }
+}
