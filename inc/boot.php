@@ -142,11 +142,18 @@ function safe_url(string $url): ?string
         return null;
     }
     $host = strtolower($p['host']);
-    // 纯 IP 与内网名直接拒绝（防止 SSRF 打内网）
+    /* 只挡内网 / 回环 / 链路本地，公网 IP 放行。
+       一刀切拒绝所有 IP 会误伤正常需求 —— 自建服务、NAS、路由器后台
+       很多就是 https://1.2.3.4:8000/ 这种写法，它跟 SSRF 没关系：
+       加一条链接不会让服务器去访问任何东西。
+       真正的 SSRF 防护在 MetaFetcher::isPublicUrl()，那里会把域名
+       先解析成 IP 再判一次私网，比这里只看字面 host 严得多。 */
     if (filter_var($host, FILTER_VALIDATE_IP)) {
-        return null;
-    }
-    if (!str_contains($host, '.')) {
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return null;
+        }
+    } elseif (!str_contains($host, '.')) {
+        // 没有点又不是 IP：nas、intranet 这类内网短名，直接拒
         return null;
     }
     return $url;

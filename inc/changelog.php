@@ -20,6 +20,22 @@ function hp_changelog(): array
 {
     return [
         [
+            'ver'  => 'V1.5.2',
+            'date' => '2026-11-16',
+            'lead' => '公网 IP 的网址被当成 SSRF 拦掉了，自建服务加不进来。',
+            'sections' => [
+                [
+                    'title' => 'https://1.2.3.4:8000 这种地址加不进去',
+                    'items' => [
+                        '<strong>现象：</strong>添加 <code>https://49.233.65.212:8000/</code>，提示「网址格式不正确，只支持 http/https」。换成域名就没事。',
+                        '<strong>原因：</strong><code>safe_url()</code> 里有一句「纯 IP 一律拒绝」，本意是防 SSRF。但「把一条链接存进库」根本不会让服务器去访问任何东西 —— 真正发请求的是后面抓标题/图标那一层，而那里已经有 <code>MetaFetcher::isPublicUrl()</code> 做完整判断（会把域名先解析成 IP 再查私网，比只看字面 host 严得多）。所以这层拦截既多余，又把自建服务的公网 IP 全部误伤。',
+                        '修法：<code>safe_url()</code> 只在 IP 落在私有 / 回环 / 链路本地网段时才拒绝（<code>FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE</code>），公网 IP 放行。SSRF 防护仍由抓取层负责，一点没放松。',
+                        '实测 13 个用例：公网 IP 与端口放行；<code>192.168.*</code>、<code>10.*</code>、<code>172.16.*</code>、<code>127.0.0.1</code>、<code>169.254.169.254</code>（云元数据）、<code>0.0.0.0</code>、内网短名、<code>javascript:</code> 伪协议、带 <code>user:pass@</code> 的全部照旧拒绝。',
+                    ],
+                ],
+            ],
+        ],
+        [
             'ver'  => 'V1.5.1',
             'date' => '2026-11-16',
             'lead' => '装完进不去：密码写进了 config.php，而登录只看 users 表。',
