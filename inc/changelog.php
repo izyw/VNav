@@ -33,6 +33,17 @@ function hp_changelog(): array
                     ],
                 ],
                 [
+                    'title' => '验证码是白框，而且登不进去',
+                    'items' => [
+                        '<strong>现象：</strong>登录页的验证码位置是个白框，控制台看 <code>login.php?captcha=...</code> 返回 500（响应头已经是 <code>image/png</code>，内容长度 0）。',
+                        '<strong>原因：</strong>宿主 PHP 没装 GD。1Panel 的 <code>1panel-php-fpm</code> 镜像就是典型 —— 运行环境的 <code>PHP_EXTENSIONS</code> 里明明写着 <code>gd</code>，镜像里其实没有这个 so，<code>php -m</code> 看不到它。',
+                        '而原来的「GD 缺失」降级分支自己又调了 <code>imagecreate()</code> / <code>imagestring()</code> —— 那些同样是 GD 函数，所以兜底代码自己先致命了，页面直接 500。',
+                        '<strong>最要命的连锁反应：</strong>登录失败一次后页面就要求验证码，而验证码永远画不出来 —— 密码对也进不去，账号被永久锁在门外。',
+                        '修法两处：① 新增 <code>hp_captcha_available()</code>，没 GD 时 <code>login.php</code> 直接不要求验证码，前端也不再渲染那个 <code>img</code>；② <code>hp_captcha_render()</code> 在无 GD 时输出一张 1×1 透明 PNG，不调用任何 GD 函数。',
+                        '装了 GD（面板 → 运行环境 → PHP → 扩展 → 勾 <code>gd</code>）之后验证码会自动恢复，不用改回来；不装也能正常登录，只是少了这一层防护。',
+                    ],
+                ],
+                [
                     'title' => '顺带记一个部署坑',
                     'items' => [
                         '如果 <code>data/</code> 是解压或上传进去的，属主可能变成 <code>root</code>，而 PHP-FPM 以 <code>www-data</code> 运行 —— 这时 SQLite 会报 <code>attempt to write a readonly database</code>，而错误信息里完全看不出是权限问题。把 <code>data/</code>、<code>inc/</code> 的属主改成 PHP 运行用户（或给足写权限）即可，<code>home.db</code> 本身不用删。',

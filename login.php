@@ -90,8 +90,9 @@ $st->execute([$ip]);
 $row = $st->fetch() ?: ['fails' => 0, 'last_at' => 0];
 $fails = ((time() - (int)$row['last_at']) > $LOCK_WINDOW) ? 0 : (int)$row['fails'];
 
-$captchaOn = setting('login_captcha', '1') === '1';
-// 出验证码的条件：开关开启 且 已经错过至少一次
+$captchaOn = hp_captcha_available() && setting('login_captcha', '1') === '1';
+// 出验证码的条件：GD 可用 且 开关开启 且 已经错过至少一次。
+// 没装 GD 时强制关掉 —— 图片画不出来，要求输入等于把用户永久锁在门外。
 $needCaptcha = $captchaOn && $fails >= 1;
 
 // 准备一张验证码给页面用（只在需要时生成，避免无谓写库）

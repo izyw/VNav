@@ -24,6 +24,23 @@ const HP_CAPTCHA_TTL = 300;
 /** 字符集：去掉 0/O、1/I/l 这些容易认错的，减少「明明输对了却不通过」 */
 const HP_CAPTCHA_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXY3456789';
 
+/**
+ * GD 是否可用。
+ *
+ * 很多发行版 / 容器镜像默认不带 gd（1Panel 的 1panel-php-fpm 就是其中之一，
+ * 它的 PHP_EXTENSIONS 里写着 gd，实际镜像里并没有这个 so）。
+ * 没有 GD 时验证码画不出来，调用方必须据此整体降级成「不要求验证码」，
+ * 否则用户会卡在「图片是个白框、输什么都不对」的死循环里。
+ */
+function hp_captcha_available(): bool
+{
+    return function_exists('imagecreatetruecolor') && function_exists('imagepng');
+}
+
+/** 无 GD 时输出这张 1×1 透明 PNG，避免前端出现裂图。 */
+const HP_CAPTCHA_BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAC0lEQVQImWNgAAIAAAUAAWJVMogAAAAASUVORK5CYII=';
+
+
 /** 生成一张新验证码，返回 [token, 明文]（明文只用来画图，不回传前端） */
 function hp_captcha_new(): array
 {
@@ -95,13 +112,13 @@ function hp_captcha_render(string $code): never
         header('X-Content-Type-Options: nosniff');
     }
 
-    // GD 缺失时退化成一张提示图，而不是 500 —— 少一个功能不该让登录页崩
-    if (!function_exists('imagecreatetruecolor')) {
-        $im = imagecreate($w, $h);
-        imagecolorallocate($im, 30, 30, 38);
-        $c = imagecolorallocate($im, 230, 200, 120);
-        imagestring($im, 3, 8, 15, 'GD missing', $c);
-        imagepng($im);
+    /* GD 缺失时输出一张 1×1 透明 PNG，绝不 500 —— 少一个功能不该让登录页崩。
+       注意这里**不能**再调 imagecreate / imagestring：那些同样是 GD 函数，
+       没装 gd 的时候调它们照样致命，「兜底的兜底」等于没有兜底。
+       真正的降级发生在 login.php：hp_captcha_available() 为 false 时
+       直接不要求验证码，前端也不会渲染这个 img。 */
+    if (!hp_captcha_available()) {
+        echo base64_decode(HP_CAPTCHA_BLANK_PNG);
         exit;
     }
 
@@ -186,8 +203,8 @@ function hp_captcha_render_expired(): never
         header('Cache-Control: no-store');
     }
     $w = 132; $h = 46;
-    if (!function_exists('imagecreatetruecolor')) {
-        echo '';
+    if (!hp_captcha_available()) {
+        echo base64_decode(HP_CAPTCHA_BLANK_PNG);
         exit;
     }
     $im = imagecreatetruecolor($w, $h);
