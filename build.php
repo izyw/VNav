@@ -45,7 +45,11 @@ if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
    注意这里不能只判 basename：data/ 下任何东西都要挡，
    但 assets/fonts/*.woff2 要留 —— 所以按目录前缀判更可靠。 */
 $skipDirs = ['.git', '.workbuddy', 'data', 'node_modules', '__pycache__'];
-$skipFiles = ['inc/config.php', '.DS_Store', 'Thumbs.db', 'build.php'];
+/* .gitattributes / release.php 是「仓库专用」的：前者管换行符策略，
+   后者是往 GitHub 发版用的。装到别人服务器上这两样没有任何用处，
+   留着只会让人误以为站点里有什么需要跑一下。 */
+$skipFiles = ['inc/config.php', '.DS_Store', 'Thumbs.db', 'build.php',
+              '.gitattributes', '.gitignore', 'release.php'];
 $skipExt = ['log', 'tmp', 'bak', 'db', 'db-wal', 'db-shm'];
 
 $files = [];
