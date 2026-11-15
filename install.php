@@ -66,6 +66,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
             // 生产默认关掉 debug
             $tpl = str_replace("'debug'    => false,", "'debug'    => false,", $tpl);
             file_put_contents($cfgFile, $tpl);
+
+            /* 登录只认 users 表（见 login.php 的 password_verify），
+               config.php 里那对 admin_user / admin_pass 从 v6 起就不参与校验，
+               只留给「老库升级时导入首个管理员」用。以前这里只写配置不写 users，
+               而 hp_install_schema 又只建表 —— 新建的库 users 是空的，
+               装完拿什么密码都进不去。这里把表单填的账号真正落到 users；
+               已存在同名账号（比如带了自己本机的 home.db）就更新密码，
+               免得用户以为填了新密码却只能用旧密码登。 */
+            $pdo->prepare(
+                'INSERT INTO users(username, pass_hash, role, created_at) VALUES(?, ?, ?, ?)
+                 ON CONFLICT(username) DO UPDATE SET pass_hash = excluded.pass_hash, role = excluded.role'
+            )->execute([
+                $user,
+                password_hash($pass, PASSWORD_BCRYPT, ['cost' => 11]),
+                'admin',
+                date('Y-m-d H:i:s'),
+            ]);
+
             $msg = '安装完成！请立刻删除 install.php，然后进入主页。';
         } catch (Throwable $e) {
             $err = '安装失败：' . $e->getMessage();

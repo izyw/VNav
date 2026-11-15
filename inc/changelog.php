@@ -20,6 +20,27 @@ function hp_changelog(): array
 {
     return [
         [
+            'ver'  => 'V1.5.1',
+            'date' => '2026-11-16',
+            'lead' => '装完进不去：密码写进了 config.php，而登录只看 users 表。',
+            'sections' => [
+                [
+                    'title' => '安装向导填的密码不生效',
+                    'items' => [
+                        '<strong>现象：</strong>新站点打开 <code>install.php</code>，填完账号密码提示「安装完成」，但拿刚填的密码登录，一直报「账号或密码不正确」。',
+                        '<strong>原因：</strong>V1.5.0 起登录改成查 <code>users</code> 表（<code>login.php</code> 里用 <code>password_verify</code> 比对 <code>pass_hash</code>），而安装向导只把 <code>admin_user</code> / <code>admin_pass</code> 写进了 <code>inc/config.php</code> —— 这两个字段从 v6 起只在「老库升级时导入首个管理员」那一步用到。新库的 <code>users</code> 表是空的，装完根本不存在任何账号。',
+                        '修法：安装向导在写完 <code>config.php</code> 之后，把表单填的账号直接落进 <code>users</code>；已存在同名账号就更新它的 <code>pass_hash</code>。所以「带着自己本机 <code>home.db</code> 一起上传」这种情况，也能用新填的密码登录，不必去回想本机那个旧密码。',
+                    ],
+                ],
+                [
+                    'title' => '顺带记一个部署坑',
+                    'items' => [
+                        '如果 <code>data/</code> 是解压或上传进去的，属主可能变成 <code>root</code>，而 PHP-FPM 以 <code>www-data</code> 运行 —— 这时 SQLite 会报 <code>attempt to write a readonly database</code>，而错误信息里完全看不出是权限问题。把 <code>data/</code>、<code>inc/</code> 的属主改成 PHP 运行用户（或给足写权限）即可，<code>home.db</code> 本身不用删。',
+                    ],
+                ],
+            ],
+        ],
+        [
             'ver'  => 'V1.4.4',
             'date' => '2026-11-16',
             'lead' => '一个只在打开后台时才炸的致命错误：hp_version() 被定义了两次，后台整页 500。',
