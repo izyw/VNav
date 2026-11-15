@@ -200,7 +200,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="stylesheet" href="assets/app.css?v=39">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=39">
 <link rel="stylesheet" href="assets/skin-frame.css?v=47">
-<link rel="stylesheet" href="assets/admin.css?v=39">
+<link rel="stylesheet" href="assets/admin.css?v=40">
 </head>
 <body class="adm-body">
 
@@ -387,6 +387,26 @@ if ($tab === 'upgrade' || $tab === 'security') {
             $bucket[$k][] = $l;
         }
         ?>
+        <?php /* 批量操作条：默认隐藏，勾了任意一行才出现。
+                 放在列表顶部并 sticky，滚到下面勾选时也还看得见。 */ ?>
+        <div class="adm-bulkbar" id="bulkBar" hidden>
+          <label class="adm-bulk-check">
+            <input type="checkbox" id="bulkAll">
+            <span>全选</span>
+          </label>
+          <span class="adm-bulk-n" id="bulkCount">已选 0 条</span>
+          <span class="adm-bulk-sp"></span>
+          <select id="bulkGroup" class="adm-bulk-select" aria-label="目标分组">
+            <option value="">移到分组…</option>
+            <?php foreach ($groups as $g): ?>
+              <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <button type="button" class="adm-mini" data-bulk="move">移动</button>
+          <button type="button" class="adm-mini" data-bulk="hide">隐藏</button>
+          <button type="button" class="adm-mini" data-bulk="show">取消隐藏</button>
+          <button type="button" class="adm-mini is-danger" data-bulk="delete">删除</button>
+        </div>
         <div class="adm-list" id="admList">
           <?php foreach ($bucket as $gid => $items): ?>
             <div class="adm-list-group">
@@ -407,6 +427,10 @@ if ($tab === 'upgrade' || $tab === 'security') {
                          data-hidden="<?= $isHidden ? '1' : '0' ?>"
                          data-icon="<?= h($l['icon']) ?>"
                          style="--hue:<?= $hue ?>">
+                  <label class="adm-cb" title="选中这一行">
+                    <input type="checkbox" data-bulk-id="<?= (int)$l['id'] ?>">
+                    <span class="sr-only">选中「<?= h($l['title']) ?>」</span>
+                  </label>
                   <span class="adm-row-icon<?= $hasIcon ? ' has-img' : '' ?>" aria-hidden="true">
                     <?php if ($hasIcon): ?>
                       <img src="<?= h($l['icon']) ?>" alt="" width="22" height="22" loading="lazy">
@@ -1551,6 +1575,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=18" defer></script>
+<script src="assets/admin.js?v=19" defer></script>
 </body>
 </html>

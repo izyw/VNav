@@ -869,4 +869,69 @@
       });
     });
   }
+
+  /* ---------- 批量管理 ----------
+     勾选一批 → 一个动作。列表是按分组分块渲染的，所以选择状态统一用
+     data-bulk-id 收集，跟分组无关；「全选」也是全列表，不是全组。 */
+  (function initBulk() {
+    const bar = $('#bulkBar');
+    if (!bar) return;
+    const allBox  = $('#bulkAll');
+    const countEl = $('#bulkCount');
+    const groupSel = $('#bulkGroup');
+    const boxes = () => $$('input[data-bulk-id]');
+    const picked = () => boxes().filter(b => b.checked);
+
+    function sync() {
+      const list = boxes();
+      const n = list.filter(b => b.checked).length;
+      bar.hidden = n === 0;
+      countEl.textContent = '已选 ' + n + ' 条';
+      allBox.checked = n > 0 && n === list.length;
+      allBox.indeterminate = n > 0 && n < list.length;
+      list.forEach(b => {
+        const row = b.closest('.adm-row');
+        if (row) row.classList.toggle('is-picked', b.checked);
+      });
+    }
+
+    document.addEventListener('change', e => {
+      if (e.target === allBox) {
+        const on = allBox.checked;
+        boxes().forEach(b => { b.checked = on; });
+        sync();
+        return;
+      }
+      if (e.target.matches && e.target.matches('input[data-bulk-id]')) sync();
+    });
+
+    bar.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-bulk]');
+      if (!btn) return;
+      const op  = btn.dataset.bulk;
+      const ids = picked().map(b => Number(b.dataset.bulkId)).filter(Boolean);
+      if (!ids.length) { toast('先勾选要处理的链接', true); return; }
+
+      const payload = { action: 'bulk', op, ids };
+      if (op === 'move') {
+        const gid = Number(groupSel.value);
+        if (!gid) { toast('先在上面选一个目标分组', true); return; }
+        payload.group_id = gid;
+      }
+      if (op === 'delete' && !confirm('确定删除选中的 ' + ids.length + ' 条链接？删了无法恢复。')) return;
+
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '处理中…';
+      try {
+        const r = await api(payload);
+        toast('已处理 ' + (r.affected ?? ids.length) + ' 条');
+        setTimeout(() => location.reload(), 500);
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+  })();
 })();

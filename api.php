@@ -287,6 +287,54 @@ try {
             json_ok();
         }
 
+        /* ---------- 批量操作 ----------
+           后台列表「勾选一批 → 一个动作」走这里。
+           一律带 user_id 条件：管理员在默认数据模式下 $U 是 0，
+           普通用户就是自己的 id —— 和单条操作共用同一道权限闸门，
+           不因为「批量」就放宽。 */
+        case 'bulk': {
+            $ids = $body['ids'] ?? [];
+            $op  = (string)($body['op'] ?? '');
+            if (!is_array($ids) || !$ids) json_err('没有选中任何链接');
+            $ids = array_values(array_unique(array_filter(
+                array_map('intval', $ids),
+                static fn($v) => $v > 0
+            )));
+            if (!$ids) json_err('没有选中任何链接');
+            if (count($ids) > 500) json_err('一次最多处理 500 条');
+
+            $in   = implode(',', array_fill(0, count($ids), '?'));
+            $args = $ids;
+            $args[] = $U;
+
+            switch ($op) {
+                case 'delete':
+                    $st = db()->prepare("DELETE FROM links WHERE id IN ($in) AND user_id = ?");
+                    $st->execute($args);
+                    json_ok(['affected' => $st->rowCount()]);
+
+                case 'hide':
+                case 'show':
+                    $st = db()->prepare("UPDATE links SET hidden = ?, updated_at = ? WHERE id IN ($in) AND user_id = ?");
+                    $st->execute([$op === 'hide' ? 1 : 0, now(), ...$args]);
+                    json_ok(['affected' => $st->rowCount()]);
+
+                case 'move': {
+                    $gid = (int)($body['group_id'] ?? 0);
+                    if ($gid <= 0) json_err('缺少目标分组');
+                    $ok = db()->prepare('SELECT 1 FROM groups WHERE id = ? AND user_id = ?');
+                    $ok->execute([$gid, $U]);
+                    if (!$ok->fetchColumn()) json_err('目标分组不存在', 404);
+                    $st = db()->prepare("UPDATE links SET group_id = ?, updated_at = ? WHERE id IN ($in) AND user_id = ?");
+                    $st->execute([$gid, now(), ...$args]);
+                    json_ok(['affected' => $st->rowCount()]);
+                }
+
+                default:
+                    json_err('未知的批量操作');
+            }
+        }
+
         /* ---------- 排序：一次提交整个顺序 ----------
            前台拖动只提交「本组内」的 id 列表，这里就只重排这些。
            不必关心别组 —— 主页渲染时先按 group_id 归并，再按

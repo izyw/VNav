@@ -53,7 +53,11 @@ function hp_clone_default_data(PDO $pdo, int $uid): array
         $gCount++;
     }
 
-    $ls = $pdo->query('SELECT group_id, title, url, icon, icon_kind, descr, sort, hidden FROM links WHERE user_id = 0')->fetchAll();
+    /* 只复制「公开」的默认链接。
+       hidden = 1 是管理员自己藏起来的私人条目（只对自己可见），
+       复制进新账号等于把它公开给这个新用户 —— 这是一条真实的泄漏路径，
+       不是理论问题：新用户注册完一登录就看见站长私藏的链接。 */
+    $ls = $pdo->query('SELECT group_id, title, url, icon, icon_kind, descr, sort, hidden FROM links WHERE user_id = 0 AND hidden = 0')->fetchAll();
     $insL = $pdo->prepare(
         'INSERT INTO links(user_id, group_id, title, url, icon, icon_kind, descr, sort, hidden, created_at, updated_at)
          VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
