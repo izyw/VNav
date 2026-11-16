@@ -44,7 +44,9 @@ if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
 /* 排除规则。用「相对路径前缀 + 文件名」双判，任一命中就跳过。
    注意这里不能只判 basename：data/ 下任何东西都要挡，
    但 assets/fonts/*.woff2 要留 —— 所以按目录前缀判更可靠。 */
-$skipDirs = ['.git', '.workbuddy', 'data', 'node_modules', '__pycache__'];
+/* docs/ 是仓库里的文档（三张界面截图就占 500 KB），装到服务器上没有任何用处，
+   放进包里只会让安装包大一倍。README 与部署说明留着 —— 解压的人会看。 */
+$skipDirs = ['.git', '.workbuddy', 'data', 'node_modules', '__pycache__', 'docs'];
 /* .gitattributes / release.php 是「仓库专用」的：前者管换行符策略，
    后者是往 GitHub 发版用的。装到别人服务器上这两样没有任何用处，
    留着只会让人误以为站点里有什么需要跑一下。 */
