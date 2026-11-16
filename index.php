@@ -31,6 +31,35 @@ require __DIR__ . '/inc/boot.php';
 require __DIR__ . '/inc/analytics.php';
 require __DIR__ . '/inc/acl.php';
 
+/* 退出登录：/?logout=<csrf>。
+   没做成单独的 logout.php，因为升级包只能覆盖服务器上已有的文件 ——
+   多一个文件就多一处「包里改了、线上还是老的」的裂缝。
+   token 是必须的：少了它，任何外站放一张 <img src="/?logout=x">
+   就能把人踢下线。 */
+if (isset($_GET['logout'])) {
+    $__outTok = (string)$_GET['logout'];
+    if (is_logged_in() && $__outTok !== '' && hash_equals(csrf_token(), $__outTok)) {
+        /* 先清数据，再清 cookie，最后销毁会话 —— 顺序反了就没得写了 */
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $__p = session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires'  => time() - 42000,
+                'path'     => $__p['path'],
+                'domain'   => $__p['domain'],
+                'secure'   => (bool)$__p['secure'],
+                'httponly' => (bool)$__p['httponly'],
+                'samesite' => 'Lax',
+            ]);
+        }
+        session_destroy();
+    }
+    header('Location: ./');
+    exit;
+}
+unset($__outTok);
+
+
 // 访问控制先于一切：被拦的请求不该建 session、不该查库、不该记统计。
 $__isAdmin = is_logged_in();   // 能编辑（登录即可）
 $__isSuper = is_admin();       // 真正的管理员：后台 / 统计 / 访问控制
@@ -69,14 +98,24 @@ $footer   = setting('footer_note', '');
    而 author_name 是个名字（izyw）。补上「Made By」这层壳，
    后台只填名字就够了，不用为了页脚好看去填一句英文。 */
 $copyOwner = trim(setting('copyright_name', ''));
+$copyAuthor = '';
 if ($copyOwner === '') {
     $copyAuthor = trim(setting('author_name', '')) ?: 'izyw';
     $copyOwner  = 'Made By ' . $copyAuthor;
 }
-/* 项目主页地址：后台没填就用仓库地址兜底。这行本来就该指向「项目的家」，
-   留空会让页脚少一行，看起来像没做完。 */
+/* 署名里的名字点进去是「作者的主页」，项目主页是另一个链接。
+   两者不能混：前者是人，后者是这个程序。后台留空就兜底到仓库。
+   author_url 是新设置项，老库没有这一行，setting() 会返回空。 */
+$authorUrl = trim(setting('author_url', '')) ?: 'https://github.com/izyw';
+/* 项目主页地址：指到**仓库**，不是作者个人页。
+   老库这条存的是作者主页（https://github.com/izyw），点「项目主页」
+   会跳到个人首页而不是这个程序 —— 那种链接点了等于没到。
+   库里的值只填到用户名一级时，一律换成仓库地址；
+   填了完整仓库（或自己的域名）就照用，不瞎改。 */
 $authorGh = trim(setting('author_github', ''));
-if ($authorGh === '') $authorGh = 'https://github.com/izyw/VNav';
+if ($authorGh === '' || preg_match('~^https?://(www\.)?github\.com/[^/]+/?$~i', $authorGh)) {
+    $authorGh = 'https://github.com/izyw/VNav';
+}
 // ICP 备案号：留空就整段不渲染，不占位也不显示「暂无备案」
 $icpBeian  = trim(setting('icp_beian', ''));
 $copyYear  = date('Y');
@@ -174,8 +213,8 @@ hp_log_visit(false, '/');
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=51">
-<link rel="stylesheet" href="assets/skin-frame.css?v=51">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=53">
+<link rel="stylesheet" href="assets/skin-frame.css?v=52">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
@@ -392,6 +431,17 @@ hp_log_visit(false, '/');
         <span class="tbm-login-text">管理</span>
       </a>
       <?php endif; ?>
+      <?php if ($__isAdmin): /* 登录后多一个「退出」。
+               普通账号是这里唯一能做的账号动作（它没有后台），
+               管理员则和管理按钮并排两颗。token 拼在地址里，
+               防的是外站拿 <img src="/?logout=x"> 把人踢下线。 */ ?>
+      <a class="tbm-btn tbm-btn--login tbm-btn--quiet" href="?logout=<?= h(csrf_token()) ?>" title="退出登录">
+        <span class="tbm-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </span>
+        <span class="tbm-login-text">退出</span>
+      </a>
+      <?php endif; ?>
     <?php if (!$__isAdmin): ?>
       <?php /* 游客 / 普通账号的登录入口。
                v1.2.2 之前这里什么都没有 —— 用户只能自己去敲 admin.php，
@@ -485,7 +535,8 @@ hp_log_visit(false, '/');
       </div>
       <?php endif; ?>
       <div class="gnav-foot">
-        <p class="gnav-copy">&copy; <?= h($copyYear) ?> <span class="gnav-owner"><?= h($copyOwner) ?></span></p>        <p class="gnav-rights">
+        <p class="gnav-copy">&copy; <?= h($copyYear) ?> <?php if ($copyAuthor !== ''): ?>Made By <a class="gnav-owner" href="<?= h($authorUrl) ?>" target="_blank" rel="noopener noreferrer"><?= h($copyAuthor) ?></a><?php else: ?><span class="gnav-owner"><?= h($copyOwner) ?></span><?php endif; ?></p>
+        <p class="gnav-rights">
           <a class="gnav-license" href="LICENSE" rel="license">MIT License</a>
         </p>
         <?php if ($icpBeian !== ''): ?>

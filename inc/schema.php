@@ -268,10 +268,12 @@ function hp_seed_settings(PDO $pdo): void
         'open_new_tab'  => '1',
         'show_desc'     => '1',
         'footer_note'   => '',
-        // 侧栏底部的版权署名。author_name 留空时前台退回站点名；
-        // author_github 留空时只显示纯文本，不生成链接。
+        // 侧栏底部的版权署名。author_name 是署名里的名字（可点，指向个人主页）；
+        // author_github 是「项目主页」，指到仓库而不是个人页；
+        // author_url 是署名里那个名字的链接。三者留空都有兜底。
         'author_name'   => '',
-        'author_github' => '',
+        'author_github' => 'https://github.com/izyw/VNav',
+        'author_url'    => 'https://github.com/izyw',
         // 统计：默认开。个人主页量级下开销就是一条 INSERT。
         'stats_on'      => '1',
         'stats_keep'    => '90',        // 明细保留天数

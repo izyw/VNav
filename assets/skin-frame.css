@@ -541,6 +541,17 @@ html[data-theme='frame'] body.hp .tbm-btn--login:hover {
   border-color: var(--fr-ink);
   color: #fff;
 }
+/* 退出在这里同样降一档：程序框语言里，主操作是唯一有边框的那颗 */
+html[data-theme='frame'] body.hp .tbm-btn--quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--fr-ink-3);
+}
+html[data-theme='frame'] body.hp .tbm-btn--quiet:hover {
+  background: color-mix(in srgb, var(--fr-ink) 6%, transparent);
+  border-color: transparent;
+  color: var(--fr-ink);
+}
 
 html[data-theme='frame'] body.hp .tbm-panel {
   border-radius: 10px;

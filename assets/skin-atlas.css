@@ -595,6 +595,22 @@ body.hp .tbm-btn--login:hover {
 }
 body.hp .tbm-btn--login:hover .tbm-ico { color: #fff; }
 
+/* 「退出」是次要动作：和管理并排，但不该同等重量 ——
+   两颗都是描边胶囊时，每次都要读字才知道哪颗是主入口。 */
+body.hp .tbm-btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--at-ink-3);
+}
+body.hp .tbm-btn--quiet .tbm-ico { color: inherit; }
+body.hp .tbm-btn--quiet:hover {
+  background: color-mix(in srgb, var(--at-ink) 7%, transparent);
+  border-color: transparent;
+  color: var(--at-ink);
+  box-shadow: none;
+}
+body.hp .tbm-btn--quiet:hover .tbm-ico { color: var(--at-ink); }
+
 body.hp .tbm-btn--edit[aria-pressed='true'] {
   background: var(--at-accent);
   border-color: var(--at-accent);
@@ -948,6 +964,13 @@ body.hp .stage {
 }
 html[data-theme='atlas'] body.hp .stage,
 html[data-theme='auto'] body.hp .stage {
+  /* 面板左边界必须和侧栏用同一个算法（侧栏是 left: max(0, (100%-maxw)/2)），
+     两边才能咬合。
+     ⚠️ 只写 margin-right: 10px 是错的：.stage 基座是 margin: 0 auto，
+     单独改右值会把左值推成 auto —— 实测 1440 视口下面板多右移 24px，
+     内容被推出侧栏通道，整块看起来「跑到右边去了」。必须同时钉死左值。 */
+  max-width: none;
+  margin-left: max(0px, calc((100% - var(--hp-maxw)) / 2));
   margin-right: 10px;
   border-radius: 16px 16px 0 0;
   background: var(--at-stage-bg);
@@ -1900,7 +1923,12 @@ body.hp .gnav-copy {
 body.hp .gnav-owner {
   font-weight: 700;
   color: var(--at-ink-2);
+  text-decoration: none;
+  transition: color .14s;
 }
+/* 署名里的名字是链接（作者主页），但不要下划线 —— 这一块是页脚，
+   一出现下划线就变成「一排可点的东西」，署名的语气就没了。 */
+a.gnav-owner:hover { color: var(--at-accent); }
 /* 权利声明比署名再淡一档：它是固定文案，不需要抢注意力 */
 body.hp .gnav-rights {
   color: var(--at-ink-3);
