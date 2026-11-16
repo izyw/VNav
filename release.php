@@ -87,7 +87,7 @@ if ($notesFile !== '') {
         }
     }
     if ($entry === null) {
-        $notes = "Vnav $ver\n\n详细改动见 docs/开发记录.md。\n";
+        $notes = "Vnav $ver\n\n详见 docs/设计说明.md（设计取舍）与 README（功能与安装）。\n";
     } else {
         $notes = '**' . $entry['lead'] . "**\n\n";
         foreach ($entry['sections'] as $sec) {
