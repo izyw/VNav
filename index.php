@@ -154,18 +154,18 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=40">
+<link rel="stylesheet" href="assets/app.css?v=42">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=42">
+<link rel="stylesheet" href="assets/home.css?v=44">
 <?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=48">
-<link rel="stylesheet" href="assets/skin-frame.css?v=50">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=50">
+<link rel="stylesheet" href="assets/skin-frame.css?v=51">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
@@ -265,17 +265,19 @@ hp_log_visit(false, '/');
               <svg class="tbo-check" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
             </button>
           <?php endforeach; ?>
-          <?php if ($__isAdmin): ?>
-            <?php /* 登录后多一个「设为默认」入口：不必跑后台就能改默认引擎。
-                     游客看不到这一项，因为它需要写设置，游客没有权限。 */ ?>
-            <div class="tbm-sep" role="separator"></div>
-            <button class="tbm-opt tbm-opt--act" type="button" data-engine-default>
-              <span class="tbo-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 6.2 6.4.5-4.9 4.3 1.5 6.3L12 16.9 6.4 20.3l1.5-6.3L3 9.7l6.4-.5z"/></svg>
-              </span>
-              <span class="tbo-body"><span class="tbo-name">把当前引擎设为默认</span></span>
-            </button>
-          <?php endif; ?>
+          <?php /* 「设为默认」这一项对所有人开放，但语义不同：
+                   登录用户写的是站点默认（服务端设置，换设备也生效）；
+                   游客没有可写的地方，写的是本机 localStorage ——
+                   那本来就是他「打开时用哪个引擎」的全部含义。
+                   以前这里整块对游客不渲染，游客换完引擎找不到「记住」的动作，
+                   会以为这次选择只在这一页有效。 */ ?>
+          <div class="tbm-sep" role="separator"></div>
+          <button class="tbm-opt tbm-opt--act" type="button" data-engine-default>
+            <span class="tbo-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 6.2 6.4.5-4.9 4.3 1.5 6.3L12 16.9 6.4 20.3l1.5-6.3L3 9.7l6.4-.5z"/></svg>
+            </span>
+            <span class="tbo-body"><span class="tbo-name"><?= $__isAdmin ? '把当前引擎设为默认' : '在本机记住这个引擎' ?></span></span>
+          </button>
         </div>
       </div>
 
@@ -545,12 +547,22 @@ hp_log_visit(false, '/');
                   data-hidden="<?= $isHidden ? '1' : '0' ?>"
                   data-icon="<?= h($l['icon']) ?>"
                   <?php endif; ?>>
-                <?php /* 拖动把手：只在编辑模式显示。放在 <a> 外面，
-                         否则拖拽时会触发链接跳转（踩过）。 */ ?>
+                <?php /* 勾选框：只在编辑模式显示。放在 <a> 外面，
+                         否则点它会把链接点开（和当年放把手是同一个理由）。
+
+                         原来是六点拖动把手，V1.0.0 换成勾选框：
+                         把手解决的是「从哪儿拖」，而整张卡片本来就能拖
+                         （鼠标 6px 阈值、触摸长按 260ms），把手是多余的；
+                         勾选框解决的是「怎么一次改十条」，那才是编辑时
+                         真正频繁的动作。 */ ?>
                 <?php if ($__isAdmin): ?>
-                  <span class="drag-handle" aria-hidden="true" tabindex="-1">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
-                  </span>
+                  <label class="pick-box">
+                    <input type="checkbox" data-pick="<?= (int)$l['id'] ?>">
+                    <span class="pick-mark" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+                    </span>
+                    <span class="sr-only">选择「<?= h($l['title']) ?>」</span>
+                  </label>
                 <?php endif; ?>
                 <a class="link" href="<?= h($l['url']) ?>" <?= $newTab ? 'target="_blank" rel="noopener noreferrer"' : '' ?>
                    data-href="<?= h($l['url']) ?>">
@@ -598,6 +610,50 @@ hp_log_visit(false, '/');
   <?php endif; ?>
 </main>
 </div>
+
+<?php /* 批量操作条：勾了卡片才浮出来，固定在视口底部。
+       为什么不做成吸顶的横条：吸顶会占掉主区一条，而且和分组标题抢位置；
+       底部浮层不参与布局，卡片一多也不会挡到正在看的内容
+       （Gmail / Notion 的批量条都是这个形态）。
+       只在登录态输出 —— 游客的写操作本来就不联网，给一条按了没反应的
+       操作条只会让人以为站坏了。 */ ?>
+<?php if ($__isAdmin): ?>
+<div class="bulkbar" id="bulkBar" hidden role="region" aria-label="批量操作">
+  <label class="bulkbar-all">
+    <input type="checkbox" id="bulkAll">
+    <span class="pick-mark pick-mark--sm" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+    </span>
+    <span>全选</span>
+  </label>
+  <span class="bulkbar-n" id="bulkCount">已选 0 项</span>
+  <span class="bulkbar-sp" aria-hidden="true"></span>
+  <select class="bulkbar-sel" id="bulkGroup" aria-label="移到哪个分组">
+    <option value="">移到分组…</option>
+    <?php /* 跳过 id=0（未分组）：bulk 的 move 要求目标组真实存在，
+             把「未分组」列进去点一下就报错，不如不列。 */ ?>
+    <?php foreach ($ordered as $g): ?>
+      <?php if ((int)$g['id'] <= 0) continue; ?>
+      <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
+  <button type="button" class="bulkbar-btn" data-bulk="icon" title="重新抓取图标">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+    <span>拉取图标</span>
+  </button>
+  <button type="button" class="bulkbar-btn" data-bulk="meta" title="重新抓取标题、描述与图标">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+    <span>拉取信息</span>
+  </button>
+  <button type="button" class="bulkbar-btn is-danger" data-bulk="delete" title="删除选中的链接">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+    <span>删除</span>
+  </button>
+  <button type="button" class="bulkbar-x" data-bulk="clear" aria-label="取消选择">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+</div>
+<?php endif; ?>
 
 <?php /* 粘贴添加浮层：游客也输出。
          未登录时改动只落到 localStorage（assets/guest.js 的沙盒），
@@ -779,12 +835,15 @@ hp_log_visit(false, '/');
   </p>
 </div>
 
+<?php endif; /* 登录专属的那几个浮层到此为止：编辑框 / 快捷键面板 */ ?>
+
 <!-- ============ 右下角提示（可永久关闭） ============ -->
 <?php
-/* 只在登录后提示「Ctrl+V 添加」—— 游客按了也加不了，
-   提示他一个做不到的操作只会让人困惑。 */
+/* 对所有访问者输出。原先只给登录用户，理由是「游客按 Ctrl+V 加不了」——
+   但 guest.js 本来就支持本地添加（改动落在 localStorage），这个前提不成立；
+   更要紧的是提示压根没渲染给游客，他连「关掉」这个动作都看不到。
+   现在游客也能看见、也能关，关掉的标记写在本机（登录用户仍写服务端）。 */
 ?>
-<?php if ($__isAdmin): ?>
 <div class="tip-bubble" id="tipBubble" hidden>
   <button type="button" class="tip-x" id="tipClose" aria-label="关闭提示">
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -799,20 +858,14 @@ hp_log_visit(false, '/');
     <button type="button" class="tip-never" id="tipNever">不再提示</button>
   </div>
 </div>
-<?php endif; ?>
 
+<!-- toast 与三个脚本对所有人输出。
+     游客没有服务端身份，但 guest.js 要负责把本地沙盒画出来、
+     app.js 要挂编辑模式与提示条 —— 少一个，这类页面就是只读的。 -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=44" defer></script>
+<script src="assets/ui.js?v=45" defer></script>
 <script src="assets/guest.js?v=52" defer></script>
-<script src="assets/app.js?v=42" defer></script>
-<?php else: ?>
-<?php /* 另一个分支（没有分组 / 没有内容）也把三个脚本全加载：
-         guest.js 要负责把本地沙盒里的数据画出来，
-         app.js 负责编辑模式 —— 少了任何一个，这类页面就是只读的。 */ ?>
-<script src="assets/ui.js?v=44" defer></script>
-<script src="assets/guest.js?v=52" defer></script>
-<script src="assets/app.js?v=42" defer></script>
-<?php endif; ?>
+<script src="assets/app.js?v=44" defer></script>
 
 </body>
 </html>

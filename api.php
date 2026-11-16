@@ -346,6 +346,37 @@ try {
             }
         }
 
+        /* ---------- 批量拉取：只处理勾选的那几条 ----------
+           和 icon_refill / meta_refresh 的区别不是参数，是权限模型：
+             · 那两个是后台运维动作，扫的是整库，admin-only
+             · 这个是前台编辑态给任何登录用户用的「刷新我选的这几条」
+           所以 $U 不是可选参数而是这条接口的边界 —— 底下两个函数都带了
+           user_id 条件，选中别人的 id 会查不到行，也就什么都不会发生。 */
+        case 'bulk_fetch': {
+            $raw = $body['ids'] ?? [];
+            if (!is_array($raw) || !$raw) json_err('没有选中任何链接');
+            $ids = [];
+            foreach ($raw as $v) {
+                $v = (int)$v;
+                if ($v > 0) $ids[] = $v;
+            }
+            $ids = array_values(array_unique($ids));
+            if (!$ids) json_err('没有选中任何链接');
+            if (count($ids) > 20) json_err('一次最多处理 20 条');
+
+            $mode = (string)($body['mode'] ?? 'meta');
+            /* 抓外站是慢活：图标那一路是串行的（每个站点都要先取 HTML 再取图），
+               20 条能跑到二三十秒，默认 30 秒的执行上限不够用。 */
+            @set_time_limit(150);
+
+            if ($mode === 'icon') {
+                require_once __DIR__ . '/inc/icons.php';
+                json_ok(['mode' => 'icon', 'result' => hp_icon_refill(20, $ids, $U)]);
+            }
+            require_once __DIR__ . '/inc/refresh.php';
+            json_ok(['mode' => 'meta', 'result' => hp_meta_refresh(20, true, 0, $ids, $U)]);
+        }
+
         /* ---------- 排序：一次提交整个顺序 ----------
            前台拖动只提交「本组内」的 id 列表，这里就只重排这些。
            不必关心别组 —— 主页渲染时先按 group_id 归并，再按
@@ -497,6 +528,47 @@ try {
             $stG->execute([$icon, $id, $U]);
             if ($stG->rowCount() === 0) json_err('没有这个分组');
             json_ok(['icon' => $icon]);
+        }
+
+        /* ---------- 分组排序：一次提交整个列表 ----------
+           和链接的 reorder 不是一回事：链接有「组内顺序 + 跨组归属」两层，
+           分组只有一层平铺列表，所以直接按提交顺序重写 sort 就行。
+
+           校验方式选了「全量对账」而不是逐条 UPDATE 后看 rowCount：
+           行数对不上就整个作废，因为排序是个整体 —— 只改一半的结果是
+           既不是新顺序也不是旧顺序，比失败更糟。 */
+        case 'group_reorder': {
+            $raw = $body['ids'] ?? [];
+            if (!is_array($raw) || !$raw) json_err('顺序数据为空');
+            $ids = [];
+            foreach ($raw as $v) {
+                $v = (int)$v;
+                if ($v > 0) $ids[] = $v;
+            }
+            $ids = array_values(array_unique($ids));
+            if (!$ids) json_err('顺序数据为空');
+
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $st = db()->prepare("SELECT COUNT(*) FROM groups WHERE id IN ($ph) AND user_id = ?");
+            $st->execute([...$ids, $U]);
+            if ((int)$st->fetchColumn() !== count($ids)) {
+                json_err('列表里有不属于你的分组', 403);
+            }
+
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                // 步长 10 与 group_add 的 MAX(sort)+10 一致，留出手工插入的余量
+                $up = $pdo->prepare('UPDATE groups SET sort = ? WHERE id = ? AND user_id = ?');
+                foreach ($ids as $i => $gid) {
+                    $up->execute([($i + 1) * 10, $gid, $U]);
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                json_err('排序失败：' . $e->getMessage(), 500);
+            }
+            json_ok(['affected' => count($ids)]);
         }
 
         /* ---------- 把「网站默认」整库复制到我自己的库 ----------

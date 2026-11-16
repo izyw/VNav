@@ -37,7 +37,7 @@ declare(strict_types=1);
  * @param int   $cursor     只处理 id 大于它的（0 = 从头开始）
  * @return array{ok:int, bad:int, left:int, changed:int, cursor:int, done:bool, errors:array<int,string>}
  */
-function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 0): array
+function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 0, ?array $ids = null, ?int $uid = null): array
 {
     require_once HP_ROOT . '/inc/MetaFetcher.php';
     require_once HP_ROOT . '/inc/icons.php';
@@ -47,13 +47,33 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
     $limit = max(1, min(48, $limit));
     $pdo = db();
 
-    /* 只挑 http(s) 开头的。url 本身不合法的那几条刷多少次也没用，
-       直接排除在拉取范围外。 */
+    /* 三套取材方式，共用后面那一整段抓取逻辑：
+       · $ids  —— 前台勾选的这几条（前台批量操作走这条，必须配 $uid）
+       · $cursor —— 后台整库刷新，分批推进
+       · 都不传 —— 从头开始一批 */
     $where = "url LIKE 'http%'";
-    $args = [];
-    if ($cursor > 0) {
+    $args  = [];
+    $total = 0;
+    if ($ids !== null) {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn($v) => $v > 0
+        )));
+        if (!$ids) {
+            return ['ok' => 0, 'bad' => 0, 'left' => 0, 'changed' => 0,
+                    'cursor' => 0, 'done' => true, 'errors' => []];
+        }
+        $total = count($ids);
+        $ids   = array_slice($ids, 0, $limit);
+        $where .= ' AND id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
+        $args  = $ids;
+    } elseif ($cursor > 0) {
         $where .= ' AND id > ?';
         $args[] = $cursor;
+    }
+    if ($uid !== null) {
+        $where .= ' AND user_id = ?';
+        $args[] = $uid;
     }
 
     $st = $pdo->prepare("SELECT id, title, url, icon, icon_kind, descr FROM links WHERE {$where} ORDER BY id ASC LIMIT " . $limit);
@@ -72,6 +92,9 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
     $bad = 0;
     $changed = 0;
     $errors = [];
+    /* 每条实际落库的新值，按 id 归集。前台批量操作靠它在原地改卡片 ——
+       只有「成功 3 条」的话，前端不知道该改哪三张。 */
+    $items = [];
 
     /* ---------- 阶段 0：先筛掉非法地址，别把它们塞进并发队列 ---------- */
     $todo = [];
@@ -147,23 +170,29 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
            overwrite=false 时只补空白 —— 这是「别动我手改过的」那个选项。 */
         $set = [];
         $val = [];
+        /* 实际落库的新值。前台批量操作要在原地更新卡片，光有「成功几条」
+           没法知道该改哪张卡、改成什么，所以这里把值带回去。 */
+        $got = ['title' => '', 'descr' => '', 'icon' => ''];
 
         $titleNow = (string)$r['title'];
         if ($newTitle !== '' && ($overwrite || $titleNow === '') && $newTitle !== $titleNow) {
+            $got['title'] = mb_substr($newTitle, 0, 60);
             $set[] = 'title = ?';
-            $val[] = mb_substr($newTitle, 0, 60);
+            $val[] = $got['title'];
         }
 
         $descrNow = (string)$r['descr'];
         if ($newDescr !== '' && ($overwrite || $descrNow === '') && $newDescr !== $descrNow) {
+            $got['descr'] = mb_substr($newDescr, 0, 120);
             $set[] = 'descr = ?';
-            $val[] = mb_substr($newDescr, 0, 120);
+            $val[] = $got['descr'];
         }
 
         $iconNow = (string)$r['icon'];
         $iconKindNow = (string)$r['icon_kind'];
         if ($iconOk && ($overwrite || $iconNow === '' || $iconKindNow !== 'file')) {
             if ($savedIcon !== $iconNow || $iconKindNow !== 'file') {
+                $got['icon'] = $savedIcon;
                 $set[] = 'icon = ?';
                 $val[] = $savedIcon;
                 $set[] = "icon_kind = 'file'";
@@ -180,9 +209,15 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
         $set[] = 'updated_at = ?';
         $val[] = now();
         $val[] = $id;
+        $sql = 'UPDATE links SET ' . implode(', ', $set) . ' WHERE id = ?';
+        if ($uid !== null) {
+            $sql .= ' AND user_id = ?';
+            $val[] = $uid;
+        }
 
         try {
-            $pdo->prepare('UPDATE links SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($val);
+            $pdo->prepare($sql)->execute($val);
+            $items[$id] = $got;
             $ok++;
             $changed++;
         } catch (Throwable $e) {
@@ -194,6 +229,22 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
     /* 本批最后处理到哪个 id。空批次时保持传入的 cursor 不动，
        否则前端会以为「到头了又回到 0」，循环重新从第一条开始。 */
     $nextCursor = $rows ? (int)$rows[count($rows) - 1]['id'] : $cursor;
+
+    if ($ids !== null) {
+        /* 指定 id 模式：进度由调用方按「还剩几条没传」自己算，
+           cursor 没有意义，left 只反映一次传太多被 limit 截断的部分。 */
+        $left = max(0, $total - count($rows));
+        return [
+            'ok'      => $ok,
+            'bad'     => $bad,
+            'left'    => $left,
+            'changed' => $changed,
+            'cursor'  => 0,
+            'done'    => $left === 0,
+            'errors'  => $errors,
+            'items'   => $items,
+        ];
+    }
 
     // 还有没有 id > nextCursor 的
     $leftSt = $pdo->prepare("SELECT COUNT(*) FROM links WHERE url LIKE 'http%' AND id > ?");
@@ -208,6 +259,7 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
         'cursor'  => $nextCursor,
         'done'    => $left === 0,
         'errors'  => $errors,
+        'items'   => $items,
     ];
 }
 

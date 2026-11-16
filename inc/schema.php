@@ -297,6 +297,27 @@ function hp_seed_settings(PDO $pdo): void
 function hp_install_schema(PDO $pdo): void
 {
     hp_create_tables($pdo);
+
+    /* ⚠️ 这里必须补一次 user_id 列，不能只靠 hp_migrate。
+       CREATE TABLE 里没有 user_id —— 它是 v6 用 ALTER 加上去的，而
+       hp_create_tables 在结尾已经把 schema_version 写成 HP_SCHEMA_VERSION，
+       于是 boot.php 的「版本落后才迁移」判断直接通过，ALTER 永远不会跑。
+       结果是一个「结构上属于 v5、版本号写着 v7」的库：links 和 groups 都缺
+       user_id，而前台每条 SQL 都在 WHERE user_id = ? —— 全新安装必挂。
+       线上当初是带着一份本机的 home.db 装的（那份是从老库升上来的，有列），
+       所以这条路径一直没被踩到。 */
+    foreach (['links', 'groups'] as $tbl) {
+        $hasUid = false;
+        foreach ($pdo->query('PRAGMA table_info(' . $tbl . ')') as $c) {
+            if (($c['name'] ?? '') === 'user_id') { $hasUid = true; break; }
+        }
+        if (!$hasUid) {
+            $pdo->exec('ALTER TABLE ' . $tbl . ' ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
+        }
+    }
+    // 唯一索引同理：它是在 migrate 里建的，新库不补就少了这层约束
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_links_owner_url ON links(user_id, url)');
+
     /* 默认值要等迁移跑完再灌：settings 的写入语句用了 user_id 列，
        而那一列要等下面的「重建 settings 表」之后才存在。
        先灌就会撞上 table settings has no column named user_id。 */

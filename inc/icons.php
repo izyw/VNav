@@ -197,24 +197,56 @@ function hp_icon_purge(int $olderThanDays = 0): array
 }
 
 /**
- * 给还没图标的链接批量补抓。每次最多 $limit 条，
+ * 给链接批量补抓图标。每次最多 $limit 条，
  * 避免一个请求跑太久被 PHP 超时掐断。
+ *
+ * 两种用法：
+ *   · 不传 $ids —— 扫全表里「还没图标」的（后台「补图标」按钮走这条）
+ *   · 传 $ids   —— 只处理这几条，且**允许覆盖已有图标**：
+ *                 用户在前台勾了几张卡点「拉取图标」，期待的是重新抓一遍，
+ *                 而不是「已经有图的就跳过」。
+ * $uid 非空时所有读写都锁在该用户名下 —— 前台批量操作必须传，
+ * 否则普通用户就能借这个接口去抓别人库里的地址。
  *
  * 返回 [成功数, 失败数, 剩余待抓数]。
  */
-function hp_icon_refill(int $limit = 12): array
+function hp_icon_refill(int $limit = 12, ?array $ids = null, ?int $uid = null): array
 {
     require_once HP_ROOT . '/inc/MetaFetcher.php';
 
     $limit = max(1, min(50, $limit));
-    $rows = db()->query(
-        "SELECT id, url FROM links
-          WHERE (icon = '' OR icon_kind <> 'file') AND url <> ''
-          ORDER BY id ASC LIMIT " . $limit
-    )->fetchAll();
+
+    $where = "url <> ''";
+    $args  = [];
+    $total = 0;
+    if ($ids === null) {
+        $where .= " AND (icon = '' OR icon_kind <> 'file')";
+    } else {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn($v) => $v > 0
+        )));
+        if (!$ids) {
+            return ['ok' => 0, 'bad' => 0, 'left' => 0, 'items' => []];
+        }
+        $total = count($ids);
+        $ids   = array_slice($ids, 0, $limit);
+        $where .= ' AND id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
+        $args  = $ids;
+    }
+    if ($uid !== null) {
+        $where .= ' AND user_id = ?';
+        $args[] = $uid;
+    }
+
+    $st = db()->prepare("SELECT id, url FROM links WHERE $where ORDER BY id ASC LIMIT " . $limit);
+    $st->execute($args);
+    $rows = $st->fetchAll();
 
     $ok = 0;
     $bad = 0;
+    /* 逐条成功的新图标路径，前台拿它就地替换卡片图标 */
+    $items = [];
     $fetcher = new MetaFetcher(8);
 
     foreach ($rows as $r) {
@@ -227,10 +259,15 @@ function hp_icon_refill(int $limit = 12): array
             $meta = $fetcher->fetch($url);
             if (!empty($meta['icon']) && preg_match('~^data/icons/[A-Za-z0-9._\-]+$~', (string)$meta['icon'])) {
                 $host = host_of($url);
-                db()->prepare(
-                    "UPDATE links SET icon = ?, icon_kind = 'file', updated_at = ? WHERE id = ?"
-                )->execute([$meta['icon'], now(), (int)$r['id']]);
+                /* user_id 条件在 $uid 非空时一定要带：这条 UPDATE 早先只按 id 定位，
+                   虽然 id 唯一不会改错行，但「写接口一律带归属条件」是本项目的硬规矩，
+                   漏一处就等于给以后埋一个越权口子。 */
+                $sql = "UPDATE links SET icon = ?, icon_kind = 'file', updated_at = ? WHERE id = ?";
+                $par = [$meta['icon'], now(), (int)$r['id']];
+                if ($uid !== null) { $sql .= ' AND user_id = ?'; $par[] = $uid; }
+                db()->prepare($sql)->execute($par);
                 hp_icon_remember((string)$meta['icon'], $host);
+                $items[(int)$r['id']] = (string)$meta['icon'];
                 $ok++;
             } else {
                 $bad++;
@@ -240,11 +277,17 @@ function hp_icon_refill(int $limit = 12): array
         }
     }
 
-    $left = (int)db()->query(
-        "SELECT COUNT(*) FROM links WHERE (icon = '' OR icon_kind <> 'file') AND url <> ''"
-    )->fetchColumn();
+    /* ids 模式下的「剩余」只可能来自一次传太多被 limit 截断；
+       前端是自己分批的，这里如实回报还剩几条没轮到。 */
+    if ($ids === null) {
+        $left = (int)db()->query(
+            "SELECT COUNT(*) FROM links WHERE (icon = '' OR icon_kind <> 'file') AND url <> ''"
+        )->fetchColumn();
+    } else {
+        $left = max(0, $total - count($rows));
+    }
 
-    return ['ok' => $ok, 'bad' => $bad, 'left' => $left];
+    return ['ok' => $ok, 'bad' => $bad, 'left' => $left, 'items' => $items];
 }
 
 /**

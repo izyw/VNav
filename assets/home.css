@@ -1249,11 +1249,6 @@ body.hp .empty {
    保持「一个总开关 + 整页进入编辑态」的做法。开关一关界面回到干净的
    浏览状态，这是 V1.2.0 定下的思路，用户接受，不推翻。
    ========================================================================== */
-body.hp .drag-handle {
-  border-radius: 9px 0 9px 0;
-  background: color-mix(in srgb, var(--bg-0) 90%, transparent);
-}
-body.hp .drag-handle:hover { color: var(--acc); }
 body.hp .link-item.is-selected > .link {
   border-color: var(--acc);
   box-shadow: 0 0 0 2px rgb(var(--acc-glow) / .3);
@@ -1275,7 +1270,7 @@ body.hp .link-item.is-dragging.is-selected > .link {
 /* 编辑态提示条：位置从「stage 顶部」挪到「顶栏正下方」，
    因为 stage::before 会被吸顶组签压住。改用固定定位更稳。 */
 body.hp.is-editing .stage::before {
-  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  content: '编辑模式：拖卡片排序 · 点卡片改内容 · 勾选可批量处理 · Esc 退出';
   position: sticky;
   top: calc(var(--hp-bar) + 1px);
   z-index: 25;
@@ -1293,12 +1288,12 @@ body.hp.is-editing .stage::before {
 }
 @media (max-width: 640px) {
   body.hp.is-editing .stage::before {
-    content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出';
+    content: '编辑模式：长按拖动排序 · 勾选批量处理 · Esc 退出';
   }
 }
 @media (hover: none) and (pointer: coarse) {
   body.hp.is-editing .stage::before {
-    content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出';
+    content: '编辑模式：长按卡片再拖 · 勾选批量处理 · Esc 退出';
   }
 }
 

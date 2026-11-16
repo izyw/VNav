@@ -12,6 +12,10 @@
   const LAYOUT_KEY = 'vnav.layout';
   const ENGINE_KEY = 'vnav.engine';
 
+  /* 游客还是登录用户。文件里多处要按身份分叉，而这个判断必须放在最前面 ——
+     markDefault() 会用到它，那个函数比下面那段游客逻辑更早被调用。 */
+  const isGuest = !!(window.__VNAV && window.__VNAV.guest);
+
   const csrf = () => document.querySelector('meta[name="csrf"]')?.content || '';
 
   /* ================= 下拉菜单（形态 / 皮肤 / 引擎） =================
@@ -252,7 +256,13 @@
       const already = !!def && engState.cur === def;
       dfltBtn.disabled = already;
       const nm = $('.tbo-name', dfltBtn);
-      if (nm) nm.textContent = already ? '当前已是默认引擎' : '把当前引擎设为默认';
+      /* 文案要按身份分叉。游客的「默认」写的是本机，写成「站点默认引擎」
+         会让他以为改了全站；反过来登录用户看到「本机默认」也会困惑。 */
+      if (nm) {
+        nm.textContent = already
+          ? (isGuest ? '当前已是本机默认' : '当前已是默认引擎')
+          : (isGuest ? '在本机记住这个引擎' : '把当前引擎设为默认');
+      }
     }
   }
 
@@ -276,6 +286,53 @@
       });
     }
   } catch (err) {}
+
+  /* ---------- 游客：把「设为默认」降级成「在本机记住」 ----------
+     游客没有服务端身份，写不了站点设置，但他显然需要一个
+     「下次打开还是这个引擎」的动作 —— 那个动作对他就是全部含义。
+     这里把「默认」就地换成本机 localStorage：
+       · 下拉里那行「站点默认引擎」小字改成「本机默认」
+       · 当前引擎等于本机记住的那个时，按钮置灰并换文案
+     登录用户不走这段（assets/app.js 里有另一份处理，写的是服务端）。
+     （isGuest 在文件顶部声明，markDefault 也要用。） */
+
+  /* ui.js 不依赖 app.js（游客根本不加载它），所以这里自带一个最小提示 */
+  function guestToast(msg) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('is-bad');
+    el.classList.add('is-ok');
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('show'));
+    clearTimeout(guestToast._t);
+    guestToast._t = setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => { el.hidden = true; }, 260);
+    }, 2400);
+  }
+
+  if (isGuest) {
+    try {
+      const mine = localStorage.getItem(ENGINE_KEY) || '';
+      if (mine) engState.siteDefault = mine;
+    } catch (err) {}
+
+    $$('.tbo-hint--default').forEach(el => { el.textContent = '本机默认'; });
+    markDefault();
+
+    $('[data-engine-default]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      const key = $('.eng-menu .eng-logo')?.dataset.engLogo || '';
+      if (!key) return;
+      try { localStorage.setItem(ENGINE_KEY, key); } catch (err) {}
+      engState.siteDefault = key;
+      markDefault(key);
+      const name = $('[data-engine-set="' + key + '"] .tbo-name')?.textContent || key;
+      guestToast('已记住：下次打开还是「' + name + '」');
+      closeMenus();
+    });
+  }
 
   document.addEventListener('click', e => {
     const eb = e.target.closest('[data-engine-set]');

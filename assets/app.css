@@ -1668,32 +1668,65 @@ html[data-theme='celadon'] .f-error { color: #a3122f; background: #fde8ec; borde
   .tbm-btn--login .tbm-login-text { display: none; }
 }
 
-/* 拖动把手：默认不占位（display:none 会让 grid 少一格，
-   所以用 absolute 浮在卡片左上，编辑模式才显示）。
-   44×44 的热区，视觉只有 14px 的六点。 */
-.drag-handle {
+/* 勾选框：默认不占位（用 absolute 浮在卡片左上角，编辑模式才显示）。
+   卡片是横向布局、图标紧贴左边，所以这个角标只能压在卡片边缘上 ——
+   往里挪会盖住图标，往外挪会盖住上一行的描述。
+   30×30 是热区，看得见的方框只有 18px：它得能被点中，但不能比图标更抢眼。 */
+.pick-box {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: -7px;
+  left: -7px;
   z-index: 3;
   display: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px 0 10px 0;
-  color: var(--text-3);
-  background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
-  cursor: grab;
-  touch-action: none; /* 关键：不写这个移动端拖动会变成滚页面 */
-  transition: color .16s, background .16s;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  /* 触摸端不能让它变成滚屏手势的起点：点勾选框就是点勾选框 */
+  touch-action: none;
 }
-.drag-handle:hover { color: var(--acc); }
-.drag-handle:active { cursor: grabbing; }
+.pick-box input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.pick-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line-hi);
+  background: var(--surface-solid);
+  color: transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .10);
+  transition: background .14s, border-color .14s, color .14s, transform .14s;
+}
+.pick-box:hover .pick-mark { border-color: var(--acc); transform: scale(1.06); }
+.pick-box input:checked + .pick-mark {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+.pick-box input:focus-visible + .pick-mark {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
 
-/* 卡片要能定位把手，同时编辑态下不再「点哪跳哪」 */
+/* 卡片要能定位角标，同时编辑态下不再「点哪跳哪」 */
 .link-item { position: relative; }
 
-body.is-editing .drag-handle { display: grid; }
+body.is-editing .pick-box { display: grid; }
+
+/* 勾中的卡片：整卡描一圈强调色 + 极淡底色。
+   只描边不换底色是不够的 —— 一屏几十张卡，选中的三张要一眼能数出来。 */
+.link-item.is-picked > .link {
+  border-color: var(--acc) !important;
+  border-style: solid !important;
+  background: rgb(var(--acc-glow) / .05);
+}
 
 /* 编辑态：整张卡片都能按住拖，光标给「抓手」而不是「手型」。
    给抓手是因为这里真的能抓起来，手型会让人以为只是"点一下"。 */
@@ -1702,6 +1735,29 @@ body.is-editing .link { cursor: grab; }
 /* 卡片里的链接在编辑态不跳转（由 JS preventDefault），
    给个视觉提示：鼠标悬停时不再有「可点击」的上浮感 */
 body.is-editing .link:hover { transform: none; }
+
+/* 编辑态：所有卡片边框改虚线。
+   实线是「成品」的语言，虚线是「草图」的语言 —— 整页退成虚线之后，
+   一眼就知道这些卡片现在都是可以被拎起来、被勾选的，而不是可点开的。
+
+   ⚠️ 虚线必须比实线更深才成立。实线只要「有一条界」就够，
+   而虚线的信息全在断点上：沿用静止态那层 8% 的灰，缩到 100% 看就是
+   一圈若有若无的影子，等于没做。这里单独给到 32%，并把 1px 加到 1.5px ——
+   间隙被放大之后，断点才真的看得出来。
+   选择器写成 body.hp.is-editing 是为了压过各皮肤里的 .link:hover
+   （那一条会把边框换成组色，编辑态里会打断「整页草图」这个信号）。 */
+body.hp.is-editing .link,
+body.hp.is-editing .link:hover {
+  border-style: dashed;
+  border-width: 1.5px;
+  border-color: color-mix(in srgb, var(--text, #1d1d1f) 32%, transparent);
+}
+/* 隐藏链接本来就靠虚线区分，编辑态下全页都是虚线，它的边框换成强调色，
+   否则两种「虚线」会撞在一起分不清。 */
+body.hp.is-editing .link-item.is-hidden-link > .link,
+body.hp.is-editing .link-item.is-hidden-link > .link:hover {
+  border-color: rgb(var(--acc-glow) / .62);
+}
 
 /* 触摸设备上的关键取舍：
    整卡可拖就不能在卡片上写 touch-action:none —— 那一禁，
@@ -1734,8 +1790,7 @@ body.is-dragging * { cursor: grabbing !important; }
 body.is-dragging { user-select: none; -webkit-user-select: none; }
 
 /* 选中的卡片：一圈强调色描边，明确「方向键/Alt+↑↓ 作用在它身上」 */
-.link-item.is-selected > .link,
-.link-item.is-selected > .drag-handle ~ .link {
+.link-item.is-selected > .link {
   border-color: var(--acc);
   box-shadow: 0 0 0 2px rgb(var(--acc-glow) / .38), var(--shadow);
 }
@@ -1785,7 +1840,7 @@ body.is-editing .link-item:active:not(.is-dragging) {
    触摸设备上是「长按再拖」，跟鼠标的「直接拖」不同，文案必须分开写，
    否则手机上的人会照着"直接拖"去做，结果滚了页面。 */
 body.is-editing .stage::before {
-  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  content: '编辑模式：拖卡片排序 · 点卡片改内容 · 勾选可批量处理 · Esc 退出';
   display: block;
   margin-bottom: 16px;
   padding: 10px 14px;
@@ -1798,11 +1853,174 @@ body.is-editing .stage::before {
 }
 @media (max-width: 640px) {
   /* 手机上没地方放那条长提示，换成短句 */
-  body.is-editing .stage::before { content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出'; }
+  body.is-editing .stage::before { content: '编辑模式：长按拖动排序 · 勾选批量处理 · Esc 退出'; }
 }
 /* 触摸设备（不管宽度）都用「长按」的说法，因为这里是真触摸而不是窄窗口 */
 @media (hover: none) and (pointer: coarse) {
-  body.is-editing .stage::before { content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出'; }
+  body.is-editing .stage::before { content: '编辑模式：长按卡片再拖 · 勾选批量处理 · Esc 退出'; }
+}
+
+/* ==========================================================================
+   批量操作条
+   --------------------------------------------------------------------------
+   勾了第一张卡才浮出来，固定在视口底部居中。
+
+   为什么是底部浮层而不是吸顶横条：
+     ① 吸顶要占掉主区一条高度，分组标题本来就贴着顶栏，再加一条会挤；
+     ② 卡片可能有几十张，操作条要一直够得着 —— 吸顶只在一屏内有效；
+     ③ 底部浮层不参与布局，出现和消失都不会让卡片跳一下。
+   Gmail / Notion 的批量条都是这个形态，用户不用学。
+   ========================================================================== */
+.bulkbar {
+  position: fixed;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 10px 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  box-shadow: 0 14px 36px -14px rgba(0, 0, 0, .38), 0 2px 8px rgba(0, 0, 0, .07);
+  animation: bulkIn .22s cubic-bezier(.2, .8, .3, 1);
+}
+/* [hidden] 自带 display:none，但上面那条 display:flex 会覆盖它 ——
+   必须显式再写一遍，否则「隐藏」的批量条照样横在屏幕底下。 */
+.bulkbar[hidden] { display: none; }
+
+/* 有勾选时给正文补一段底部留白。
+   批量条是 fixed 的，滚到页面最底下时它会正好压住最后一行卡片 ——
+   那不是「浮层的正常遮挡」，是最后一屏永远看不到。补的这段高度
+   = 批量条高度 + 它离底的距离 + 一点呼吸。 */
+body.hp.is-picking .stage { padding-bottom: 190px; }
+@keyframes bulkIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bulkbar { animation: none; }
+}
+
+.bulkbar-all {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bulkbar-all input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.pick-mark--sm { width: 16px; height: 16px; border-radius: 4px; }
+.bulkbar-all input:checked + .pick-mark {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+.bulkbar-all input:focus-visible + .pick-mark {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+.bulkbar-n {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bulkbar-sp { flex: 1; min-width: 6px; }
+
+.bulkbar-sel {
+  height: 32px;
+  max-width: 150px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.bulkbar-sel:hover { border-color: var(--line-hi); }
+.bulkbar-sel:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+
+.bulkbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.bulkbar-btn:hover {
+  border-color: var(--line-hi);
+  background: var(--surface-solid);
+  color: var(--text);
+}
+.bulkbar-btn:active { transform: translateY(.5px); }
+.bulkbar-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+.bulkbar-btn[disabled] { opacity: .55; cursor: progress; }
+.bulkbar-btn.is-danger:hover {
+  border-color: color-mix(in srgb, #e5484d 45%, transparent);
+  color: #d63b40;
+}
+
+.bulkbar-x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.bulkbar-x:hover { background: var(--surface); color: var(--text); }
+
+/* 窄屏：一行放不下。改成两行 —— 第一行「全选 + 已选 + 关闭」，
+   第二行「下拉 + 三个动作」。按钮文字在 720 以下全部收起，
+   只留图标（都有 title 和 aria-label，看得懂也听得到）。 */
+@media (max-width: 720px) {
+  .bulkbar {
+    left: 10px;
+    right: 10px;
+    transform: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px;
+    /* 桌面那条动画带 translateX(-50%)，窄屏没有这个位移，另起一个名字 ——
+       在 media query 里重定义同名 keyframes 会让两边的行为都变得不可预测。 */
+    animation-name: bulkInM;
+  }
+  @keyframes bulkInM {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .bulkbar-sp { display: none; }
+  .bulkbar-sel { flex: 1; max-width: none; }
+  .bulkbar-btn span { display: none; }
+  .bulkbar-btn { padding: 0 10px; }
 }
 
 /* ==========================================================================
@@ -2016,7 +2234,7 @@ body.is-editing .tip-bubble { display: none !important; }
 
 /* 打印时不该出现任何浮层与把手 */
 @media print {
-  .drag-handle, .tip-bubble, .keys-box, .paste-scrim, .toast { display: none !important; }
+  .pick-box, .bulkbar, .tip-bubble, .keys-box, .paste-scrim, .toast { display: none !important; }
 }
 
 /* ==========================================================================

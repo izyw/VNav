@@ -257,6 +257,10 @@
       // 图标按钮必须在这里拦下。放在删除逻辑之后会被当成「删除」走掉
       // —— 那个分支下面就是 confirm + group_delete，误触即丢分组。
       if (btn.dataset.gact === 'icon') { openGroupIcon(row, btn); return; }
+      if (btn.dataset.gact === 'up' || btn.dataset.gact === 'down') {
+        moveGroupRow(row, btn.dataset.gact === 'up' ? -1 : 1);
+        return;
+      }
       if (!confirm('删除这个分组？组内链接会回到未分组。')) return;
       try {
         await api({ action: 'group_delete', id });
@@ -264,6 +268,43 @@
         toast('已删除分组');
       } catch (err) { toast(err.message, true); }
     });
+
+    /* 上移 / 下移一格。
+       顺序是「先提交、成功了再动 DOM」—— 反过来（先动 DOM 再提交、失败回滚）
+       要维护一套反向插入逻辑，而这里一次点击只挪一行，几百毫秒的等待
+       换来的是「看得见的一定是存下的」。连点用 sortBusy 挡掉，
+       否则两次请求会基于同一个旧顺序算出两个互相覆盖的结果。 */
+    let sortBusy = false;
+    async function moveGroupRow(row, dir) {
+      if (sortBusy) return;
+      const list = $('#groupList');
+      if (!list) return;
+      const rows = [...list.querySelectorAll('.adm-group-row')];
+      const i = rows.indexOf(row);
+      const j = i + dir;
+      if (j < 0 || j >= rows.length) {
+        toast(dir < 0 ? '已经是第一个了' : '已经是最后一个了');
+        return;
+      }
+
+      const next = rows.slice();
+      next.splice(i, 1);
+      next.splice(j, 0, row);
+
+      sortBusy = true;
+      try {
+        await api({ action: 'group_reorder', ids: next.map(r => Number(r.dataset.id)) });
+        // dir<0：插到 rows[j] 之前；dir>0：插到 rows[j] 之后
+        if (dir < 0) list.insertBefore(row, rows[j]);
+        else list.insertBefore(row, rows[j].nextSibling);
+        row.classList.add('is-flash');
+        setTimeout(() => row.classList.remove('is-flash'), 620);
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        sortBusy = false;
+      }
+    }
   }
 
   /* ---------- 分组图标选择浮层 ----------

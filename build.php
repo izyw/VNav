@@ -48,7 +48,7 @@ $skipDirs = ['.git', '.workbuddy', 'data', 'node_modules', '__pycache__'];
 /* .gitattributes / release.php 是「仓库专用」的：前者管换行符策略，
    后者是往 GitHub 发版用的。装到别人服务器上这两样没有任何用处，
    留着只会让人误以为站点里有什么需要跑一下。 */
-$skipFiles = ['inc/config.php', '.DS_Store', 'Thumbs.db', 'build.php',
+$skipFiles = ['inc/config.php', '.DS_Store', 'Thumbs.db', 'build.php', '安装说明.txt',
               '.gitattributes', '.gitignore', 'release.php'];
 $skipExt = ['log', 'tmp', 'bak', 'db', 'db-wal', 'db-shm',
             /* zip 绝对不能进包：交付物本身就是 zip，源码目录里一旦留下

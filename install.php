@@ -48,6 +48,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
             $pdo->exec('PRAGMA journal_mode=WAL');
             hp_install_schema($pdo);
 
+            /* 默认链接库：9 个分组、67 条站点（见 inc/seed.php）。
+               只在 links 为空时灌 —— 带着自己的 home.db 来装的人不会被覆盖。
+               失败不算安装失败：没有默认数据只是首页空着，站点本身是好的。 */
+            $seedMsg = '';
+            try {
+                require_once __DIR__ . '/inc/seed.php';
+                $seed = hp_seed_apply($pdo);
+                if (!$seed['skipped']) {
+                    $seedMsg = '已导入 ' . $seed['groups'] . ' 个分组、' . $seed['links'] . ' 条常用站点。';
+                }
+            } catch (Throwable $e) {
+                $seedMsg = '默认数据导入失败（不影响使用）：' . $e->getMessage();
+            }
+
             if ($title !== '') {
                 $st = $pdo->prepare('UPDATE settings SET v = ? WHERE k = ?');
                 $st->execute([$title, 'site_title']);
@@ -84,7 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
                 date('Y-m-d H:i:s'),
             ]);
 
-            $msg = '安装完成！请立刻删除 install.php，然后进入主页。';
+            $msg = '安装完成！请立刻删除 install.php，然后进入主页。'
+                 . ($seedMsg !== '' ? ' ' . $seedMsg : '');
         } catch (Throwable $e) {
             $err = '安装失败：' . $e->getMessage();
         }

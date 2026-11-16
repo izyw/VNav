@@ -253,8 +253,10 @@ html[data-theme='frame'] body.hp .gnav--side .gnav-item {
   padding: 0 9px;
   gap: 9px;
   border-radius: var(--fr-r-sm);
-  font-size: 14px;
-  font-weight: 450;
+  /* 与 Atlas 同步加一号（14 → 15）。字重只到 500：程序框语言靠线宽
+     和留白立骨架，600 的汉字会把这列压成一块黑板。 */
+  font-size: 15px;
+  font-weight: 500;
   color: var(--fr-ink-2);
   transition: background .12s, color .12s;
 }

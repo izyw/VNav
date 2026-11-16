@@ -20,6 +20,11 @@
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+  /* 勾选集合。放在最外层是因为它有两个使用方：
+     fillItem（重建卡片时要还原勾选态）和批量操作条。
+     键用字符串 id —— dataset 读回来是字符串，混用数字会让 Set 判重失效。 */
+  const picked = new Set();
+
   /* ---------------- 基础工具 ---------------- */
 
   function toast(msg, kind) {
@@ -435,8 +440,23 @@
       </a>`;
   }
 
+  const PICK_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+
+  /* 生成勾选框。卡片每被重建一次就要重新造一个（innerHTML 会把旧的冲掉），
+     所以做成函数而不是模板里的一段字符串 —— 勾选态也得跟着一起还原。 */
+  function makePickBox(id, title) {
+    const lb = document.createElement('label');
+    lb.className = 'pick-box';
+    lb.innerHTML = `<input type="checkbox" data-pick="${id}">`
+      + `<span class="pick-mark" aria-hidden="true">${PICK_SVG}</span>`
+      + `<span class="sr-only">选择「${esc(title)}」</span>`;
+    lb.querySelector('input').checked = picked.has(String(id));
+    return lb;
+  }
+
   function fillItem(li, link) {
-    li.className = 'link-item' + (link.hidden ? ' is-hidden-link' : '');
+    const isPicked = picked.has(String(link.id));
+    li.className = 'link-item' + (link.hidden ? ' is-hidden-link' : '') + (isPicked ? ' is-picked' : '');
     li.dataset.id = link.id;
     li.dataset.title = link.title;
     li.dataset.url = link.url;
@@ -447,10 +467,10 @@
     const host = (() => { try { return new URL(link.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
     li.style.setProperty('--hue', link.hue ?? hue(host));
     const newTab = document.querySelector('a.link[target="_blank"]') !== null;
-    // 保留拖动把手
-    const handle = li.querySelector('.drag-handle');
     li.innerHTML = cardHTML(link, newTab);
-    if (handle) li.prepend(handle);
+    if (document.body.classList.contains('is-admin')) {
+      li.prepend(makePickBox(link.id, link.title));
+    }
   }
 
   function insertCard(link) {
@@ -462,14 +482,6 @@
     const li = document.createElement('li');
     li.style.setProperty('--i', '0');
     fillItem(li, link);
-    // 新卡也要有把手
-    if (document.body.classList.contains('is-admin')) {
-      const h = document.createElement('span');
-      h.className = 'drag-handle';
-      h.setAttribute('aria-hidden', 'true');
-      h.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
-      li.prepend(h);
-    }
     list.appendChild(li);
     bumpGroupCount(link.group_id || 0, 1);
     showGroupOf(link.group_id || 0);
@@ -870,7 +882,10 @@
       }
     });
 
-    if (!on) { selectItem(null); }
+    /* 退出编辑态必须清空勾选：批量条只在编辑态有意义，
+       带着三个勾选退出去，底部那条会一直浮在那儿，而且下次进来
+       会莫名其妙已经有选中项。 */
+    if (!on) { selectItem(null); clearPicks(); }
     if (on) {
       /* 这里刻意不弹 toast：进入编辑模式后页面顶部已经有一条常驻提示条
          （.stage::before）。两条同时出现就是同一句话说两遍，
@@ -899,6 +914,199 @@
 
   editToggle?.addEventListener('click', () => setEditing(!editing));
 
+  /* ==================================================================
+     8.5 批量选择与批量操作
+     ------------------------------------------------------------------
+     勾选框只在编辑态出现（CSS 控制）；选中任意一张，底部浮出操作条。
+     动作分两类：
+       · 删除 / 移动 —— 就地改 DOM，不刷新（一次操作只影响几行）
+       · 拉取图标 / 信息 —— 分批请求，拿服务端回来的 items 逐张改
+     刻意不做「操作完 reload」：刷新会吞掉编辑态和滚动位置，
+     而用户处理批量时往往要连着来好几趟。
+     ================================================================== */
+  const bulkBar   = document.getElementById('bulkBar');
+  const bulkCount = document.getElementById('bulkCount');
+  const bulkAll   = document.getElementById('bulkAll');
+  const bulkGroup = document.getElementById('bulkGroup');
+
+  function syncBulkBar() {
+    if (!bulkBar) return;
+    const n = picked.size;
+    bulkBar.hidden = n === 0;
+    /* 正文底部补留白：批量条是 fixed，不补的话滚到最底下时
+       它会压住最后一行卡片（那一屏就永远看不全）。 */
+    document.body.classList.toggle('is-picking', n > 0);
+    if (bulkCount) bulkCount.textContent = '已选 ' + n + ' 项';
+    if (bulkAll) {
+      const all = $$('.link-item');
+      const onAll = all.length > 0 && all.every(li => picked.has(String(li.dataset.id)));
+      bulkAll.checked = onAll;
+      /* 部分选中要显示成横杠。只置空框的话，用户会以为「全选」没生效。 */
+      bulkAll.indeterminate = n > 0 && !onAll;
+    }
+  }
+
+  function clearPicks() {
+    picked.clear();
+    $$('.link-item.is-picked').forEach(li => {
+      li.classList.remove('is-picked');
+      const cb = li.querySelector('.pick-box input');
+      if (cb) cb.checked = false;
+    });
+    syncBulkBar();
+  }
+
+  function setPicked(li, on) {
+    if (!li) return;
+    const id = String(li.dataset.id);
+    if (on) picked.add(id); else picked.delete(id);
+    li.classList.toggle('is-picked', on);
+    const cb = li.querySelector('.pick-box input');
+    if (cb) cb.checked = on;
+    syncBulkBar();
+  }
+
+  stage?.addEventListener('change', e => {
+    const cb = e.target.closest('.pick-box input');
+    if (!cb) return;
+    setPicked(cb.closest('.link-item'), cb.checked);
+  });
+
+  bulkAll?.addEventListener('change', () => {
+    const on = !!bulkAll.checked;
+    $$('.link-item').forEach(li => setPicked(li, on));
+  });
+
+  /* 把一张卡换成服务端刚抓到的值。
+     只改文本节点和图标，不整卡重建 —— 重建会把勾选框和动画状态一起丢掉。 */
+  function applyMeta(id, got) {
+    const li = document.querySelector('.link-item[data-id="' + Number(id) + '"]');
+    if (!li || !got) return;
+    if (got.title) {
+      li.dataset.title = got.title;
+      const t = li.querySelector('.link-title');
+      if (t) t.textContent = got.title;
+    }
+    if (got.descr) {
+      li.dataset.descr = got.descr;
+      const d = li.querySelector('.link-sub');
+      if (d) d.textContent = got.descr;
+    }
+    if (got.icon) {
+      li.dataset.icon = got.icon;
+      const box = li.querySelector('.link-icon');
+      if (box) {
+        box.classList.add('has-img');
+        box.innerHTML = '<img src="' + esc(got.icon) + '" alt="" loading="lazy">';
+      }
+    }
+  }
+
+  /* 分批拉取。8 条一批：抓外站是慢活，一批太大容易撞 PHP 执行上限，
+     太小则是十几次往返。服务端也限了 20 条上限。 */
+  async function bulkFetch(mode, btn) {
+    const ids = [...picked].map(Number);
+    if (!ids.length) return;
+    const isIcon = mode === 'icon';
+    const label = isIcon ? '图标' : '信息';
+    const span = btn?.querySelector('span');
+    const oldText = span ? span.textContent : '';
+    const CHUNK = 8;
+    let ok = 0;
+    let bad = 0;
+    let done = 0;
+
+    if (btn) btn.disabled = true;
+    try {
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const part = ids.slice(i, i + CHUNK);
+        const res = await api({ action: 'bulk_fetch', mode, ids: part });
+        const r = res.result || {};
+        ok += r.ok || 0;
+        bad += r.bad || 0;
+        if (r.items) {
+          for (const [id, val] of Object.entries(r.items)) {
+            applyMeta(id, isIcon ? { icon: val } : val);
+          }
+        }
+        done += part.length;
+        if (span) span.textContent = label + ' ' + done + '/' + ids.length;
+      }
+      toast(bad ? ('已更新 ' + ok + ' 条，' + bad + ' 条抓不到') : ('已更新 ' + ok + ' 条' + label),
+        bad ? 'bad' : 'ok');
+    } catch (err) {
+      toast('拉取' + label + '失败：' + err.message, 'bad');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (span) span.textContent = oldText;
+    }
+  }
+
+  async function bulkDelete() {
+    const ids = [...picked].map(Number);
+    if (!ids.length) return;
+    /* 这里破例弹一次确认框：单条删除能靠 toast 上的「撤销」兜底，
+       批量删除没有对应的恢复接口 —— 一次删掉二十条，没有二次确认
+       就等于把不可逆的动作放在一次误触上。 */
+    if (!confirm('删除选中的 ' + ids.length + ' 条链接？删掉之后不能撤销。')) return;
+    try {
+      const res = await api({ action: 'bulk', op: 'delete', ids });
+      ids.forEach(id => {
+        const li = document.querySelector('.link-item[data-id="' + id + '"]');
+        if (!li) return;
+        bumpGroupCount(Number(li.dataset.group) || 0, -1);
+        li.remove();
+      });
+      clearPicks();
+      toast('已删除 ' + (res.affected || ids.length) + ' 条');
+    } catch (err) {
+      toast(err.message, 'bad');
+    }
+  }
+
+  async function bulkMoveTo(gid) {
+    const ids = [...picked].map(Number);
+    if (!ids.length) return;
+    const target = document.querySelector('.links[data-group="' + gid + '"]');
+    try {
+      const res = await api({ action: 'bulk', op: 'move', ids, group_id: gid });
+      ids.forEach(id => {
+        const li = document.querySelector('.link-item[data-id="' + id + '"]');
+        if (!li) return;
+        const from = Number(li.dataset.group) || 0;
+        bumpGroupCount(from, -1);
+        bumpGroupCount(gid, 1);
+        li.dataset.group = String(gid);
+        if (target) target.appendChild(li);
+      });
+      toast(target
+        ? ('已移动 ' + (res.affected || ids.length) + ' 条')
+        : ('已移动 ' + (res.affected || ids.length) + ' 条，刷新后可在目标分组看到'));
+      clearPicks();
+    } catch (err) {
+      toast(err.message, 'bad');
+    } finally {
+      if (bulkGroup) bulkGroup.value = '';
+    }
+  }
+
+  bulkBar?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-bulk]');
+    if (!btn) return;
+    const op = btn.dataset.bulk;
+    if (op === 'clear') { clearPicks(); return; }
+    if (op === 'delete') { bulkDelete(); return; }
+    if (op === 'icon' || op === 'meta') { bulkFetch(op, btn); }
+  });
+
+  /* 下拉选完就立刻执行 —— 批量条上没有「确定」按钮的位置，
+     选一个分组＝下一个指令，这是这个控件的全部语义。 */
+  bulkGroup?.addEventListener('change', () => {
+    const gid = Number(bulkGroup.value);
+    if (!gid) return;
+    bulkMoveTo(gid);
+  });
+
   /* 编辑模式下点卡片 = 直接改。
      用 pointerup 之后浏览器仍会再派发一次 click，而拖动结束时不希望它
      触发编辑器。这里用一个时间戳闸门：刚刚发生过拖动（或刚结束）就吞掉。
@@ -910,7 +1118,7 @@
     const li = e.target.closest('.link-item');
     if (!li) return;
     if (e.target.closest('[data-edit]')) return; // 铅笔走自己的逻辑，别开两次
-    if (e.target.closest('.drag-handle')) return; // 把手只负责拖
+    if (e.target.closest('.pick-box')) return; // 勾选框走自己的 change 事件
     e.preventDefault();
     selectItem(li);
     if (typeof openEditorRef === 'function') openEditorRef(li);
@@ -943,6 +1151,7 @@
     if (!editing) return;
     // 铅笔有自己的职责，别抢
     if (e.target.closest('[data-edit]')) return;
+    if (e.target.closest('.pick-box')) return; // 勾选框：点它就是打勾，不是起拖
     // 只接左键和触摸/笔；右键、中键留给系统菜单
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
@@ -956,7 +1165,6 @@
        启动 HTML5 拖放之前。 */
     li.querySelectorAll('a.link').forEach(a => a.setAttribute('draggable', 'false'));
 
-    const fromHandle = !!e.target.closest('.drag-handle');
     const startX = e.clientX;
     const startY = e.clientY;
     let started = false;   // 是否已经越过阈值、真正进入拖动
@@ -1224,15 +1432,15 @@
 
         /* 触摸：还没到长按时长就先只观察。
            手指一动超过 TOUCH_HOLD_SLOP 就说明用户在滑屏，放弃这次拖动。 */
-        if (ev.pointerType === 'touch' && !fromHandle) {
+        if (ev.pointerType === 'touch') {
           if (dist > TOUCH_HOLD_SLOP) { clearHold(); return; }
           return;
         }
 
-        if (!fromHandle && dist < DRAG_THRESHOLD) return;
-        // 从把手起手时也要等一帧移动才真正开始，
-        // 否则「点一下把手」会误判成一次拖动
-        if (fromHandle && dist < 2 && !moved) { moved = true; return; }
+        /* 鼠标 / 触控笔：越过 6px 才算拖，否则那一下点击要留给「打开编辑器」。
+           取消把手之后这是唯一的起拖路径，阈值比以前更要紧 ——
+           没有它，手一抖就会把一次点击变成一次排序，还会误存。 */
+        if (dist < DRAG_THRESHOLD) return;
         beginDrag();
       }
       // 防止拖动时选中文字
@@ -1328,12 +1536,9 @@
 
     /* 关键：按住不放但还没移动时不 preventDefault，
        否则卡片里的链接连「按住看状态栏」都做不了，而且会挡掉长按菜单。
-       真正进入拖动后才由 onMove 里的 preventDefault 接管。 */
-    if (fromHandle) {
-      e.preventDefault();
-      beginDrag();
-      seizeGesture(true);
-    } else if (e.pointerType === 'touch') {
+       真正进入拖动后才由 onMove 里的 preventDefault 接管。
+       鼠标端一律等阈值（在 onMove 里判），只有触摸需要在这里起一条长按计时。 */
+    if (e.pointerType === 'touch') {
       /* 触摸整卡：按住 260ms 不动才起拖。
          这段等待是必须的 —— 浏览器判定"这是不是滚屏手势"需要时间，
          我们抢先起拖会被 pointercancel 打断（实测）。等它判完、手指还在原位，
@@ -1432,19 +1637,19 @@
   const tip = document.getElementById('tipBubble');
   const TIP_KEY = 'vnav.tip.dismissed';
 
-  /* 提示是否已被永久关闭。
-     以**服务端**为准：hint_dismissed=1 才是真的关过，0 就是没关。
-     本地 localStorage 只在拿不到服务端值时兜底（游客、异常）。
+  /* 提示是否已被永久关闭。两处标记**取并集**：本地关过、或服务端关过，
+     都算关过。
 
-     以前是反过来的（本地优先），后果是两边永远对不上：
-       · 在 A 电脑点过「不再提示」→ 服务端记 1，B 电脑本地是空的 → 又弹
-       · 清过缓存的浏览器 → 本地空了，但服务端还记着 1 → 白记
-     更糟的是「本地有标记、服务端是 0」这种不一致会让人以为提示坏了 ——
-     明明没关过、服务端也说没关，就是不弹。 */
+     之前的写法是「服务端优先，本地只在拿不到服务端值时兜底」，看着合理，
+     对游客却是死路：__VNAV.tipOff 对任何人都会输出（未登录时恒为 false），
+     于是 typeof off === 'boolean' 永远成立，本地的标记被完全跳过 ——
+     游客点了「不再提示」，刷新一下它又回来了，因为这个动作他根本没权限
+     写到服务端。所以这里必须反过来：本地记过就别再问服务端。
+     admin 关过一次仍然到处生效（服务端记着 1）。 */
   function tipGone() {
+    try { if (localStorage.getItem(TIP_KEY) === '1') return true; } catch {}
     const off = window.__VNAV && window.__VNAV.tipOff;
-    if (typeof off === 'boolean') return off;
-    try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; }
+    return typeof off === 'boolean' ? off : false;
   }
 
   if (tip && !tipGone()) {

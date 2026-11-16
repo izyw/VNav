@@ -353,8 +353,43 @@
   border-color: transparent;
   background: transparent;
   font-weight: 600;
+}.f-input-tight:hover { border-color: var(--line); background: var(--surface); }
+
+/* 分组行的排序箭头：竖排两枚 26×19，合起来 39px —— 正好落进 40px 的行高，
+   不会把这一行撑高。色调压到 --text-3，它是个行内微调控件，
+   不该和「保存」「删除」抢注意力。 */
+.adm-sort {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.f-input-tight:hover { border-color: var(--line); background: var(--surface); }
+.g-sort {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 19px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.g-sort:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.g-sort:active { background: color-mix(in srgb, var(--acc) 18%, transparent); color: var(--acc); }
+.g-sort:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+
+/* 移动之后的落点提示：新位置闪一下，不然点完看不出变化发生在哪一行 */
+.adm-group-row.is-flash { animation: gRowFlash .62s ease-out; }
+@keyframes gRowFlash {
+  from { background: color-mix(in srgb, var(--acc) 16%, transparent); }
+  to   { background: color-mix(in srgb, var(--bg-1) 40%, transparent); }
+}
 .adm-hint { color: var(--text-3); font-size: 14px; margin: 16px 0 0; }
 
 /* ---------- 外观：形态选择 ---------- */

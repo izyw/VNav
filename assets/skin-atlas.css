@@ -818,8 +818,12 @@ body.hp .gnav--side .gnav-item {
   border-bottom: 0;
   justify-content: flex-start;
   gap: 10px;
-  font-size: 14px;
-  font-weight: 500;
+  /* 15px / 600：13px 那版是照着英文界面定的，中文字形本来就没有西文
+     的「重量差」，同样字号下笔画细一档；在 #efeff2 的浅灰侧栏上，
+     500 字重的汉字几乎糊成一片浅灰线。加一号、加到 600 才和其它界面
+     （Linear / Notion 的中文）在一个密度上。 */
+  font-size: 15px;
+  font-weight: 600;
 }
 /* V1.3.8 起侧栏用图标代替小圆点：分类名是自建的，图标按名字匹配内置库。
    V1.5.12 起这枚图标带色 —— 每个分组一个固定色相，和组标题、卡片悬停
@@ -1486,12 +1490,6 @@ body.hp .btn-primary:hover {
 /* ==========================================================================
    13. 编辑模式
    ========================================================================== */
-body.hp .drag-handle {
-  border-radius: var(--at-r-xs) 0 var(--at-r-xs) 0;
-  background: color-mix(in srgb, var(--at-card) 92%, transparent);
-  color: var(--at-ink-3);
-}
-body.hp .drag-handle:hover { color: var(--at-accent); }
 
 body.hp .link-item.is-selected > .link {
   border-color: color-mix(in srgb, var(--at-accent) 60%, transparent);
@@ -1513,7 +1511,7 @@ body.hp .link-item.is-dragging.is-selected > .link {
 }
 
 body.hp.is-editing .stage::before {
-  content: '编辑模式：按住卡片拖动排序 · 点卡片改内容 · Alt+↑↓ 移动 · Esc 退出';
+  content: '编辑模式：拖卡片排序 · 点卡片改内容 · 勾选可批量处理 · Esc 退出';
   position: sticky;
   top: calc(var(--hp-bar) + 1px);
   z-index: 25;
@@ -1532,12 +1530,12 @@ body.hp.is-editing .stage::before {
 }
 @media (max-width: 640px) {
   body.hp.is-editing .stage::before {
-    content: '编辑模式：长按卡片拖动排序 · 点卡片改 · Esc 退出';
+    content: '编辑模式：长按拖动排序 · 勾选批量处理 · Esc 退出';
   }
 }
 @media (hover: none) and (pointer: coarse) {
   body.hp.is-editing .stage::before {
-    content: '编辑模式：长按卡片再拖排序 · 点卡片改 · Esc 退出';
+    content: '编辑模式：长按卡片再拖 · 勾选批量处理 · Esc 退出';
   }
 }
 
