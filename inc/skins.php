@@ -58,6 +58,16 @@ function hp_skins(): array
             'tone'  => 'light',
             'svg'   => '<rect x="2.5" y="4" width="19" height="16" rx="2.4"/><path d="M2.5 9h19M8.5 9v11"/>',
         ],
+        /* 工作台的暗色版。不是第四套设计语言，是同一副骨架换明暗：
+           结构、圆角、间距、字号一字不动，只换颜色与阴影。
+           取色照参考站 shadcn dashboard 的暗色主题，见 skin-frame.css 1b 节。
+           图标在 frame 的线框里填上侧栏那一块，表示「框还在，只是变暗了」。 */
+        'frame-dark' => [
+            'label' => '工作台 暗',
+            'hint'  => '暗 · 深色窗口，骨架不变',
+            'tone'  => 'dark',
+            'svg'   => '<rect x="2.5" y="4" width="19" height="16" rx="2.4"/><path d="M2.5 9h19M8.5 9v11"/><path d="M3.9 10.2h3.4v8.6H3.9z" fill="currentColor" stroke="none" opacity=".45"/>',
+        ],
     ];
 }
 

@@ -216,7 +216,7 @@ hp_log_visit(false, '/');
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
 <link rel="stylesheet" href="assets/skin-atlas.css?v=61">
-<link rel="stylesheet" href="assets/skin-frame.css?v=55">
+<link rel="stylesheet" href="assets/skin-frame.css?v=56">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，

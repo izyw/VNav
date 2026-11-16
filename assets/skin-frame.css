@@ -16,7 +16,7 @@
    强调色是黑而不是某个彩色 —— 彩色只出现在该出现的地方（站点图标）。
 
    实现要点：
-   · 所有规则都带 html[data-theme='frame'] 前缀，且本文件在 skin-atlas.css
+   · 所有规则都带 html[data-theme^='frame'] 前缀，且本文件在 skin-atlas.css
      之后加载，同特异性靠「后写的赢」覆盖；
    · 变量块同时给出了 --at-* 一整套，避免漏覆盖时 atlas 的规则读到空变量；
    · 布局靠 .shell 的 grid，侧栏不再是 fixed，而是框内的一列。
@@ -25,7 +25,7 @@
 /* ==========================================================================
    1. 变量
    ========================================================================== */
-html[data-theme='frame'] {
+html[data-theme^='frame'] {
   color-scheme: light;
 
   /* 下面这组数是把参考站（ui.shadcn.com/examples/dashboard）的样式表
@@ -48,6 +48,17 @@ html[data-theme='frame'] {
   --fr-ink-2:  #525252;
   --fr-ink-3:  #a1a1aa;
   --fr-ring:   rgba(10, 10, 10, .08);
+  /* 危险色（侧栏删除）。亮色用暗红实底；暗色那一版见下面的暗色块 ——
+     同一个红在深底上会掉到几乎看不见，必须换一支。 */
+  --fr-danger:    #d92d20;
+  --fr-danger-bg: color-mix(in srgb, #d92d20 12%, transparent);
+  --fr-danger-ink: #fff;
+  /* 阴影。亮色是一层 4% 的灰，只为了让元素「有厚度」；
+     暗部的影子必须更黑、范围更大，否则等于没画。 */
+  --fr-sh-card:   0 1px 2px rgba(0, 0, 0, .04);
+  --fr-sh-card-h: 0 2px 6px rgba(0, 0, 0, .06);
+  --fr-sh-shell:  0 1px 2px rgba(24, 24, 27, .04), 0 12px 32px -24px rgba(24, 24, 27, .22);
+  --fr-sh-panel:  0 12px 32px -12px rgba(24, 24, 27, .22), 0 2px 6px rgba(24, 24, 27, .06);
 
   --fr-r-app:  14px;   /* rounded-xl */
   --fr-r-card: 12px;   /* 链接卡只有 76px 高，照搬 14 会显软，取中间值 */
@@ -125,12 +136,111 @@ html[data-theme='frame'] {
 }
 
 /* ==========================================================================
+   1b. 变量 · 暗色
+   --------------------------------------------------------------------------
+   数值是照参考站的暗色主题（.theme-neutral:is(.dark *)）量下来的，不是
+   自己把亮色调暗：
+     --background #0a0a0a    --foreground #fafafa
+     --card / --sidebar      #171717
+     --primary #e5e5e5       --primary-foreground #171717
+     --muted / --sidebar-accent #262626
+     --muted-foreground      #a1a1a1
+     --border #ffffff1a      --ring #737373
+
+   三处「沿用关系而不是抄数值」的地方：
+
+   · 边框是 10% 白，不是灰色实色。半透明描边在任何底色上都能自动对齐
+     明度，换底色不必重新挑灰 —— 暗色界面的通透感主要来自这一点。
+   · 强调色整体翻转：原本 #0a0a0a 的实底按钮换成 #e5e5e5 的浅灰底，字反
+     过来变成深色。所以下面所有「强调底上的文字」都写成 var(--acc-ink)；
+     硬编码 #fff 在暗色下就是白底白字。
+   · 层级跨度放大：亮色 #fafafa→#f5f5f5 只差 5，暗色 #171717→#262626 差
+     15。暗部人眼对小亮度差更迟钝，同样的数值差会看着像没有层次。
+
+   ⚠️ 这是一层覆盖，不是完整副本：上面的亮色块用
+      html[data-theme^='frame'] 选择器，frame-dark 同样命中它，
+      两条规则特异性相同、本块在后 —— 所以只需要写「与明暗有关」的那些，
+      字体、圆角、间距这些与明暗无关的继续沿用上面的。
+   ========================================================================== */
+html[data-theme='frame-dark'] {
+  color-scheme: dark;
+
+  --fr-page:   #000000;   /* 框外那一圈：纯黑，让窗口的边真正浮起来 */
+  --fr-app:    #0a0a0a;   /* 框内主区 */
+  --fr-side:   #171717;   /* 侧栏：暗色里「更靠前 = 更亮」 */
+  --fr-hover:  #262626;
+  --fr-active: #303030;
+  --fr-line:   rgba(255, 255, 255, .10);
+  --fr-line-2: rgba(255, 255, 255, .20);
+  --fr-ink:    #fafafa;
+  --fr-ink-2:  #a1a1a1;
+  --fr-ink-3:  #8a8a8a;   /* 不是 shadcn 的 #737373：那个值压在小字上是 4.05:1，
+                             不到 AA 的 4.5。提到 #8a8a8a 之后 5.6:1 —— 暗底
+                             上的小字本来就该比白底给得更多。 */
+  --fr-ring:   rgba(255, 255, 255, .12);
+
+  /* 危险色换一支：暗红 #d92d20 在 #0a0a0a 上几乎看不见，
+     参考站的暗色 destructive 是 #ff6568，实底时配深字。 */
+  --fr-danger:     #ff6568;
+  --fr-danger-bg:  color-mix(in srgb, #ff6568 16%, transparent);
+  --fr-danger-ink: #171717;
+
+  --fr-sh-card:   0 1px 2px rgba(0, 0, 0, .30);
+  --fr-sh-card-h: 0 2px 8px rgba(0, 0, 0, .40);
+  --fr-sh-shell:  0 1px 2px rgba(0, 0, 0, .60), 0 20px 48px -28px rgba(0, 0, 0, .90);
+  --fr-sh-panel:  0 16px 40px -12px rgba(0, 0, 0, .70), 0 2px 8px rgba(0, 0, 0, .40);
+
+  /* ---- 兼容层：与亮色块一一对应，只换值 ---- */
+  --at-paper:    #000000;
+  --at-paper-hi: #0a0a0a;
+  --at-card:     #0a0a0a;
+  --at-sunken:   #171717;
+  --at-ink:      #fafafa;
+  --at-ink-2:    #a1a1a1;
+  --at-ink-3:    #8a8a8a;
+  --at-rule:     rgba(255, 255, 255, .10);
+  --at-rule-2:   rgba(255, 255, 255, .18);
+  --at-accent:   #e5e5e5;
+  --at-accent-2: #fafafa;
+  --at-accent-s: rgba(250, 250, 250, .08);
+  --at-scrim:    rgba(10, 10, 10, .70);
+  --at-nav-bg:   #171717;
+
+  --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .30);
+  --at-sh-sm: 0 1px 2px rgba(0, 0, 0, .30);
+  --at-sh-md: 0 2px 6px rgba(0, 0, 0, .40);
+  --at-sh-lg: 0 8px 24px -8px rgba(0, 0, 0, .60), 0 2px 6px rgba(0, 0, 0, .40);
+  --at-sh-xl: 0 16px 40px -12px rgba(0, 0, 0, .70);
+
+  /* 占位字母反过来：浅字 + 深底。饱和度仍是 0 —— 中性灰是工作台的身份，
+     不借用 atlas 那套带紫的 #2a2a2e。 */
+  --at-ico-bg-s: 0%;  --at-ico-bg-l: 20%;
+  --at-ico-fg-s: 0%;  --at-ico-fg-l: 72%;
+  --at-ico-ln-s: 0%;  --at-ico-ln-l: 26%;
+  --at-img-bg: #1a1a1a;
+
+  /* 强调色翻转：底变浅、字变深。--acc-glow 是「空格分隔三元组」，
+     给 rgb(var(--acc-glow) / α) 用，暗色下必须是浅色。 */
+  --acc:       #e5e5e5;
+  --acc-2:     #d4d4d4;
+  --acc-ink:   #171717;
+  --acc-glow:  250 250 250;
+
+  /* 滚动条滑块：app.css 按皮肤名给暗色发了一套（atlas-dark / night /
+     cyber），frame 不在那张名单里 —— 亮色下用默认的黑色滑块没问题，
+     但暗色侧栏 #171717 上再压一条 18% 黑的滑块等于没有。
+     在这里本地覆盖，比去 app.css 里维护一张越拉越长的名单干净。 */
+  --sb-thumb:    rgba(255, 255, 255, .14);
+  --sb-thumb-hi: rgba(255, 255, 255, .28);
+}
+
+/* ==========================================================================
    2. 页面与壳
    --------------------------------------------------------------------------
    视口本身变成一张灰底，应用在中间，四周一圈 12px。
    小屏上这圈留白要去掉 —— 手机上每一像素都该给内容。
    ========================================================================== */
-html[data-theme='frame'] body.hp {
+html[data-theme^='frame'] body.hp {
   padding: 12px;
   height: 100dvh;
   overflow: hidden;
@@ -144,10 +254,10 @@ html[data-theme='frame'] body.hp {
 }
 
 /* Atlas 的背景装饰在框里没有意义 */
-html[data-theme='frame'] body.hp .aurora,
-html[data-theme='frame'] body.hp .grain { display: none; }
+html[data-theme^='frame'] body.hp .aurora,
+html[data-theme^='frame'] body.hp .grain { display: none; }
 
-html[data-theme='frame'] body.hp .shell {
+html[data-theme^='frame'] body.hp .shell {
   display: grid;
   /* 240：参考站是 256（w-64），它的分类名是 Dashboard/Lifecycle 这种长词；
      这里的中文分类两到四个字，240 已经把「名称 …… 计数」撑得很开。 */
@@ -161,13 +271,13 @@ html[data-theme='frame'] body.hp .shell {
   background: var(--fr-app);
   /* 一张几乎看不见的投影，只为了让框从底上「浮起 1mm」。
      再重就变成卡片了 —— 窗口不需要被举起。 */
-  box-shadow: 0 1px 2px rgba(24, 24, 27, .04), 0 12px 32px -24px rgba(24, 24, 27, .22);
+  box-shadow: var(--fr-sh-shell);
 }
 
 /* ==========================================================================
    3. 顶栏 —— 框内的第一行，横跨两列
    ========================================================================== */
-html[data-theme='frame'] body.hp .topbar {
+html[data-theme^='frame'] body.hp .topbar {
   grid-column: 1 / -1;
   grid-row: 1;
   position: relative;
@@ -185,26 +295,26 @@ html[data-theme='frame'] body.hp .topbar {
 }
 
 /* 品牌：方块 + 字，字号收小半号，跟程序标题栏一个量级 */
-html[data-theme='frame'] body.hp .brand {
+html[data-theme^='frame'] body.hp .brand {
   gap: 9px;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -.01em;
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .brand-mark {
+html[data-theme^='frame'] body.hp .brand-mark {
   width: 24px;
   height: 24px;
   border-radius: 6px;
   background: var(--fr-ink);
   box-shadow: none;
 }
-html[data-theme='frame'] body.hp .brand-mark svg { width: 14px; height: 14px; }
+html[data-theme^='frame'] body.hp .brand-mark svg { width: 14px; height: 14px; }
 
 /* ==========================================================================
    4. 侧栏 —— 框内左列，不是浮层
    ========================================================================== */
-html[data-theme='frame'] body.hp .gnav--side {
+html[data-theme^='frame'] body.hp .gnav--side {
   grid-column: 1;
   grid-row: 2;
   position: relative;
@@ -224,11 +334,11 @@ html[data-theme='frame'] body.hp .gnav--side {
   z-index: 1;
 }
 
-html[data-theme='frame'] body.hp .gnav-head {
+html[data-theme^='frame'] body.hp .gnav-head {
   margin: 4px 0 6px;
   padding: 0 8px;
 }
-html[data-theme='frame'] body.hp .gnav-title {
+html[data-theme^='frame'] body.hp .gnav-title {
   font-family: var(--fr-font);
   font-size: 12px;
   font-weight: 500;
@@ -236,19 +346,19 @@ html[data-theme='frame'] body.hp .gnav-title {
   text-transform: none;
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .gnav-fold {
+html[data-theme^='frame'] body.hp .gnav-fold {
   width: 24px;
   height: 24px;
   border-radius: var(--fr-r-sm);
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .gnav-fold:hover {
+html[data-theme^='frame'] body.hp .gnav-fold:hover {
   background: var(--fr-active);
   color: var(--fr-ink);
 }
 
-html[data-theme='frame'] body.hp .gnav--side .gnav-track { gap: 1px; }
-html[data-theme='frame'] body.hp .gnav--side .gnav-item {
+html[data-theme^='frame'] body.hp .gnav--side .gnav-track { gap: 1px; }
+html[data-theme^='frame'] body.hp .gnav--side .gnav-item {
   min-height: 36px;
   padding: 0 9px;
   gap: 9px;
@@ -260,11 +370,11 @@ html[data-theme='frame'] body.hp .gnav--side .gnav-item {
   color: var(--fr-ink-2);
   transition: background .12s, color .12s;
 }
-html[data-theme='frame'] body.hp .gnav-item:hover {
+html[data-theme^='frame'] body.hp .gnav-item:hover {
   background: var(--fr-hover);
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .gnav-item.is-active {
+html[data-theme^='frame'] body.hp .gnav-item.is-active {
   background: var(--fr-active);
   color: var(--fr-ink);
   font-weight: 550;
@@ -278,7 +388,7 @@ html[data-theme='frame'] body.hp .gnav-item.is-active {
    又让分组颜色这条线索在这里也成立。
    用户反馈「太暗」后饱和度 52% → 70%、亮度 46% → 50%，
    只动颜色，形态仍是零底色的细线。 */
-html[data-theme='frame'] body.hp .gnav-ico {
+html[data-theme^='frame'] body.hp .gnav-ico {
   width: 17px;
   height: 17px;
   border-radius: 0;
@@ -287,34 +397,34 @@ html[data-theme='frame'] body.hp .gnav-ico {
   color: hsl(var(--gt-h, 220) 70% 50%);
   transform: none;
 }
-html[data-theme='frame'] body.hp .gnav-item:hover .gnav-ico {
+html[data-theme^='frame'] body.hp .gnav-item:hover .gnav-ico {
   background: none;
   color: hsl(var(--gt-h, 220) 76% 42%);
   transform: none;
 }
-html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-ico {
+html[data-theme^='frame'] body.hp .gnav-item.is-active .gnav-ico {
   background: none;
   color: hsl(var(--gt-h, 220) 78% 40%);
 }
 /* 选中行左侧的组色彩条在程序框里不出现：这里的选中态是整块浅灰，
    再加一条竖彩条会同时存在两种「当前项」语言。 */
-html[data-theme='frame'] body.hp .gnav--side .gnav-item.is-active::before {
+html[data-theme^='frame'] body.hp .gnav--side .gnav-item.is-active::before {
   content: none;
 }
 
-html[data-theme='frame'] body.hp .gnav--side .gnav-count {
+html[data-theme^='frame'] body.hp .gnav--side .gnav-count {
   font-size: 12px;
   color: var(--fr-ink-3);
   font-variant-numeric: tabular-nums;
 }
-html[data-theme='frame'] body.hp .gnav--side .gnav-item.is-active .gnav-count {
+html[data-theme^='frame'] body.hp .gnav--side .gnav-item.is-active .gnav-count {
   color: var(--fr-ink-2);
 }
 
 /* ==========================================================================
    5. 主区 —— 框内右列，自己滚动
    ========================================================================== */
-html[data-theme='frame'] body.hp .stage {
+html[data-theme^='frame'] body.hp .stage {
   grid-column: 2;
   grid-row: 2;
   position: relative;
@@ -335,11 +445,11 @@ html[data-theme='frame'] body.hp .stage {
 
 /* 分组标题：去掉圆点与延长线，只留「名字 + 数量」。
    程序界面里的分组标签就该这么安静。 */
-html[data-theme='frame'] body.hp .group {
+html[data-theme^='frame'] body.hp .group {
   margin-bottom: 32px;
   scroll-margin-top: 8px;
 }
-html[data-theme='frame'] body.hp .group-head {
+html[data-theme^='frame'] body.hp .group-head {
   /* 必须显式 static。Atlas 给组签写了 position: sticky + top: 顶栏高，
      在它自己的布局里是用来吸顶的；但 frame 的滚动容器是 .stage 而不是
      视口，sticky 会按视口的 top 计算，把整行标题往下推 57px、正好压在
@@ -350,25 +460,25 @@ html[data-theme='frame'] body.hp .group-head {
   padding: 0;
   gap: 9px;
 }
-html[data-theme='frame'] body.hp .group-name {
+html[data-theme^='frame'] body.hp .group-name {
   font-family: var(--fr-font);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -.01em;
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .group-count {
+html[data-theme^='frame'] body.hp .group-count {
   font-size: 12.5px;
   color: var(--fr-ink-3);
   font-variant-numeric: tabular-nums;
 }
-html[data-theme='frame'] body.hp .group-rule { display: none; }
+html[data-theme^='frame'] body.hp .group-rule { display: none; }
 /* Atlas 的组名前有一颗 6px 强调色圆点 —— 那是「目录」语气的装饰。
    窗口界面里分组标签不需要装饰，一个短横线的信息量都是多余的。
    V1.5.12 换成彩色图标块之后同理：框里只留一条彩色细线，
    不摆 22px 的实色小方块 —— 那是 Atlas 的分量，放进 32px 行高会发重。 */
-html[data-theme='frame'] body.hp .group-name::before { display: none; }
-html[data-theme='frame'] body.hp .gh-ico {
+html[data-theme^='frame'] body.hp .group-name::before { display: none; }
+html[data-theme^='frame'] body.hp .gh-ico {
   width: 15px;
   height: 15px;
   border-radius: 0;
@@ -376,13 +486,13 @@ html[data-theme='frame'] body.hp .gh-ico {
   box-shadow: none;
   color: hsl(var(--gt-h, 220) 52% 46%);
 }
-html[data-theme='frame'] body.hp .gh-ico svg { width: 15px; height: 15px; }
+html[data-theme^='frame'] body.hp .gh-ico svg { width: 15px; height: 15px; }
 /* 计数徽章的组色底只在 Atlas 出现。Atlas 那两条 background 用的是
    --gt-* 变量，在 frame 下这些变量没有定义 —— 不显式关掉的话，
    「关掉」这件事就取决于变量有没有定义，将来给 frame 补上变量块就
    会突然冒出胶囊底。frame 里它一直是纯数字。 */
-html[data-theme='frame'] body.hp .group-count { color: hsl(var(--gt-h, 220) 34% 42%); background: none; }
-html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-count { background: none; }
+html[data-theme^='frame'] body.hp .group-count { color: hsl(var(--gt-h, 220) 34% 42%); background: none; }
+html[data-theme^='frame'] body.hp .gnav-item.is-active .gnav-count { background: none; }
 
 /* ==========================================================================
    6. 卡片
@@ -390,7 +500,7 @@ html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-count { background: 
    边框 + 小圆角，零阴影。悬停只做两件事：边框深一档、微微提亮。
    Atlas 的「抬 2px + 双层柔影」在这里会显得轻浮 —— 窗口里的元素不该飘。
    ========================================================================== */
-html[data-theme='frame'] body.hp .link {
+html[data-theme^='frame'] body.hp .link {
   min-height: 88px;
   padding: 14px 16px;
   gap: 13px;
@@ -400,20 +510,20 @@ html[data-theme='frame'] body.hp .link {
   /* 参考站的卡片带一层 `0 1px 2px rgba(0,0,0,.05)`：极轻，作用是让白卡在
      白底上「有一点点厚度」，而不是完全平贴。Atlas 追求的是同一件事，
      只是它的阴影更散。 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  box-shadow: var(--fr-sh-card);
   color: var(--fr-ink);
   transition: border-color .14s, background .14s, box-shadow .14s;
 }
-html[data-theme='frame'] body.hp .link:hover {
+html[data-theme^='frame'] body.hp .link:hover {
   border-color: var(--fr-line-2);
   background: var(--fr-app);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+  box-shadow: var(--fr-sh-card-h);
   transform: none;
 }
-html[data-theme='frame'] body.hp .link:active { background: var(--fr-side); }
+html[data-theme^='frame'] body.hp .link:active { background: var(--fr-side); }
 
-html[data-theme='frame'] body.hp .link-icon,
-html[data-theme='frame'][data-layout='card'] body.hp .link-icon {
+html[data-theme^='frame'] body.hp .link-icon,
+html[data-theme^='frame'][data-layout='card'] body.hp .link-icon {
   width: 40px;
   height: 40px;
   border-radius: 9px;
@@ -421,26 +531,26 @@ html[data-theme='frame'][data-layout='card'] body.hp .link-icon {
   border: 1px solid var(--fr-line);
   box-shadow: none;
 }
-html[data-theme='frame'] body.hp .link:hover .link-icon {
+html[data-theme^='frame'] body.hp .link:hover .link-icon {
   transform: none;
   border-color: var(--fr-line-2);
 }
 
-html[data-theme='frame'] body.hp .link-title,
-html[data-theme='frame'][data-layout='card'] body.hp .link-title {
+html[data-theme^='frame'] body.hp .link-title,
+html[data-theme^='frame'][data-layout='card'] body.hp .link-title {
   font-family: var(--fr-font);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -.008em;
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .link-sub {
+html[data-theme^='frame'] body.hp .link-sub {
   font-family: var(--fr-font);
   font-size: 12.5px;
   color: var(--fr-ink-3);
   letter-spacing: 0;
 }
-html[data-theme='frame'] body.hp .initials {
+html[data-theme^='frame'] body.hp .initials {
   font-family: var(--fr-font);
   font-weight: 600;
   letter-spacing: -.02em;
@@ -448,7 +558,7 @@ html[data-theme='frame'] body.hp .initials {
 }
 
 /* 宫格：图标仍是圆角方块，但底色统一到浅灰，不再每家一个色相 */
-html[data-theme='frame'][data-layout='grid'] body.hp .link-icon {
+html[data-theme^='frame'][data-layout='grid'] body.hp .link-icon {
   width: 52px;
   height: 52px;
   border-radius: 12px;
@@ -457,7 +567,7 @@ html[data-theme='frame'][data-layout='grid'] body.hp .link-icon {
 /* ==========================================================================
    7. 搜索框 —— 方角，不再是胶囊
    ========================================================================== */
-html[data-theme='frame'] body.hp .search-wrap {
+html[data-theme^='frame'] body.hp .search-wrap {
   width: clamp(300px, 32vw, 460px);
   min-height: 36px;
   border-radius: 10px;
@@ -466,11 +576,11 @@ html[data-theme='frame'] body.hp .search-wrap {
   box-shadow: none;
   transition: border-color .14s, box-shadow .14s;
 }
-html[data-theme='frame'] body.hp .search-wrap:focus-within {
+html[data-theme^='frame'] body.hp .search-wrap:focus-within {
   border-color: var(--fr-line-2);
   box-shadow: 0 0 0 3px var(--fr-ring);
 }
-html[data-theme='frame'] body.hp .search input {
+html[data-theme^='frame'] body.hp .search input {
   min-height: 36px;
   /* 左侧只留 12px：放大镜在工作台里是隐藏的（见下一条），
      左边已经有引擎 logo 表达「这里能搜」，再放一个放大镜是重复的。
@@ -481,20 +591,20 @@ html[data-theme='frame'] body.hp .search input {
   font-size: 14px;
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .search input::placeholder { color: var(--fr-ink-3); }
+html[data-theme^='frame'] body.hp .search input::placeholder { color: var(--fr-ink-3); }
 /* 放大镜隐藏。Atlas 里它和引擎 logo 在视觉上是叠着的（颜色相近看不出），
    工作台的 logo 是彩色的，再并排放一个放大镜就成了三个图标挤在 20px 里。
    参考站的搜索框同样没有放大镜 —— 有 placeholder 就够了。 */
-html[data-theme='frame'] body.hp .search-icon { display: none; }
-html[data-theme='frame'] body.hp .eng-btn {
+html[data-theme^='frame'] body.hp .search-icon { display: none; }
+html[data-theme^='frame'] body.hp .eng-btn {
   min-height: 34px;
   padding: 0 5px 0 11px;
   border-radius: 10px 0 0 10px;
   color: var(--fr-ink-2);
 }
-html[data-theme='frame'] body.hp .eng-btn:hover { color: var(--fr-ink); }
-html[data-theme='frame'] body.hp .eng-logo { width: 20px; height: 20px; }
-html[data-theme='frame'] body.hp .search-kbd {
+html[data-theme^='frame'] body.hp .eng-btn:hover { color: var(--fr-ink); }
+html[data-theme^='frame'] body.hp .eng-logo { width: 20px; height: 20px; }
+html[data-theme^='frame'] body.hp .search-kbd {
   border-radius: 4px;
   border: 1px solid var(--fr-line);
   background: var(--fr-side);
@@ -506,7 +616,7 @@ html[data-theme='frame'] body.hp .search-kbd {
 /* ==========================================================================
    8. 工具按钮与下拉
    ========================================================================== */
-html[data-theme='frame'] body.hp .tbm-btn {
+html[data-theme^='frame'] body.hp .tbm-btn {
   width: 34px;
   min-width: 34px;
   height: 34px;
@@ -514,20 +624,20 @@ html[data-theme='frame'] body.hp .tbm-btn {
   border: 1px solid transparent;
   color: var(--fr-ink-2);
 }
-html[data-theme='frame'] body.hp .tbm-btn:hover {
+html[data-theme^='frame'] body.hp .tbm-btn:hover {
   background: var(--fr-hover);
   border-color: var(--fr-line);
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .tbm-btn[aria-pressed='true'] {
+html[data-theme^='frame'] body.hp .tbm-btn[aria-pressed='true'] {
   background: var(--fr-ink);
   border-color: var(--fr-ink);
-  color: #fff;
+  color: var(--acc-ink);
   box-shadow: none;
 }
-html[data-theme='frame'] body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: #fff; }
+html[data-theme^='frame'] body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: var(--acc-ink); }
 
-html[data-theme='frame'] body.hp .tbm-btn--login {
+html[data-theme^='frame'] body.hp .tbm-btn--login {
   min-height: 34px;
   padding: 0 13px;
   border-radius: 8px;
@@ -538,71 +648,71 @@ html[data-theme='frame'] body.hp .tbm-btn--login {
   font-weight: 500;
   box-shadow: none;
 }
-html[data-theme='frame'] body.hp .tbm-btn--login:hover {
+html[data-theme^='frame'] body.hp .tbm-btn--login:hover {
   background: var(--fr-ink);
   border-color: var(--fr-ink);
-  color: #fff;
+  color: var(--acc-ink);
 }
 /* 退出在这里同样降一档：程序框语言里，主操作是唯一有边框的那颗 */
-html[data-theme='frame'] body.hp .tbm-btn--quiet {
+html[data-theme^='frame'] body.hp .tbm-btn--quiet {
   border-color: transparent;
   background: none;
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .tbm-btn--quiet:hover {
+html[data-theme^='frame'] body.hp .tbm-btn--quiet:hover {
   background: color-mix(in srgb, var(--fr-ink) 6%, transparent);
   border-color: transparent;
   color: var(--fr-ink);
 }
 
-html[data-theme='frame'] body.hp .tbm-panel {
+html[data-theme^='frame'] body.hp .tbm-panel {
   border-radius: 10px;
   border: 1px solid var(--fr-line);
   background: var(--fr-app);
-  box-shadow: 0 12px 32px -12px rgba(24, 24, 27, .22), 0 2px 6px rgba(24, 24, 27, .06);
+  box-shadow: var(--fr-sh-panel);
 }
-html[data-theme='frame'] body.hp .tbm-opt {
+html[data-theme^='frame'] body.hp .tbm-opt {
   border-radius: 6px;
   font-size: 13px;
 }
-html[data-theme='frame'] body.hp .tbm-opt:hover { background: var(--fr-hover); }
-html[data-theme='frame'] body.hp .tbm-opt[aria-selected='true'] {
+html[data-theme^='frame'] body.hp .tbm-opt:hover { background: var(--fr-hover); }
+html[data-theme^='frame'] body.hp .tbm-opt[aria-selected='true'] {
   background: var(--fr-active);
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .tbo-name { font-weight: 500; }
+html[data-theme^='frame'] body.hp .tbo-name { font-weight: 500; }
 
 /* ==========================================================================
    9. 收起态
    --------------------------------------------------------------------------
    shell 的列宽是写死的 224px（grid），不走 --hp-nav-w，所以这里要直接改列。
    ========================================================================== */
-html[data-theme='frame'][data-nav='mini'] body.hp .shell {
+html[data-theme^='frame'][data-nav='mini'] body.hp .shell {
   grid-template-columns: 56px 1fr;
 }
-html[data-theme='frame'][data-nav='mini'] body.hp .gnav--side {
+html[data-theme^='frame'][data-nav='mini'] body.hp .gnav--side {
   padding: 10px 6px 14px;
 }
 
 /* ==========================================================================
    10. 页脚与空态
    ========================================================================== */
-html[data-theme='frame'] body.hp .foot {
+html[data-theme^='frame'] body.hp .foot {
   margin-top: 34px;
   font-size: 12.5px;
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .empty-title {
+html[data-theme^='frame'] body.hp .empty-title {
   font-family: var(--fr-font);
   font-size: 17px;
   font-weight: 600;
   color: var(--fr-ink);
 }
-html[data-theme='frame'] body.hp .empty-sub { color: var(--fr-ink-3); }
-html[data-theme='frame'] body.hp .btn-primary {
+html[data-theme^='frame'] body.hp .empty-sub { color: var(--fr-ink-3); }
+html[data-theme^='frame'] body.hp .btn-primary {
   border-radius: 8px;
   background: var(--fr-ink);
-  color: #fff;
+  color: var(--acc-ink);
   box-shadow: none;
 }
 
@@ -613,21 +723,21 @@ html[data-theme='frame'] body.hp .btn-primary {
    应用重新铺满视口，侧栏回到顶部横条，与 Atlas 的窄屏一致。
    ========================================================================== */
 @media (max-width: 1139px) {
-  html[data-theme='frame'] body.hp { padding: 0; }
-  html[data-theme='frame'] body.hp .shell {
+  html[data-theme^='frame'] body.hp { padding: 0; }
+  html[data-theme^='frame'] body.hp .shell {
     border: 0;
     border-radius: 0;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
     box-shadow: none;
   }
-  html[data-theme='frame'] body.hp .topbar {
+  html[data-theme^='frame'] body.hp .topbar {
     grid-column: 1;
     grid-row: 1;
     height: auto;
     min-height: 56px;
   }
-  html[data-theme='frame'] body.hp .gnav--side {
+  html[data-theme^='frame'] body.hp .gnav--side {
     grid-column: 1;
     grid-row: 2;
     position: relative;
@@ -638,68 +748,68 @@ html[data-theme='frame'] body.hp .btn-primary {
     overflow-x: auto;
     overflow-y: hidden;
   }
-  html[data-theme='frame'] body.hp .gnav-head { display: none; }
-  html[data-theme='frame'] body.hp .gnav--side .gnav-track {
+  html[data-theme^='frame'] body.hp .gnav-head { display: none; }
+  html[data-theme^='frame'] body.hp .gnav--side .gnav-track {
     flex-direction: row;
     gap: 4px;
   }
-  html[data-theme='frame'] body.hp .gnav--side .gnav-item {
+  html[data-theme^='frame'] body.hp .gnav--side .gnav-item {
     width: auto;
     flex: 0 0 auto;
     min-height: 30px;
     padding: 0 10px;
     border-radius: var(--fr-r-sm);
   }
-  html[data-theme='frame'] body.hp .gnav--side .gnav-count { margin-left: 0; }
-  html[data-theme='frame'] body.hp .stage {
+  html[data-theme^='frame'] body.hp .gnav--side .gnav-count { margin-left: 0; }
+  html[data-theme^='frame'] body.hp .stage {
     grid-column: 1;
     grid-row: 3;
     padding: 16px 16px 32px;
   }
-  html[data-theme='frame'] body.hp .group-name { font-size: 14px; }
+  html[data-theme^='frame'] body.hp .group-name { font-size: 14px; }
 }
 
 @media (max-width: 720px) {
-  html[data-theme='frame'] body.hp .topbar {
+  html[data-theme^='frame'] body.hp .topbar {
     height: auto;
     padding: 10px 12px;
     gap: 8px;
   }
-  html[data-theme='frame'] body.hp .search-wrap {
+  html[data-theme^='frame'] body.hp .search-wrap {
     width: 100%;
     min-height: 36px;
   }
-  html[data-theme='frame'] body.hp .search input { font-size: 16px; }
+  html[data-theme^='frame'] body.hp .search input { font-size: 16px; }
 }
 
 /* ==========================================================================
    12. 动效收敛
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
-  html[data-theme='frame'] body.hp * {
+  html[data-theme^='frame'] body.hp * {
     transition-duration: .01ms !important;
     animation-duration: .01ms !important;
   }
 }
 
 /* 拖到侧栏分组名上：工作台用近黑实底（它的强调色就是黑） */
-html[data-theme='frame'] body.hp .gnav-item.is-drop-target {
+html[data-theme^='frame'] body.hp .gnav-item.is-drop-target {
   background: var(--fr-ink);
-  color: #fff;
+  color: var(--acc-ink);
 }
-html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-name { color: #fff; }
-html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-ico {
+html[data-theme^='frame'] body.hp .gnav-item.is-drop-target .gnav-name { color: var(--acc-ink); }
+html[data-theme^='frame'] body.hp .gnav-item.is-drop-target .gnav-ico {
   background: none;
-  color: #fff;
+  color: var(--acc-ink);
 }
-html[data-theme='frame'] body.hp .gnav-item.is-drop-target .gnav-count { color: rgba(255, 255, 255, .7); }
+html[data-theme^='frame'] body.hp .gnav-item.is-drop-target .gnav-count { color: color-mix(in srgb, var(--acc-ink) 70%, transparent); }
 
 /* 侧栏底部：版本 + 版权（工作台用更小的字，和它的紧凑基调一致） */
-html[data-theme='frame'] body.hp .gnav--side {
+html[data-theme^='frame'] body.hp .gnav--side {
   display: flex;
   flex-direction: column;
 }
-html[data-theme='frame'] body.hp .gnav-foot {
+html[data-theme^='frame'] body.hp .gnav-foot {
   margin-top: auto;
   padding: 14px 9px 2px;
   display: flex;
@@ -709,37 +819,37 @@ html[data-theme='frame'] body.hp .gnav-foot {
   line-height: 1.45;
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .gnav-ver {
+html[data-theme^='frame'] body.hp .gnav-ver {
   font-size: 10.5px;
   letter-spacing: .01em;
   color: var(--fr-ink-3);
 }
-html[data-theme='frame'] body.hp .gnav-foot p { margin: 0; }
-html[data-theme='frame'] body.hp .gnav-copy {
+html[data-theme^='frame'] body.hp .gnav-foot p { margin: 0; }
+html[data-theme^='frame'] body.hp .gnav-copy {
   color: var(--fr-ink-3);
   text-decoration: none;
 }
-html[data-theme='frame'] body.hp .gnav-owner {
+html[data-theme^='frame'] body.hp .gnav-owner {
   font-weight: 700;
   color: var(--fr-ink-2);
 }
-html[data-theme='frame'] body.hp .gnav-rights {
+html[data-theme^='frame'] body.hp .gnav-rights {
   color: var(--fr-ink-3);
   opacity: .72;
 }
-html[data-theme='frame'] body.hp .gnav-license,
-html[data-theme='frame'] body.hp .gnav-link {
+html[data-theme^='frame'] body.hp .gnav-license,
+html[data-theme^='frame'] body.hp .gnav-link {
   color: var(--fr-ink-3);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: color .14s, border-color .14s;
 }
-html[data-theme='frame'] body.hp .gnav-license:hover,
-html[data-theme='frame'] body.hp .gnav-link:hover {
+html[data-theme^='frame'] body.hp .gnav-license:hover,
+html[data-theme^='frame'] body.hp .gnav-link:hover {
   color: var(--fr-ink);
   border-bottom-color: var(--fr-line-hi, currentColor);
 }
-html[data-theme='frame'] body.hp .gnav-meta {
+html[data-theme^='frame'] body.hp .gnav-meta {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -747,20 +857,20 @@ html[data-theme='frame'] body.hp .gnav-meta {
 }
 html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 @media (max-width: 1139px) {
-  html[data-theme='frame'] body.hp .gnav-foot { display: none; }
+  html[data-theme^='frame'] body.hp .gnav-foot { display: none; }
 }
 
 /* ==========================================================================
    编辑态侧栏管理：虚线边框 + 删除入口（与 Atlas 同款交互，frame 配色）
    ========================================================================== */
-html[data-theme='frame'] body.hp.is-editing .gnav--side .gnav-item {
+html[data-theme^='frame'] body.hp.is-editing .gnav--side .gnav-item {
   border: 1px dashed color-mix(in srgb, var(--fr-ink-2, #71717a) 45%, transparent);
   background-clip: padding-box;
 }
-html[data-theme='frame'] body.hp.is-editing .gnav--side .gnav-item:hover {
+html[data-theme^='frame'] body.hp.is-editing .gnav--side .gnav-item:hover {
   border-color: hsl(var(--gt-h, 220) 52% 50% / .6);
 }
-html[data-theme='frame'] body.hp .gnav-del {
+html[data-theme^='frame'] body.hp .gnav-del {
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
@@ -772,14 +882,99 @@ html[data-theme='frame'] body.hp .gnav-del {
   -webkit-tap-highlight-color: transparent;
   transition: background .14s, color .14s;
 }
-html[data-theme='frame'] body.hp .gnav-del svg { display: block; flex: 0 0 auto; }
-html[data-theme='frame'] body.hp .gnav-del-text { font-size: 11px; font-weight: 600; }
-html[data-theme='frame'] body.hp .gnav-del:hover,
-html[data-theme='frame'] body.hp .gnav-del:focus-visible {
-  background: color-mix(in srgb, #d92d20 12%, transparent);
-  color: #d92d20;
+html[data-theme^='frame'] body.hp .gnav-del svg { display: block; flex: 0 0 auto; }
+html[data-theme^='frame'] body.hp .gnav-del-text { font-size: 11px; font-weight: 600; }
+html[data-theme^='frame'] body.hp .gnav-del:hover,
+html[data-theme^='frame'] body.hp .gnav-del:focus-visible {
+  background: var(--fr-danger-bg);
+  color: var(--fr-danger);
   outline: none;
 }
-html[data-theme='frame'] body.hp .gnav-del.is-armed { background: #d92d20; color: #fff; }
-html[data-theme='frame'] body.hp .gnav-del.is-armed .gnav-del-text::after { content: '？'; }
-html[data-theme='frame'] body.hp .gnav-del.is-disabled { opacity: .5; pointer-events: none; }
+html[data-theme^='frame'] body.hp .gnav-del.is-armed { background: var(--fr-danger); color: var(--fr-danger-ink); }
+html[data-theme^='frame'] body.hp .gnav-del.is-armed .gnav-del-text::after { content: '？'; }
+html[data-theme^='frame'] body.hp .gnav-del.is-disabled { opacity: .5; pointer-events: none; }
+
+/* ==========================================================================
+   13. 暗色专属微调
+   --------------------------------------------------------------------------
+   变量块换不到的地方，只有三类：
+
+   ① 组色（--gt-h 那套 HSL）在深底上会「闷」。同样是 50% 亮度，同一支紫
+      放在 #171717 上看着比放在白底上暗两档 —— 深底压掉了明度感知。
+      所以暗色把每条色阶的亮度统一抬高 12~14 点、饱和度略降：
+      0 饱和的灰线在这个亮度已经很显眼，再堆饱和反而显脏。
+   ② 卡片与弹层要比「底」亮一档。亮色里卡和白底完全同色、只靠 1px 线分
+      界，那是纸的语法；暗色里照做会让卡片看着比底更「空」—— 参考站的
+      暗色同样把 card #171717 放在 background #0a0a0a 之上。
+   ③ 页脚那层 .72 的 opacity 叠在本来就很淡的三级文字上，暗色会掉到读不
+      出来，必须抬回 .88。
+   ========================================================================== */
+
+/* ① 组色提亮 */
+html[data-theme='frame-dark'] body.hp .gnav-ico {
+  color: hsl(var(--gt-h, 220) 64% 64%);
+}
+html[data-theme='frame-dark'] body.hp .gnav-item:hover .gnav-ico {
+  color: hsl(var(--gt-h, 220) 68% 76%);
+}
+html[data-theme='frame-dark'] body.hp .gnav-item.is-active .gnav-ico {
+  color: hsl(var(--gt-h, 220) 70% 72%);
+}
+html[data-theme='frame-dark'] body.hp .gh-ico {
+  color: hsl(var(--gt-h, 220) 56% 62%);
+}
+html[data-theme='frame-dark'] body.hp .group-count {
+  color: hsl(var(--gt-h, 220) 28% 62%);
+  background: none;
+}
+html[data-theme='frame-dark'] body.hp.is-editing .gnav--side .gnav-item:hover {
+  border-color: hsl(var(--gt-h, 220) 58% 62% / .55);
+}
+
+/* ② 卡片：抬 2% 的亮，悬停再抬一点。用 color-mix 而不是写死 #0f0f0f，
+   是为了让「比底亮多少」这个意图直接写在代码里。 */
+html[data-theme='frame-dark'] body.hp .link {
+  background: color-mix(in srgb, var(--fr-ink) 5%, var(--fr-app));
+}
+html[data-theme='frame-dark'] body.hp .link:hover {
+  background: color-mix(in srgb, var(--fr-ink) 7%, var(--fr-app));
+  border-color: var(--fr-line-2);
+}
+html[data-theme='frame-dark'] body.hp .link:active {
+  background: color-mix(in srgb, var(--fr-ink) 9%, var(--fr-app));
+}
+
+/* 图标方块：卡片是「底+5% 白」，方块再抬 3 点，才看得出它是个容器。
+   亮色那边 #fafafa 落在 #ffffff 上只差 5 级，同样很淡 —— 但亮底的
+   1px 边框自带对比，暗底的 10% 白线压不住，只能靠底色多给一点。
+   ⚠️ 必须带 [data-layout='card'] 再写一遍：上面那条亮色规则是
+      `.link-icon, [data-layout='card'] .link-icon` 两段并列，
+      带属性选择器的那段特异性更高，只写裸 .link-icon 压不住它。 */
+html[data-theme='frame-dark'] body.hp .link-icon,
+html[data-theme='frame-dark'][data-layout='card'] body.hp .link-icon {
+  background: color-mix(in srgb, var(--fr-ink) 8%, var(--fr-app));
+}
+
+/* 弹层：比顶栏亮一档 + 更强阴影。暗色里纯靠阴影浮不起来，
+   需要「底比周围亮」这条额外的线索。 */
+html[data-theme='frame-dark'] body.hp .tbm-panel {
+  background: var(--fr-side);
+  border-color: var(--fr-line-2);
+}
+
+/* ③ 页脚 */
+html[data-theme='frame-dark'] body.hp .gnav-rights { opacity: .88; }
+
+/* ==========================================================================
+   14. 登录页的两团光
+   --------------------------------------------------------------------------
+   上面第 2 节写过 `body.hp .aurora { display: none }`，理由是「Atlas 的
+   背景装饰在框里没有意义」。但登录页的 body 是 .auth-body 而不是 .hp，
+   那条规则匹配不到 —— 于是 frame 的登录页一直带着 atlas 的紫/橙光斑。
+
+   亮色下它还能勉强当成一层暖色衬底，暗色下就成了两块霓虹：中性灰的
+   窗口语言里不该出现任何彩色光晕。这里按皮肤关掉，不分色调 ——
+   两个色调的 frame 应当长同一副骨架。
+   ========================================================================== */
+html[data-theme^='frame'] .auth-body .aurora,
+html[data-theme^='frame'] .auth-body .grain { display: none; }

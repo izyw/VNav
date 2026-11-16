@@ -4,7 +4,7 @@
   <p><strong>把常用站点摆成一屏的上网导航（浏览器起始页）</strong><br>
   一个 PHP 目录、一个 SQLite 文件，传上去就能用。</p>
   <p>
-    <img alt="版本" src="https://img.shields.io/badge/version-1.1.2-blue">
+    <img alt="版本" src="https://img.shields.io/badge/version-1.1.3-blue">
     <img alt="PHP" src="https://img.shields.io/badge/PHP-8.1%2B-777bb4">
     <img alt="SQLite" src="https://img.shields.io/badge/SQLite-单文件-003b57">
     <img alt="构建步骤" src="https://img.shields.io/badge/构建步骤-无-brightgreen">
@@ -44,7 +44,7 @@
 | 皮肤 | 取向 | 明暗 |
 | :--- | :--- | :--- |
 | **Atlas**（默认） | 白纸黑字、发丝线、圆角与留白 | 亮 / 暗 / 跟随系统 |
-| **工作台** Frame | 整个应用收进一张带边框的圆角框，顶栏、侧栏、主区三块并列 | 亮 |
+| **工作台** Frame | 整个应用收进一张带边框的圆角框，顶栏、侧栏、主区三块并列 | 亮 / 暗 |
 
 布局有卡片、横排、紧凑、宫格四种；分组默认在左侧一整列，可收起成 68px 的图标条。
 
@@ -60,6 +60,13 @@
 <p align="center"><img src="docs/home-frame.png" alt="工作台皮肤">
   <br>
   <sub>工作台皮肤：应用被收进一张框里，顶栏、侧栏、主区三块并列</sub>
+</p>
+
+<br>
+
+<p align="center"><img src="docs/home-frame-dark.png" alt="工作台皮肤 暗色">
+  <br>
+  <sub>同一张框换成石墨底：外框、侧栏、主区还是三层，只是底翻过来</sub>
 </p>
 
 ## 安装

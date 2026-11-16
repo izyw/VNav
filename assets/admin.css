@@ -505,6 +505,12 @@
   border-color: rgba(0, 0, 0, .16);
   box-shadow: inset -9px 9px 0 -4px #18181b;
 }
+/* 工作台暗：框内近黑、框外纯黑，右下角一块浅灰 —— 强调色整个翻过来了 */
+.sr-swatch--frame-dark {
+  background: linear-gradient(140deg, #000000 0 22%, #141414 22% 100%);
+  border-color: rgba(255, 255, 255, .22);
+  box-shadow: inset -9px 9px 0 -4px #e5e5e5;
+}
 /* 跟随系统：沿对角线一分为二，左亮右暗 */
 .sr-swatch--auto {
   background: linear-gradient(140deg, #f5f5f7 0 48%, #0b0b0d 52% 100%);
