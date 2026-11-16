@@ -1006,7 +1006,14 @@ body.hp .gnav--side .gnav-item.is-active::before {
   /* 竖线与 28px 图标齐高：旧版 15px 只有图标一半，看着像一小截红线。
      行高 44px，28px 居中上下各留 8px，既够醒目又不顶到行边缘。 */
   height: 28px;
-  margin-top: -14px;
+  /* 居中只用 transform 一种手段，并且显式写出来。
+     home.css 里那条通用的 .gnav-item.is-active::before 已经带了
+     translateY(-50%)；这里以前又加了一个 margin-top:-14px，
+     两个「上移一半」叠在一起 = 上移 28px，于是竖线整体偏上一半高度，
+     顶端贴住行的上沿、底端只到图标中间 —— 看着就是「跑到左上边」。
+     margin 一并清零，别再和别处的规则互相加成。 */
+  transform: translateY(-50%);
+  margin: 0;
   border-radius: 2px;
   background: hsl(var(--gt-h, 220) 76% 55%);
 }

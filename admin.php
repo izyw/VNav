@@ -229,7 +229,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/app.css?v=45">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=55">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=53">
 <link rel="stylesheet" href="assets/admin.css?v=46">
 </head>
