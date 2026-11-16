@@ -239,14 +239,18 @@ try {
         }
 
         /* ---------- 编辑链接 ---------- */
-        case 'update': {
-            $id    = (int)($body['id'] ?? 0);
+        case 'update': {            $id    = (int)($body['id'] ?? 0);
             $title = trim((string)($body['title'] ?? ''));
             $url   = safe_url((string)($body['url'] ?? ''));
             $gid   = (int)($body['group_id'] ?? 0);
             $descr = trim((string)($body['descr'] ?? ''));
             $icon  = trim((string)($body['icon'] ?? ''));
-            $hidden = !empty($body['hidden']) && $body['hidden'] !== '0' ? 1 : 0;
+            /* hidden 不再是「设置项」，但这一列还在库里（历史数据与老客户端）。
+               规则改成「不传就不动」：前端已经把那个开关撤掉了，
+               如果照旧无条件写 0，管理员编辑一条历史隐藏条目就会把它公开。
+               传了才写，兼容仍在用旧前端的场景。 */
+            $hiddenSet = array_key_exists('hidden', $body);
+            $hidden    = $hiddenSet ? (!empty($body['hidden']) && $body['hidden'] !== '0' ? 1 : 0) : 0;
 
             if ($id <= 0) json_err('缺少链接 ID');
             if ($url === null) json_err('网址格式不正确');
@@ -266,10 +270,19 @@ try {
             }
 
             $st = db()->prepare(
-                'UPDATE links SET title = ?, url = ?, group_id = ?, descr = ?, icon = ?, icon_kind = ?, hidden = ?, updated_at = ?
+                'UPDATE links SET title = ?, url = ?, group_id = ?, descr = ?, icon = ?, icon_kind = ?,'
+                . ($hiddenSet ? ' hidden = ?,' : '')
+                . ' updated_at = ?
                  WHERE id = ? AND user_id = ?'
             );
-            $st->execute([mb_substr($title, 0, 60), $url, $gid ?: null, mb_substr($descr, 0, 120), $icon, $iconKind, $hidden, now(), $id, $U]);
+            $vals = [mb_substr($title, 0, 60), $url, $gid ?: null, mb_substr($descr, 0, 120), $icon, $iconKind];
+            if ($hiddenSet) {
+                $vals[] = $hidden;
+            }
+            $vals[] = now();
+            $vals[] = $id;
+            $vals[] = $U;
+            $st->execute($vals);
             /* 0 行受影响 = 这条链接不属于当前用户（WHERE 里的 user_id 挡住了）。
                必须报错而不是返回 ok —— 否则越权尝试会显示「保存成功」，
                用户以为改到了别人的数据。 */

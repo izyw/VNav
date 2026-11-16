@@ -73,6 +73,10 @@ if ($copyOwner === '') {
     $copyAuthor = trim(setting('author_name', '')) ?: 'izyw';
     $copyOwner  = 'Made By ' . $copyAuthor;
 }
+/* 项目主页地址：后台没填就用仓库地址兜底。这行本来就该指向「项目的家」，
+   留空会让页脚少一行，看起来像没做完。 */
+$authorGh = trim(setting('author_github', ''));
+if ($authorGh === '') $authorGh = 'https://github.com/izyw/VNav';
 // ICP 备案号：留空就整段不渲染，不占位也不显示「暂无备案」
 $icpBeian  = trim(setting('icp_beian', ''));
 $copyYear  = date('Y');
@@ -88,6 +92,12 @@ $groupnav = hp_groupnav_safe(setting('groupnav', 'tab'));
    admin 想检查自己那份私人库时，带 ?lib=mine 即可（后台切换器里有入口）。
    普通人带这个参数没用：hp_data_uid_for() 对游客和普通用户不认 lib。 */
 $dataUid = hp_data_uid_for(($_GET['lib'] ?? '') === 'mine' ? 'mine' : 'site');
+
+/* 当前看的是哪一份库。管理员日常看「站点默认」（公共那份），
+   想放私人条目就切到自己的库 —— V1.1.0 起这个切换有了明面入口，
+   原先只能手敲 ?lib=mine，于是「隐藏链接」那个开关成了唯一手段。
+   普通用户不参与：他看的一直是自己的库，没有可切的东西。 */
+$onMine = $__isSuper && $dataUid !== 0;
 
 $sql = 'SELECT id, group_id, title, url, icon, icon_kind, descr, hits, hidden
           FROM links WHERE user_id = ?';
@@ -154,17 +164,17 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=42">
+<link rel="stylesheet" href="assets/app.css?v=43">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=44">
+<link rel="stylesheet" href="assets/home.css?v=45">
 <?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=50">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=51">
 <link rel="stylesheet" href="assets/skin-frame.css?v=51">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
@@ -214,7 +224,7 @@ hp_log_visit(false, '/');
 })();
 </script>
 </head>
-<body class="hp <?= $__isAdmin ? 'is-admin' : 'is-guest' ?>">
+<body class="hp <?= $__isAdmin ? 'is-admin' : 'is-guest' ?><?= $onMine ? ' is-mylib' : '' ?>">
 
 <div class="aurora" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
@@ -371,9 +381,15 @@ hp_log_visit(false, '/');
         <span class="sr-only" id="editToggleLabel">编辑模式</span>
       </button>
       <?php if ($__isSuper): /* 后台只有 admin 能进；普通账号这里什么都不输出 */ ?>
-      <a class="btn-admin" href="admin.php" title="管理后台">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.55 1z"/></svg>
-        <span class="sr-only">管理后台</span>
+      <?php /* 未登录时这里叫「登录」，登录后必须换名字 ——
+               同一个位置、同一个形状，只换字和链接。原先登录后只剩一枚
+               没有文字的齿轮，看起来像「登录按钮消失了」，而不是
+               「我已经在管理态里」。 */ ?>
+      <a class="tbm-btn tbm-btn--login" href="admin.php" title="管理后台">
+        <span class="tbm-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.55 1z"/></svg>
+        </span>
+        <span class="tbm-login-text">管理</span>
       </a>
       <?php endif; ?>
     <?php if (!$__isAdmin): ?>
@@ -459,6 +475,15 @@ hp_log_visit(false, '/');
                协议名链到根目录的 LICENSE 全文（rel="license" 是标准标注）。
 
                换协议时改两处：这里的名字，以及根目录 LICENSE 的正文。 */ ?>
+      <?php /* 库切换：站点默认（公共）/ 我的（私人）。
+               只有管理员看得到这两份 —— 普通用户的数据本来就在自己名下，
+               没有「切到哪一份」这回事。 */ ?>
+      <?php if ($onMine || $__isSuper): ?>
+      <div class="gnav-lib" role="group" aria-label="数据范围">
+        <a class="gnav-lib-btn<?= $onMine ? '' : ' is-on' ?>" href="./">站点库</a>
+        <a class="gnav-lib-btn<?= $onMine ? ' is-on' : '' ?>" href="?lib=mine">我的库</a>
+      </div>
+      <?php endif; ?>
       <div class="gnav-foot">
         <p class="gnav-copy">&copy; <?= h($copyYear) ?> <span class="gnav-owner"><?= h($copyOwner) ?></span></p>        <p class="gnav-rights">
           <a class="gnav-license" href="LICENSE" rel="license">MIT License</a>
@@ -472,10 +497,8 @@ hp_log_visit(false, '/');
         <?php endif; ?>
         <p class="gnav-meta">
           <span class="gnav-ver">Vnav <?= h(hp_version()) ?></span>
-          <?php if (trim(setting('author_github', '')) !== ''): ?>
-            <a class="gnav-link" href="<?= h(trim(setting('author_github', ''))) ?>"
-               target="_blank" rel="noopener noreferrer">项目主页</a>
-          <?php endif; ?>
+          <a class="gnav-link" href="<?= h($authorGh) ?>"
+             target="_blank" rel="noopener noreferrer">项目主页</a>
         </p>
       </div>
     </nav>
@@ -483,6 +506,14 @@ hp_log_visit(false, '/');
 
 <main class="stage" id="stage">
 
+  <?php /* 切到私人库时给一条明示。少了它，管理员看到链接突然变少
+           会以为是数据丢了 —— 这份数据只有他自己看得到。 */ ?>
+  <?php if ($onMine): ?>
+  <p class="mylib-note">
+    你正在看自己的私人库，这里的链接只有你能看到。
+    <a href="./">回到站点库</a>
+  </p>
+  <?php endif; ?>
   <?php if (!$ordered): ?>
     <div class="empty">
       <p class="empty-title">这里还没有东西</p>
@@ -538,7 +569,7 @@ hp_log_visit(false, '/');
                   && $l['icon_kind'] === 'file'
                   && is_file(HP_ROOT . '/' . $l['icon']);
             ?>
-              <li class="link-item<?= $isHidden ? ' is-hidden-link' : '' ?>" style="--i:<?= $i ?>;--hue:<?= $hue ?>" data-id="<?= (int)$l['id'] ?>"
+              <li class="link-item" style="--i:<?= $i ?>;--hue:<?= $hue ?>" data-id="<?= (int)$l['id'] ?>"
                   <?php if ($__isAdmin): ?>
                   data-title="<?= h($l['title']) ?>"
                   data-url="<?= h($l['url']) ?>"
@@ -694,17 +725,7 @@ hp_log_visit(false, '/');
     <?php /* 隐藏开关：滑块。默认关（公开），因为绝大多数链接是给
              自己看的公开收藏，把「隐藏」做成默认会让人莫名其妙
              看不到自己刚加的链接。 */ ?>
-    <div class="switch-row switch-row--tight">
-      <div>
-        <p class="sw-label">隐藏链接</p>
-        <p class="sw-desc" id="pHideDesc">关闭时所有访客可见</p>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="pHidden" name="hidden">
-        <span class="sw-track" aria-hidden="true"></span>
-        <span class="sr-only">隐藏链接（仅登录后可见）</span>
-      </label>
-    </div>
+    <?php /* 粘贴浮层的「隐藏链接」开关也一起撤了，理由同编辑器里那处 */ ?>
 
     <p class="f-error" id="pasteError" role="alert" hidden></p>
 
@@ -756,17 +777,11 @@ hp_log_visit(false, '/');
       <?php endforeach; ?>
     </select>
 
-    <div class="switch-row switch-row--tight">
-      <div>
-        <p class="sw-label">隐藏链接</p>
-        <p class="sw-desc" id="eHideDesc">关闭时所有访客可见</p>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="eHidden" name="hidden">
-        <span class="sw-track" aria-hidden="true"></span>
-        <span class="sr-only">隐藏链接（仅登录后可见）</span>
-      </label>
-    </div>
+    <?php /* 这里原本有一个「隐藏链接」开关。V1.1.0 删掉了：
+             它对普通用户完全无效（他的链接本来就在自己名下，别人看不到，
+             而登录后前台又不过滤，等于连自己都藏不住）；对管理员则是
+             「我的库」入口缺失时的补丁。入口补上之后，这个开关只剩下
+             误导 —— 写着「关闭时所有访客可见」，而访客从来不会看到他的库。 */ ?>
 
     <p class="f-error" id="editError" role="alert" hidden></p>
 
@@ -865,7 +880,7 @@ hp_log_visit(false, '/');
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="assets/ui.js?v=45" defer></script>
 <script src="assets/guest.js?v=52" defer></script>
-<script src="assets/app.js?v=44" defer></script>
+<script src="assets/app.js?v=45" defer></script>
 
 </body>
 </html>

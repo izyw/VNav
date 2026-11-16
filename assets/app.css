@@ -1198,13 +1198,6 @@ html[data-theme='celadon'] .link-icon.has-img {
 /* 有角标时，编辑按钮不再顶到最右，两者并排 */
 .link-priv + .link-edit { margin-left: 4px; }
 
-/* 隐藏链接的卡片加一道极淡的虚线边，扫一眼就能区分公开与私密 */
-html[data-layout='card'] .link-item.is-hidden-link .link,
-html[data-layout='compact'] .link-item.is-hidden-link .link {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--line-hi) 70%, transparent);
-}
-
 /* ==========================================================================
    形态 1：卡片聚合（card）—— 2~4 列自适应
    ========================================================================== */
@@ -1751,12 +1744,6 @@ body.hp.is-editing .link:hover {
   border-style: dashed;
   border-width: 1.5px;
   border-color: color-mix(in srgb, var(--text, #1d1d1f) 32%, transparent);
-}
-/* 隐藏链接本来就靠虚线区分，编辑态下全页都是虚线，它的边框换成强调色，
-   否则两种「虚线」会撞在一起分不清。 */
-body.hp.is-editing .link-item.is-hidden-link > .link,
-body.hp.is-editing .link-item.is-hidden-link > .link:hover {
-  border-color: rgb(var(--acc-glow) / .62);
 }
 
 /* 触摸设备上的关键取舍：

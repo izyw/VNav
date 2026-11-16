@@ -169,8 +169,6 @@
     const fUrl = document.getElementById('pUrl');
     const fTitle = document.getElementById('pTitle');
     const fGroup = document.getElementById('pGroup');
-    const fHidden = document.getElementById('pHidden');
-    const hideDesc = document.getElementById('pHideDesc');
     const fErr = document.getElementById('pasteError');
     const statusEl = document.getElementById('pasteStatus');
     const hostEl = document.getElementById('pasteHost');
@@ -180,13 +178,6 @@
     const spinner = saveBtn.querySelector('.spinner');
     let lastFocus = null;
     let busy = false;
-
-    const syncHideHint = () => {
-      if (!hideDesc || !fHidden) return;
-      hideDesc.textContent = fHidden.checked ? '开启后只有登录的你能看到' : '关闭时所有访客可见';
-    };
-    fHidden?.addEventListener('change', syncHideHint);
-    syncHideHint();
 
     const URL_RE = /\bhttps?:\/\/[^\s<>"'）)】」]+/i;
     const BARE_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?:\/[^\s<>"'）)】」]*)?/i;
@@ -260,7 +251,6 @@
       clearError();
       fUrl.value = url;
       fTitle.value = '';
-      if (fHidden) { fHidden.checked = false; syncHideHint(); }
       try { hostEl.textContent = new URL(url).hostname.replace(/^www\./, ''); } catch { hostEl.textContent = ''; }
       paintIcon(iconEl, '', '', hostEl.textContent);
       setStatus('正在识别名称与图标…', 'loading');
@@ -281,7 +271,6 @@
       clearError();
       fUrl.value = '';
       fTitle.value = '';
-      if (fHidden) { fHidden.checked = false; syncHideHint(); }
       hostEl.textContent = '';
       paintIcon(iconEl, '', '', '');
       setStatus(msg, '');
@@ -399,12 +388,11 @@
           url,
           title,
           group_id: Number(fGroup.value || 0),
-          hidden: fHidden?.checked ? 1 : 0,
           icon: iconEl.classList.contains('has-img') ? iconEl.querySelector('img')?.getAttribute('src') : '',
         });
         insertCard(data.link);
         closeBox();
-        toast('已添加「' + data.link.title + '」' + (data.link.hidden ? '（仅登录可见）' : ''), 'ok');
+        toast('已添加「' + data.link.title + '」' + , 'ok');
       } catch (err) {
         // 出错不清空输入，只提示
         showError(err.message);
@@ -456,7 +444,7 @@
 
   function fillItem(li, link) {
     const isPicked = picked.has(String(link.id));
-    li.className = 'link-item' + (link.hidden ? ' is-hidden-link' : '') + (isPicked ? ' is-picked' : '');
+    li.className = 'link-item' + (isPicked ? ' is-picked' : '');
     li.dataset.id = link.id;
     li.dataset.title = link.title;
     li.dataset.url = link.url;
@@ -510,8 +498,6 @@
     const eUrl    = document.getElementById('eUrl');
     const eTitle  = document.getElementById('eTitle');
     const eGroup  = document.getElementById('eGroup');
-    const eHidden = document.getElementById('eHidden');
-    const eHideDesc = document.getElementById('eHideDesc');
     const eErr    = document.getElementById('editError');
     const eIcon   = document.getElementById('editIcon');
     const eHost   = document.getElementById('editHost');
@@ -521,13 +507,6 @@
     const eSpinner = eSave.querySelector('.spinner');
     let editLastFocus = null;
     let editBusy = false;
-
-    const syncEditHide = () => {
-      if (eHideDesc && eHidden) {
-        eHideDesc.textContent = eHidden.checked ? '开启后只有登录的你能看到' : '关闭时所有访客可见';
-      }
-    };
-    eHidden?.addEventListener('change', syncEditHide);
 
     function showEditError(msg) {
       eErr.textContent = msg;
@@ -549,8 +528,6 @@
       eUrl.value = li.dataset.url || '';
       eTitle.value = li.dataset.title || '';
       eGroup.value = li.dataset.group || '0';
-      eHidden.checked = li.dataset.hidden === '1';
-      syncEditHide();
 
       try { eHost.textContent = new URL(eUrl.value).hostname.replace(/^www\./, ''); }
       catch { eHost.textContent = ''; }
@@ -595,7 +572,7 @@
       return eUrl.value.trim() !== (li.dataset.url || '')
         || eTitle.value.trim() !== (li.dataset.title || '')
         || String(eGroup.value) !== String(li.dataset.group || '0')
-        || (eHidden.checked ? '1' : '0') !== (li.dataset.hidden || '0');
+
     }
 
     async function saveEditor() {
@@ -618,7 +595,6 @@
         url,
         title,
         group_id: newGroup,
-        hidden: eHidden.checked ? 1 : 0,
         descr: li?.dataset.descr || '',
         icon: li?.dataset.icon || '',
       };
@@ -634,8 +610,7 @@
         fillItem(li, {
           id, url, title,
           group_id: newGroup,
-          hidden: eHidden.checked ? 1 : 0,
-          icon: li.dataset.icon || '',
+            icon: li.dataset.icon || '',
           descr: li.dataset.descr || '',
           hue: hue((() => { try { return new URL(url).hostname; } catch { return ''; } })()),
         });

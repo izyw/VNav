@@ -31,11 +31,18 @@ html[data-theme='atlas'],
 html[data-theme='auto'] {
   color-scheme: light;
 
-  /* #f5f5f7 是 Apple 的系统灰。纯白显得空，纯灰显得脏。 */
-  --at-paper:    #f5f5f7;
-  --at-paper-hi: #fbfbfd;
+  /* 三层灰，从外到内：外壳最淡 → 主区面板中灰 → 侧栏最深 → 卡片纯白。
+     为什么要三层而不是两层：只有「外壳 + 卡片」时，主区没有自己的面，
+     页面读起来是一整片背景上散着一堆白块，右侧边距和卡片区是同一个颜色。
+     加一层之后，卡片区成了有边界的「内容面板」，边距才像边距。
+
+     数值是按「相邻两层相差 3–4% 亮度」定的：差 1% 看不出来（之前侧栏和
+     外壳只差 3%，实测几乎无感）；差 8% 以上会变成色块拼接，白卡反而显脏。 */
+  --at-paper:    #f7f8fa;
+  --at-paper-hi: #fafbfc;
+  --at-stage-bg: #eff1f4;
   --at-card:     #ffffff;
-  --at-sunken:   #f0f0f3;
+  --at-sunken:   #e9ecf1;
   --at-ink:      #1d1d1f;
   --at-ink-2:    #6e6e73;
   --at-ink-3:    #86868b;
@@ -45,9 +52,8 @@ html[data-theme='auto'] {
   --at-accent-2: #0077ed;
   --at-accent-s: rgba(0, 113, 227, .10);
   --at-scrim:    rgba(245, 245, 247, .68);
-  /* 侧栏是「背景面」，比系统灰再深一档 —— 反过来（比主区亮）会让白色
-     卡片失去浮起感。只差 3%，但两块面就此分开。 */
-  --at-nav-bg:   #efeff2;
+  /* 侧栏是三层里最深的一面 —— 它比主区更深，白色卡片才有浮起感。 */
+  --at-nav-bg:   #e8eaed;
 
   /* 阴影退到第二线：静止态只靠边框分层，投影只在悬停与浮层出现。
      参考项目里没有一个是「静止也带明显阴影」的 —— 那会让白卡在浅底上
@@ -130,10 +136,11 @@ html[data-theme='auto'][data-accent] {
 html[data-theme='atlas-dark'] {
   color-scheme: dark;
 
-  --at-paper:    #0b0b0d;
-  --at-paper-hi: #16161a;
-  --at-card:     #1c1c1e;
-  --at-sunken:   #232326;
+  --at-paper:    #0c0c0f;
+  --at-paper-hi: #131318;
+  --at-stage-bg: #14141a;
+  --at-card:     #1e1e24;
+  --at-sunken:   #26262e;
   --at-ink:      #f5f5f7;
   --at-ink-2:    #a1a1a6;
   --at-ink-3:    #86868b;
@@ -143,7 +150,7 @@ html[data-theme='atlas-dark'] {
   --at-accent-2: #3d9bff;
   --at-accent-s: rgba(10, 132, 255, .16);
   --at-scrim:    rgba(11, 11, 13, .66);
-  --at-nav-bg:   #0e0e11;
+  --at-nav-bg:   #07070a;
 
   --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .5);
   --at-sh-sm: 0 1px 3px rgba(0, 0, 0, .55), 0 2px 6px -2px rgba(0, 0, 0, .45);
@@ -218,10 +225,11 @@ html[data-theme='atlas-dark'][data-accent] {
   html[data-theme='auto'] {
     color-scheme: dark;
 
-    --at-paper:    #0b0b0d;
-    --at-paper-hi: #16161a;
-    --at-card:     #1c1c1e;
-    --at-sunken:   #232326;
+    --at-paper:    #0c0c0f;
+    --at-paper-hi: #131318;
+    --at-stage-bg: #14141a;
+    --at-card:     #1e1e24;
+    --at-sunken:   #26262e;
     --at-ink:      #f5f5f7;
     --at-ink-2:    #a1a1a6;
     --at-ink-3:    #86868b;
@@ -231,7 +239,7 @@ html[data-theme='atlas-dark'][data-accent] {
     --at-accent-2: #3d9bff;
     --at-accent-s: rgba(10, 132, 255, .16);
     --at-scrim:    rgba(11, 11, 13, .66);
-    --at-nav-bg:   #0e0e11;
+    --at-nav-bg:   #07070a;
 
     --at-sh-xs: 0 1px 2px rgba(0, 0, 0, .5);
     --at-sh-sm: 0 1px 3px rgba(0, 0, 0, .55), 0 2px 6px -2px rgba(0, 0, 0, .45);
@@ -311,32 +319,19 @@ body.hp {
   font-family: var(--at-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 空气感：顶部一团极淡的蓝、右上一点紫、右下一点暖琥珀。
-     加第三层是因为前两层都在顶部 —— 整页上半冷、下半死灰，滚动到
-     第二屏之后背景就是一块平铺的 #f5f5f7。右下补一点暖色之后，
-     页面有了冷↔暖的对角，而且因为固定在视口（attachment: fixed），
-     滚到哪里都跟着，不会在中途「用完」。 */
-  background-color: var(--at-paper);
-  background-image:
-    radial-gradient(1100px 520px at 50% -18%, rgba(0, 113, 227, .06), transparent 70%),
-    radial-gradient(820px 460px at 88% 2%, rgba(120, 90, 255, .045), transparent 72%),
-    radial-gradient(960px 640px at 96% 112%, rgba(240, 180, 41, .055), transparent 70%),
-    linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 46%, var(--at-paper) 100%);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
+  /* 外壳是纯色，没有渐变也没有光晕。
+     之前这里有四层径向渐变（顶部蓝、右上紫、右下暖），本意是「空气感」，
+     实际效果是整片右侧背景都在发光——主区、边距、留白全被染上颜色，
+     卡片区看不出自己的边界。现在层次交给三段实色（外壳 / 主区 / 侧栏），
+     背景只负责「安静」。 */
+  background: var(--at-paper);
 }
 html[data-theme='atlas-dark'] body.hp {
-  background-image:
-    radial-gradient(1100px 520px at 50% -18%, rgba(10, 132, 255, .11), transparent 70%),
-    radial-gradient(820px 460px at 88% 2%, rgba(110, 80, 255, .06), transparent 72%),
-    linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 48%, var(--at-paper) 100%);
+  background: var(--at-paper);
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme='auto'] body.hp {
-    background-image:
-      radial-gradient(1100px 520px at 50% -18%, rgba(10, 132, 255, .11), transparent 70%),
-      radial-gradient(820px 460px at 88% 2%, rgba(110, 80, 255, .06), transparent 72%),
-      linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 48%, var(--at-paper) 100%);
+    background: var(--at-paper);
   }
 }
 body.hp::before { background-image: none; }
@@ -940,8 +935,22 @@ html[data-nav='mini'] body.hp .gnav--side .gnav-item {
    与加壳之前逐像素一致。程序框皮肤会把它变成一张真的容器。 */
 body.hp .shell { display: contents; }
 
+/* 主区是三层里的中间那一层：一块从侧栏右边铺开的灰色面板。
+   右侧留 10px、顶部 16px 圆角，露出一线外壳色 —— 不这么留的话，
+   这块背景会一路铺到视口右边缘，和「整个页面底色」没有区别，
+   加这层颜色就白加了。
+   左侧不留边距：那一侧被侧栏盖着，留了也看不见，反而会把卡片挤窄。
+
+   ⚠️ 必须限定在 atlas / auto 之下。frame 皮肤有自己的三区结构（整个应用
+   装在一张越界的框里），套上 margin-right 和顶部圆角会把框切歪。 */
 body.hp .stage {
   padding: clamp(18px, 2.6vw, 28px) var(--pad-x) 100px;
+}
+html[data-theme='atlas'] body.hp .stage,
+html[data-theme='auto'] body.hp .stage {
+  margin-right: 10px;
+  border-radius: 16px 16px 0 0;
+  background: var(--at-stage-bg);
 }
 /* 侧栏模式下正文让出左通道。不能只靠 padding 简写：home.css 用
    html[data-gnav='side'] body.hp .stage 单独补了 padding-left，
@@ -1181,18 +1190,6 @@ body.hp .link-priv {
 }
 body.hp .link-priv + .link-edit { margin-left: 2px; }
 
-html[data-layout='card'] body.hp .link-item.is-hidden-link .link,
-html[data-layout='compact'] body.hp .link-item.is-hidden-link .link,
-html[data-layout='grid'] body.hp .link-item.is-hidden-link .link {
-  border-style: dashed;
-}
-html[data-layout='card'] body.hp .link-item.is-hidden-link .link-icon,
-html[data-layout='compact'] body.hp .link-item.is-hidden-link .link-icon,
-html[data-layout='grid'] body.hp .link-item.is-hidden-link .link-icon {
-  filter: saturate(.35);
-}
-
-/* 入场：上浮 6px + 淡入，错峰 18ms */
 @media (prefers-reduced-motion: no-preference) {
   body.hp .link-item {
     animation: atRise .4s cubic-bezier(.16, 1, .3, 1) backwards;
@@ -1542,7 +1539,7 @@ body.hp.is-editing .stage::before {
 /* ==========================================================================
    14. 浮层
    --------------------------------------------------------------------------
-   越靠近「用户临时打开的界面」，圆角越大、阴影越深 —— Apple 的层级惯例。
+   越靠近「用户临时打开的界面」，圆角越大、阴影越深 —— 桌面系统的通行层级惯例。
    ========================================================================== */
 body.hp .paste-box,
 body.hp .keys-box {
@@ -1875,6 +1872,10 @@ body.hp .gnav-foot {
   padding: 16px 10px 2px;
   display: flex;
   flex-direction: column;
+  /* 整块居中：侧栏这一列是「面」而不是「行」，底部几行小字左对齐会
+     在 240px 的宽度里孤零零贴在左边，看起来像没排版。 */
+  align-items: center;
+  text-align: center;
   gap: 3px;
   font-size: 11px;
   line-height: 1.45;
@@ -1924,6 +1925,57 @@ body.hp .gnav-meta {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* 库切换：站点库 / 我的库。
+   放在页脚上方而不是顶栏 —— 它决定的是「这一页显示哪份数据」，
+   和分组导航属于同一层语义，放进顶栏会和皮肤、布局这些「显示设置」混在一起。 */
+body.hp .gnav-lib {
+  display: flex;
+  gap: 2px;
+  margin: 12px 2px 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--at-ink) 5%, transparent);
+}
+body.hp .gnav-lib-btn {
+  flex: 1 1 0;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--at-ink-3);
+  text-decoration: none;
+  transition: background .14s, color .14s;
+}
+body.hp .gnav-lib-btn:hover { color: var(--at-ink-2); }
+body.hp .gnav-lib-btn.is-on {
+  background: var(--at-card);
+  color: var(--at-ink);
+  font-weight: 600;
+  box-shadow: var(--at-sh-xs);
+}
+
+/* 私人库的顶部提示。只在 mine 态出现，说明「这里的链接访客看不到」 */
+body.hp .mylib-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  border-radius: var(--at-r-md);
+  border: 1px dashed color-mix(in srgb, var(--at-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--at-accent) 7%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--at-ink-2);
+}
+body.hp .mylib-note a {
+  color: var(--at-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* 侧栏收起成 68px 只剩图标，这些文字没有落脚处 */
 html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 /* 窄屏侧栏退化成横向滚动条，底部这行在横条里没有位置 */

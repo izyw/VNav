@@ -972,17 +972,6 @@ body.hp .link-priv {
 }
 body.hp .link-priv + .link-edit { margin-left: 2px; }
 
-/* 隐藏链接：虚线边 + 图标降饱和。扫一眼能分出公开与私密。 */
-html[data-layout='card'] body.hp .link-item.is-hidden-link .link,
-html[data-layout='compact'] body.hp .link-item.is-hidden-link .link,
-html[data-layout='grid'] body.hp .link-item.is-hidden-link .link {
-  border-style: dashed;
-}
-html[data-layout='card'] body.hp .link-item.is-hidden-link .link-icon,
-html[data-layout='compact'] body.hp .link-item.is-hidden-link .link-icon,
-html[data-layout='grid'] body.hp .link-item.is-hidden-link .link-icon {
-  filter: saturate(.45);
-}
 
 /* ==========================================================================
    10. 形态 1：图标宫格（grid）—— 默认形态
