@@ -215,7 +215,7 @@ hp_log_visit(false, '/');
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=55">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=57">
 <link rel="stylesheet" href="assets/skin-frame.css?v=52">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
@@ -1071,7 +1071,7 @@ hp_log_visit(false, '/');
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="assets/ui.js?v=46" defer></script>
 <script src="assets/guest.js?v=53" defer></script>
-<script src="assets/app.js?v=46" defer></script>
+<script src="assets/app.js?v=47" defer></script>
 
 </body>
 </html>

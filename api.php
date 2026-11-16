@@ -40,19 +40,29 @@ if ($action === 'export') {
     }
 
     $pdo = db();
+    /* 之前这里三条查询全是全表：任意注册用户带自己的 csrf 就能导出
+       站点默认库和其他所有用户的链接/分组/设置。现在按当前身份算 uid，
+       三条都带 WHERE user_id = ?。导出格式（version=1、settings 扁平 k/v）
+       保持不变，老备份照样能导入。管理员要整站备份请直接从服务器取
+       data/home.db —— 不为此开一个可被越权调用的全量分支。 */
+    $uid = hp_data_uid_for((string)($_GET['lib'] ?? 'site'));
+    $gs = $pdo->prepare('SELECT * FROM groups WHERE user_id = ? ORDER BY sort ASC, id ASC');
+    $gs->execute([$uid]);
+    $ls = $pdo->prepare('SELECT * FROM links WHERE user_id = ? ORDER BY sort ASC, id ASC');
+    $ls->execute([$uid]);
+    $ss = $pdo->prepare('SELECT k, v FROM settings WHERE user_id = ? ORDER BY k ASC');
+    $ss->execute([$uid]);
+    $settings = [];
+    foreach ($ss as $r) {
+        $settings[$r['k']] = $r['v'];
+    }
     $dump = [
         'format'     => 'vnav-backup',
         'version'    => 1,
         'exported_at'=> date('c'),
-        'groups'     => $pdo->query('SELECT * FROM groups ORDER BY sort ASC, id ASC')->fetchAll(),
-        'links'      => $pdo->query('SELECT * FROM links ORDER BY sort ASC, id ASC')->fetchAll(),
-        'settings'   => (function (PDO $p) {
-            $out = [];
-            foreach ($p->query('SELECT k, v FROM settings') as $r) {
-                $out[$r['k']] = $r['v'];
-            }
-            return $out;
-        })($pdo),
+        'groups'     => $gs->fetchAll(),
+        'links'      => $ls->fetchAll(),
+        'settings'   => $settings,
     ];
 
     $json = json_encode($dump, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
@@ -73,19 +83,12 @@ if ($method !== 'POST') {
     // 换一张验证码走 GET：登录页的 <img> 与刷新按钮都只能发 GET
     if ($action === 'captcha_new') {
         require __DIR__ . '/inc/captcha.php';
-        session_boot(); // 限流计数要存 session，先开
+        session_boot(); // 验证码答案要写 session
 
-        /* 不限流会被当成免费的 PNG 生成器：一次请求就是一次 GD 绘图
-           + 一条 INSERT。按会话每 10 秒最多 6 张，超了直接 429。
-           用 session 而不是数据库：这是临时节流，不值得落盘。 */
-        $now = time();
-        $win = (int)($_SESSION['__cap_t'] ?? 0);
-        if ($now - $win > 10) {
-            $_SESSION['__cap_t'] = $now;
-            $_SESSION['__cap_n'] = 0;
-        }
-        $_SESSION['__cap_n'] = (int)($_SESSION['__cap_n'] ?? 0) + 1;
-        if ($_SESSION['__cap_n'] > 6) {
+        /* 按 IP 限流：原来按 session 计数，请求时不带 cookie 就能无限
+           绕过，把这里当成免费的 PNG 生成器（一次 GD 绘图 + 一条 INSERT）。
+           固定窗口 10 秒最多 6 张。 */
+        if (!hp_rate_allow('cap:' . hp_client_ip(), 6, 10)) {
             json_err('请求过于频繁，请稍后再试', 429);
         }
         [$token] = hp_captcha_new();
@@ -99,8 +102,13 @@ if ($method !== 'POST') {
 if ($action === 'hit') {
     $id = (int)($body['id'] ?? 0);
     if ($id > 0) {
-        db()->prepare('UPDATE links SET hits = hits + 1 WHERE id = ?')->execute([$id]);
-        hp_log_click($id);
+        /* 同一 IP 对同一链接 30 秒内只计一次。之前游客可无限调用，
+           既污染统计又让 clicks 明细表膨胀。静默忽略而非报错，
+           不影响正常用户的点击体验。 */
+        if (hp_rate_allow('hit:' . $id . ':' . hp_client_ip(), 1, 30)) {
+            db()->prepare('UPDATE links SET hits = hits + 1 WHERE id = ?')->execute([$id]);
+            hp_log_click($id);
+        }
     }
     json_ok();
 }
@@ -228,7 +236,8 @@ $ADMIN_ONLY = [
     'geo_import', 'geo_clear', 'geo_backfill',
     'change_pass', 'set_captcha', 'unlock_all',
     'icon_sync', 'icon_refill', 'icon_gc', 'icon_purge',
-    'upgrade_apply', 'meta_refresh', 'meta_refresh_stats',
+    'upgrade_apply', 'upgrade_rollback', 'upgrade_drop_snapshot', 'upgrade_inspect',
+    'meta_refresh', 'meta_refresh_stats',
 ];
 if (in_array($action, $ADMIN_ONLY, true)) {
     require_admin();
@@ -903,7 +912,7 @@ try {
         case 'change_pass': {
             $old = (string)($body['old'] ?? '');
             $new = (string)($body['new'] ?? '');
-            if (strlen($new) < 6) json_err('新密码至少 6 位');
+            if (strlen($new) < 8) json_err('新密码至少 8 位');
             if (!password_verify($old, $CONFIG['admin_pass'])) json_err('原密码不正确');
 
             $tpl = file_get_contents(HP_ROOT . '/inc/config.php');
@@ -1114,13 +1123,10 @@ try {
             json_err('未知操作：' . $action, 404);
     }
 } catch (PDOException $e) {
-    if (!empty($CONFIG['debug'])) {
-        json_err('数据库错误：' . $e->getMessage(), 500);
-    }
+    // 错误详情只进服务端日志：以前 debug=true 时会把 SQL/路径原文回给客户端。
+    error_log('[vnav] DB error @ ' . $action . ': ' . $e->getMessage());
     json_err('数据库操作失败', 500);
 } catch (Throwable $e) {
-    if (!empty($CONFIG['debug'])) {
-        json_err($e->getMessage(), 500);
-    }
+    error_log('[vnav] error @ ' . $action . ': ' . $e->getMessage());
     json_err('服务器内部错误', 500);
 }

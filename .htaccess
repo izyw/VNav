@@ -19,7 +19,10 @@ Options -Indexes
 # ---------- 3. 不让浏览器猜类型 ----------
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
-    Header set Referrer-Policy "same-origin"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'"
+    Header set Strict-Transport-Security "max-age=31536000"
 </IfModule>
 
 # ---------- 4. 压缩（纯文本资源能小一半以上） ----------

@@ -725,13 +725,13 @@ body.hp .gnav-item:hover {
 }
 body.hp .gnav-item.is-active {
   color: var(--at-ink);
-  /* 选中底色从「白卡」换成组色的一层薄雾：白色在浅灰侧栏上是「抬起」，
-     但它跟任何一个分组都没有关系；换成 --gt-h 之后，选中的是哪一组
-     由颜色自己说明。着色用 color-mix 叠透明，暗底自动跟着变深。 */
-  background: color-mix(in srgb,
-      hsl(var(--gt-h, 220) 88% 64%) var(--gt-tint-a), transparent);
-  border-color: color-mix(in srgb,
-      hsl(var(--gt-h, 220) 60% 55%) var(--gt-edge-a), transparent);
+  /* 选中行不再铺一层组色薄雾。整列七个彩色块 + 彩色选中底在灰侧栏上
+     像一排贴纸，和主区那套克制的灰白卡片是两套语言。底色回到中性：
+     比侧栏深一档的灰，和 hover 的「浅一层」方向相反，两者一眼可分。
+     组色只留在两处 —— 左侧 3px 竖条、选中项图标块，都是「当前位置」
+     的安静信号，不拿颜色去填满整行。 */
+  background: color-mix(in srgb, var(--at-ink) 5%, var(--at-nav-bg));
+  border-color: color-mix(in srgb, var(--at-ink) 8%, var(--at-nav-bg));
   box-shadow: none;
 }
 body.hp .gnav-item.is-active::before { display: none; }
@@ -878,13 +878,15 @@ body.hp .gnav--side .gnav-item {
   font-weight: 600;
 }
 /* V1.3.8 起侧栏用图标代替小圆点：分类名是自建的，图标按名字匹配内置库。
-   V1.5.12 起这枚图标带色 —— 每个分组一个固定色相，和组标题、卡片悬停
-   用同一个 --gt-h。
 
-   为什么这里破例用实色，而不是卡片图标那套「95% 亮度的淡底 + 深色图标」：
-   28px 的块里，15px 描边图标的彩色面积不到 3%，淡底在灰侧栏上看着
-   仍然是灰的。要让「一列彩色」真的成立，只能让色块本身是实色。
-   全站只有这一处这样做，所以它反而成了识别度最高的那一处。 */
+   设计改版：默认态回到中性 —— 浅灰块 + 中性描边图标，无渐变无投影。
+   旧版是每组一枚实色渐变块（78% 饱和、60→48% 亮度、双层彩色投影），
+   一整列七枚在灰侧栏上像贴纸，和主区那套零彩度卡片不是一套语言，
+   用户直接反馈「很丑、突兀」。现在颜色只在「当前位置」出现：
+   选中组的图标块才染上该组的组色（同一个 --gt-h），其余保持中性灰。
+   这样组色从「七个静态色块」变成「一个会移动的焦点」，信息量不减，
+   噪音大降。主区组标题的小图标 (gh-ico) 仍保留实色 —— 那是内容区的
+   分类标识，和侧栏导航是两回事，不一起改。 */
 body.hp .gnav-ico {
   flex: 0 0 auto;
   display: grid;
@@ -892,23 +894,25 @@ body.hp .gnav-ico {
   width: 28px;
   height: 28px;
   border-radius: 9px;
+  background: color-mix(in srgb, var(--at-ink) 7%, var(--at-nav-bg));
+  color: var(--at-ink-3);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--at-ink) 8%, transparent);
+  transition: transform .18s cubic-bezier(.34, 1.4, .64, 1), background .18s, color .18s;
+}
+body.hp .gnav-item:hover .gnav-ico {
+  transform: translateY(-1px) scale(1.05);
+  background: color-mix(in srgb, var(--at-ink) 11%, var(--at-nav-bg));
+  color: var(--at-ink-2);
+}
+/* 选中组才染组色：用组色的实色渐变 + 白图标，是全列唯一带色的一枚，
+   和左侧那条 3px 组色竖条是同一个「你在这里」的信号。 */
+body.hp .gnav-item.is-active .gnav-ico {
+  transform: none;
   background: linear-gradient(155deg,
       hsl(var(--gt-h, 220) var(--gt-s) var(--gt-l1)),
       hsl(calc(var(--gt-h, 220) + 9) var(--gt-s) var(--gt-l2)));
   color: #fff;
-  box-shadow:
-    0 1px 2px hsl(var(--gt-h, 220) 70% 30% / .28),
-    0 4px 10px -4px hsl(var(--gt-h, 220) 72% 42% / .38),
-    inset 0 1px 0 hsl(0 0% 100% / .38);
-  transition: transform .18s cubic-bezier(.34, 1.4, .64, 1), box-shadow .18s;
-}
-body.hp .gnav-item:hover .gnav-ico {
-  transform: translateY(-1px) scale(1.05);
-}
-/* 选中项的图标块不再换色 —— 它本来就是这一组的颜色，换成强调蓝
-   反而会把「颜色 = 分组」这条规则打断。 */
-body.hp .gnav-item.is-active .gnav-ico {
-  transform: none;
+  box-shadow: 0 1px 2px hsl(var(--gt-h, 220) 70% 30% / .22);
 }
 /* 窄屏折叠条左侧的组色竖条 —— 和桌面侧栏选中项左边那条同款。
    折叠条正下方紧挨着组标题，用彩色图标块会和它撞脸；一条竖条表达的是
@@ -954,7 +958,7 @@ body.hp .gnav--side .gnav-count {
    强调蓝，一列七个分组全被染成同一个蓝，正好抵消了这套颜色。 */
 body.hp .gnav--side .gnav-item.is-active .gnav-count {
   background: transparent;
-  color: hsl(var(--gt-h, 220) 58% var(--gt-ink-l));
+  color: var(--at-ink-2);
 }
 body.hp .gnav--side .gnav-item.is-active {
   border-left-color: transparent;
@@ -2087,4 +2091,16 @@ html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 @media (hover: none) {
   html[data-layout] body.hp .link-edit { opacity: .5; }
   html[data-layout] body.hp.is-editing .link-edit { opacity: 1; }
+}
+
+/* 侧栏分组拖拽排序（编辑态）：平时侧栏项是普通 <a>，光标保持默认；
+   进入编辑态才提示可抓。拖动中的那一项压到上层并半透明，
+   让位的目标项移动一眼能看清。两套皮肤共用这段，frame 无独立覆盖。 */
+body.hp.is-editing .gnav--side .gnav-item { cursor: grab; }
+body.hp.is-drag-nav .gnav--side .gnav-item { cursor: grabbing; }
+body.hp .gnav-item.is-nav-dragging {
+  position: relative;
+  z-index: 5;
+  opacity: .58;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
 }

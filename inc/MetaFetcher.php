@@ -260,73 +260,47 @@ final class MetaFetcher
         return $out;
     }
 
-    /** GET 前 512KB，跟随重定向但最多 3 跳 */
+    /** GET 前 512KB，重定向逐跳校验、最多 3 跳（SSRF 防护见 curlSafely） */
     private function get(string $url, ?string &$finalUrl = null): string
     {
-        $finalUrl = $url;
-        if (!self::isPublicUrl($url)) {
-            return '';
-        }
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 3,
-            CURLOPT_TIMEOUT        => $this->timeout,
-            CURLOPT_CONNECTTIMEOUT => 4,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-            CURLOPT_ENCODING       => '',
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_NOPROGRESS     => false,
-            CURLOPT_BUFFERSIZE     => 16384,
-        ]);
-        curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function ($res, $dlTotal, $dlNow) {
-            return ($dlNow > $this->maxBytes) ? 1 : 0; // 返回非 0 中断
-        });
-        $body = curl_exec($ch);
-        $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL) ?: $url;
-        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
-
-        if (!is_string($body) || $code >= 400) {
+        $r = self::curlSafely($url, [
+            CURLOPT_RETURNTRANSFER  => true,
+            CURLOPT_TIMEOUT         => $this->timeout,
+            CURLOPT_CONNECTTIMEOUT  => 4,
+            CURLOPT_USERAGENT       => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+            CURLOPT_ENCODING        => '',
+            CURLOPT_SSL_VERIFYPEER  => true,
+            CURLOPT_SSL_VERIFYHOST  => 2,
+            CURLOPT_BUFFERSIZE      => 16384,
+        ], 3, $this->maxBytes);
+        $finalUrl = $r['finalUrl'];
+        if ($r['body'] === '' || $r['code'] >= 400) {
             return '';
         }
         // 非 HTML 就别解析了
-        if (stripos(substr($body, 0, 200), '<html') === false && stripos(substr($body, 0, 400), '<!doctype') === false) {
+        if (stripos(substr($r['body'], 0, 200), '<html') === false && stripos(substr($r['body'], 0, 400), '<!doctype') === false) {
             return '';
         }
-        return $body;
+        return $r['body'];
     }
 
     /** 下载图标、校验类型、转成 png/ico 落盘，返回相对路径 */
     public function cacheIcon(string $iconUrl, string $host): string
     {
-        if (!self::isPublicUrl($iconUrl)) {
-            return '';
-        }
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $iconUrl,
+        // 重定向逐跳校验，且校验响应类型 —— cacheIcon 原本没有「须含 <html>」
+        // 那道软限制，若不查重定向，内网图片会被落到 data/icons/ 对外可访问。
+        $r = self::curlSafely($iconUrl, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 2,
             CURLOPT_TIMEOUT        => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => 4,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        ]);
-        $bin = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $mime = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
+        ], 2);
+        $bin  = $r['body'];
+        $code = $r['code'];
+        $mime = $r['mime'];
 
-        if (!is_string($bin) || $code >= 400 || strlen($bin) < 64 || strlen($bin) > 2 * 1024 * 1024) {
+        if ($bin === '' || $code >= 400 || strlen($bin) < 64 || strlen($bin) > 2 * 1024 * 1024) {
             return '';
         }
         $mime = strtolower(trim(explode(';', $mime)[0]));
@@ -434,6 +408,128 @@ final class MetaFetcher
         return true;
     }
 
+    /* ----------------------------------------------------------------------
+       SSRF 防护：curl 自带的 FOLLOWLOCATION 只认协议、不认目标 IP ——
+       自己的公网域名 302 到 127.0.0.1 / 169.254.169.254（云元数据）时
+       会照单全收。下面这组函数让重定向逐跳经过 isPublicUrl()，并把
+       已验证的 IP 用 CURLOPT_RESOLVE 钉死，杜绝二次解析 rebinding。
+       ---------------------------------------------------------------------- */
+
+    /** 把 Location（可能是相对地址）解析成绝对 URL */
+    private static function absoluteUrl(string $base, string $ref): string
+    {
+        $ref = trim($ref);
+        if (preg_match('~^https?://~i', $ref)) {
+            return $ref;
+        }
+        $p = parse_url($base);
+        if (!$p || empty($p['scheme']) || empty($p['host'])) {
+            return '';
+        }
+        $scheme = strtolower($p['scheme']);
+        $auth   = $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '');
+        if (str_starts_with($ref, '//')) {
+            return $scheme . ':' . $ref;
+        }
+        if (str_starts_with($ref, '/')) {
+            return $scheme . '://' . $auth . $ref;
+        }
+        $path = $p['path'] ?? '/';
+        $pos  = strrpos($path, '/');
+        $dir  = $pos === false ? '/' : substr($path, 0, $pos + 1);
+        return $scheme . '://' . $auth . $dir . $ref;
+    }
+
+    /** 从响应头里取最后一处 Location */
+    private static function locationFromHeaders(string $headers): string
+    {
+        $loc = '';
+        foreach (preg_split('/\r?\n/', $headers) ?: [] as $line) {
+            if (preg_match('~^Location\s*:\s*(.+)$~i', trim($line), $m)) {
+                $loc = trim($m[1]);
+            }
+        }
+        return $loc;
+    }
+
+    /** 已验证域名的 host:port:ip，交给 CURLOPT_RESOLVE 固定解析结果 */
+    private static function pinnedResolve(string $url): array
+    {
+        $p = parse_url($url);
+        if (!$p || empty($p['host'])) {
+            return [];
+        }
+        $host = strtolower($p['host']);
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return []; // 字面量 IP 已是连接目标，isPublicUrl 已校验过
+        }
+        $ip = @gethostbyname($host);
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return [];
+        }
+        $port = $p['port'] ?? (strtolower($p['scheme'] ?? '') === 'https' ? 443 : 80);
+        return [$host . ':' . $port . ':' . $ip];
+    }
+
+    /**
+     * 单次请求 + 手动逐跳跟随重定向，每一跳都过 isPublicUrl()。
+     *
+     * @param array $opts       curl_setopt_array 的选项，FOLLOWLOCATION 会被强制关闭
+     * @param int   $maxRedirects 最多跟随几跳
+     * @param int   $maxBytes  进度回调的字节上限，0 表示不限制
+     * @return array{body:string, code:int, mime:string, finalUrl:string}
+     */
+    private static function curlSafely(string $url, array $opts, int $maxRedirects, int $maxBytes = 0): array
+    {
+        $finalUrl = $url;
+        for ($hop = 0; $hop <= $maxRedirects; $hop++) {
+            if (!self::isPublicUrl($url)) {
+                return ['body' => '', 'code' => 0, 'mime' => '', 'finalUrl' => $finalUrl];
+            }
+            $ch = curl_init();
+            $o = $opts;
+            $o[CURLOPT_URL] = $url;
+            $o[CURLOPT_FOLLOWLOCATION] = false; // 关键：绝不交给 curl 自动跟
+            $o[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+            $pin = self::pinnedResolve($url);
+            if ($pin) {
+                $o[CURLOPT_RESOLVE] = $pin;
+            }
+            $headers = '';
+            $o[CURLOPT_HEADERFUNCTION] = static function ($c, $line) use (&$headers) {
+                $headers .= $line;
+                return strlen($line);
+            };
+            curl_setopt_array($ch, $o);
+            if ($maxBytes > 0) {
+                curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+                curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, static function ($res, $dlTotal, $dlNow) use ($maxBytes) {
+                    return $dlNow > $maxBytes ? 1 : 0;
+                });
+            }
+            $body = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $mime = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+            $finalUrl = $url;
+
+            if (!is_string($body) || $code >= 400) {
+                return ['body' => '', 'code' => $code, 'mime' => $mime, 'finalUrl' => $finalUrl];
+            }
+            if ($code >= 300 && $code < 400 && $hop < $maxRedirects) {
+                $loc  = self::locationFromHeaders($headers);
+                $next = $loc !== '' ? self::absoluteUrl($url, $loc) : '';
+                if ($next === '' || !self::isPublicUrl($next)) {
+                    return ['body' => '', 'code' => $code, 'mime' => $mime, 'finalUrl' => $finalUrl];
+                }
+                $url = $next;
+                continue;
+            }
+            return ['body' => $body, 'code' => $code, 'mime' => $mime, 'finalUrl' => $finalUrl];
+        }
+        return ['body' => '', 'code' => 0, 'mime' => '', 'finalUrl' => $finalUrl];
+    }
+
     /* ======================================================================
        并发抓取
        ----------------------------------------------------------------------
@@ -451,8 +547,9 @@ final class MetaFetcher
     {
         return [
             CURLOPT_RETURNTRANSFER  => true,
-            CURLOPT_FOLLOWLOCATION  => true,
-            CURLOPT_MAXREDIRS       => 3,
+            /* SSRF：不自动跟随。重定向由 multiGet() 逐跳解析 Location 并过
+               isPublicUrl() 后才重新入队，避免公网域名 302 打进内网。 */
+            CURLOPT_FOLLOWLOCATION  => false,
             CURLOPT_TIMEOUT         => $timeout,
             /* 连接超时不能等于总超时：连不上和读得慢是两件事。
                连不上要尽快判死（2 秒），把时间还给它后面的正常站点。 */
@@ -486,7 +583,7 @@ final class MetaFetcher
                 $out[$k] = ['body' => '', 'finalUrl' => (string)$u, 'code' => 0, 'mime' => ''];
                 continue;
             }
-            $queue[$k] = (string)$u;
+            $queue[$k] = ['url' => (string)$u, 'hops' => 0];
         }
         if (!$queue) {
             return $out;
@@ -498,19 +595,34 @@ final class MetaFetcher
             @curl_multi_setopt($mh, CURLMOPT_MAX_TOTAL_CONNECTIONS, $limit);
         }
 
-        $active = [];   // spl_object_id => ['ch' => CurlHandle, 'key' => 原 key]
+        $active = [];   // spl_object_id => ['ch'=>CurlHandle, 'key'=>原key, 'hops'=>跳数, 'headers'=>响应头]
 
-        $fill = function () use (&$active, &$queue, $mh, $limit, $timeout) {
+        // 建一条请求：固定已验证 IP，并收集响应头供逐跳解析 Location
+        $spawn = function ($key, string $url, int $hops) use (&$active, $mh, $timeout) {
+            $ch = curl_init();
+            curl_setopt_array($ch, self::baseOpts($timeout));
+            curl_setopt($ch, CURLOPT_URL, $url);
+            $pin = self::pinnedResolve($url);
+            if ($pin) {
+                curl_setopt($ch, CURLOPT_RESOLVE, $pin);
+            }
+            $headers = '';
+            curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($c, $line) use (&$headers) {
+                $headers .= $line;
+                return strlen($line);
+            });
+            curl_multi_add_handle($mh, $ch);
+            $active[spl_object_id($ch)] = [
+                'ch' => $ch, 'key' => $key, 'hops' => $hops, 'headers' => &$headers,
+            ];
+        };
+
+        $fill = function () use (&$active, &$queue, $spawn, $limit) {
             while (count($active) < $limit && $queue) {
-                $key = array_key_first($queue);
-                $url = $queue[$key];
+                $key  = array_key_first($queue);
+                $item = $queue[$key];
                 unset($queue[$key]);
-
-                $ch = curl_init();
-                curl_setopt_array($ch, self::baseOpts($timeout));
-                curl_setopt($ch, CURLOPT_URL, $url);
-                curl_multi_add_handle($mh, $ch);
-                $active[spl_object_id($ch)] = ['ch' => $ch, 'key' => $key];
+                $spawn($key, (string)$item['url'], (int)$item['hops']);
             }
         };
 
@@ -529,7 +641,26 @@ final class MetaFetcher
                 if ($key === null) {
                     continue;
                 }
-                $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                $code   = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                $hops   = (int)($active[$sid]['hops'] ?? 0);
+                $header = (string)($active[$sid]['headers'] ?? '');
+
+                // 3xx：逐跳校验 Location；合法就重新入队，非法/超跳则判失败。
+                // 绝不让 curl 自动跳，否则公网域名可 302 到内网/云元数据。
+                if ($code >= 300 && $code < 400) {
+                    $loc  = self::locationFromHeaders($header);
+                    $next = $loc !== '' ? self::absoluteUrl((string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL), $loc) : '';
+                    curl_multi_remove_handle($mh, $ch);
+                    curl_close($ch);
+                    unset($active[$sid]);
+                    if ($next !== '' && self::isPublicUrl($next) && $hops < 3) {
+                        $queue[$key] = ['url' => $next, 'hops' => $hops + 1];
+                    } else {
+                        $out[$key] = ['body' => '', 'finalUrl' => $next ?: (string)$loc, 'code' => $code, 'mime' => ''];
+                    }
+                    continue;
+                }
+
                 $body = (string)curl_multi_getcontent($ch);
                 $out[$key] = [
                     'body'     => $code >= 400 ? '' : $body,

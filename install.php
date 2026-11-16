@@ -4,6 +4,14 @@
  */
 declare(strict_types=1);
 define('HP_ROOT', __DIR__);
+
+// 装完就别再暴露安装向导：已安装直接 404，连页面都不渲染。
+// 包里仍保留本文件供首次安装；生产环境也可直接删掉它。
+if (is_file(__DIR__ . '/inc/config.php')) {
+    http_response_code(404);
+    exit;
+}
+
 require __DIR__ . '/inc/compress.php';
 require __DIR__ . '/inc/schema.php';
 
@@ -28,8 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
     $pass  = (string)($_POST['pass'] ?? '');
     $title = trim($_POST['site_title'] ?? 'Vnav');
 
-    if ($user === '' || strlen($pass) < 6) {
-        $err = '账号不能为空，密码至少 6 位。';
+    if ($user === '' || strlen($pass) < 8) {
+        $err = '账号不能为空，密码至少 8 位。';
     } else {
         $dbPath = __DIR__ . '/data/home.db';
         if (!is_dir(__DIR__ . '/data')) {

@@ -1936,6 +1936,180 @@
     });
   })();
 
+  /* ==================================================================
+     侧栏分组拖拽排序（仅编辑态）。
+     服务端 group_reorder 早已备好（一次提交整列 id、带 user_id 校验、
+     全量对账失败就整批作废），这里补的是一直缺着的手势。
+
+     刻意只在编辑态启用：侧栏项本质是 <a href="#gN">，平时点一下要跳到
+     对应分组；若常驻拖拽，手一抖就会把「跳转」变成一次误排序。
+     触摸沿用卡片那套「按住 260ms 才起拖」——滑屏手势必须让给浏览器，
+     起拖后再用 passive:false 的 touchmove 拦；绝不在手势中改 touch-action。
+     ================================================================== */
+  (() => {
+    const track = document.getElementById('gnav-track');
+    if (!track) return;
+
+    const THRESHOLD = 6;
+    const HOLD_MS = 260;
+    const HOLD_SLOP = 8;
+
+    let el = null;            // 正在拖的那一项
+    let started = false;
+    let startX = 0, startY = 0;
+    let holdTimer = 0;
+    let suppressUntil = 0;    // 吞掉松手那一发 click，避免跳锚点
+    let snap = [];            // 落点用起手/重排后的矩形快照，不实时读
+    let beforeIds = [];       // 起手顺序，取消或存失败时还原
+
+    const idleIds = () => $$('.gnav-item', track)
+      .map(n => Number(n.dataset.group || 0)).filter(n => n > 0);
+    const clearHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; } };
+
+    /* 快照排除正在拖的项：它的位置是被我们改的那个，
+       拿它当参照会自证式抖动（卡片拖拽踩过同一个坑）。 */
+    const takeSnap = () => {
+      snap = $$('.gnav-item', track).filter(n => n !== el).map(n => {
+        const r = n.getBoundingClientRect();
+        return { el: n, mid: r.top + r.height / 2 };
+      });
+    };
+
+    const restore = () => {
+      for (const id of beforeIds) {
+        const n = track.querySelector(`.gnav-item[data-group="${id}"]`);
+        if (n) track.appendChild(n);
+      }
+      snap = [];
+    };
+
+    /* capture 阶段拦在 track 上，先于 document 的冒泡监听生效。
+       拖动结束紧跟的 click 若放行，<a> 就会跳到旧锚点，看着像排序没生效。 */
+    track.addEventListener('click', e => {
+      if (Date.now() < suppressUntil) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+
+    let blocked = false;
+    const block = ev => { if (ev.cancelable) ev.preventDefault(); };
+    const seize = on => {
+      if (on && !blocked) {
+        document.addEventListener('touchmove', block, { passive: false });
+        blocked = true;
+      } else if (!on && blocked) {
+        document.removeEventListener('touchmove', block, { passive: false });
+        blocked = false;
+      }
+    };
+
+    /* 一维竖列表：第一个中线在指针下方的项就是插入点，没有就追加末尾。
+       直接挪 DOM（不插占位线），位置参照系全程稳定。 */
+    const place = (x, y) => {
+      if (!snap.length) takeSnap();
+      let target = null;
+      for (const s of snap) {
+        if (y < s.mid) { target = s.el; break; }
+      }
+      if (target) {
+        if (el.nextElementSibling === target) return;
+        target.before(el);
+      } else {
+        if (!el.nextElementSibling) return;
+        track.appendChild(el);
+      }
+      takeSnap(); // DOM 真挪过了，重拍一次，后续落点才准
+    };
+
+    const begin = () => {
+      started = true;
+      el.classList.add('is-nav-dragging');
+      document.body.classList.add('is-drag-nav');
+      suppressUntil = Date.now() + 500;
+      takeSnap();
+      navigator.vibrate?.(12); // 不支持的设备静默跳过
+    };
+
+    const cleanup = () => {
+      clearHold();
+      seize(false);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
+      document.body.classList.remove('is-drag-nav');
+      el?.classList.remove('is-nav-dragging');
+      el?.removeAttribute('draggable');
+    };
+
+    const onMove = ev => {
+      if (!started) {
+        const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+        if (ev.pointerType === 'touch') {
+          // 长按等待期间手指一滑，说明用户要滚页面，让给他
+          if (dist > HOLD_SLOP) { clearHold(); cleanup(); el = null; return; }
+          return;
+        }
+        if (dist < THRESHOLD) return;
+        begin();
+      }
+      if (ev.cancelable) ev.preventDefault();
+      place(ev.clientX, ev.clientY);
+    };
+
+    const onUp = async () => {
+      cleanup();
+      if (!started) { el = null; return; }
+      const after = idleIds();
+      if (after.join(',') === beforeIds.join(',')) { el = null; return; }
+
+      toast('正在保存分组顺序…');
+      try {
+        await api({ action: 'group_reorder', ids: after });
+        /* 侧栏顺序、主区分区顺序、#gN 锚点三者都由 PHP 按 sort 渲染，
+           刷新一次就全部对齐 —— 局部拼装很容易漏掉其中一处。 */
+        location.reload();
+      } catch (err) {
+        restore(); // 存失败就把界面还原，别留一个刷新后必跳回去的假象
+        toast(err.message || '排序保存失败', 'bad');
+        el = null;
+      }
+    };
+
+    const onCancel = () => {
+      cleanup();
+      if (started) restore();
+      el = null;
+    };
+
+    track.addEventListener('pointerdown', e => {
+      if (!document.body.classList.contains('is-editing')) return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      const item = e.target.closest('.gnav-item');
+      if (!item || !track.contains(item)) return;
+
+      /* 侧栏项是 <a href="#gN">。按住再移动会被浏览器当成原生链接拖拽，
+         dragstart 一发 pointermove 就不再送达 —— 手势刚越过阈值就断，
+         表现是「拖了但什么都没发生」。卡片拖拽里也专门兜过这一层。 */
+      item.setAttribute('draggable', 'false');
+      el = item;
+      started = false;
+      startX = e.clientX; startY = e.clientY;
+      beforeIds = idleIds();
+      snap = [];
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
+
+      if (e.pointerType === 'touch') {
+        holdTimer = setTimeout(() => {
+          holdTimer = 0;
+          if (started || !el) return;
+          begin();
+          seize(true);
+        }, HOLD_MS);
+      }
+    });
+  })();
+
   /* 「这些链接是你自己的副本」提示：点知道了写 user 级 setting。
      写失败就保持提示可见，用户还能再点一次 —— 不要先藏起来再说。 */
   (() => {

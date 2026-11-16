@@ -24,6 +24,23 @@ $CONFIG = require $__cfgFile;
 date_default_timezone_set($CONFIG['timezone'] ?? 'Asia/Shanghai');
 mb_internal_encoding('UTF-8');
 
+/* ---------- 安全响应头 ----------
+   放在 PHP 层而不只写 .htaccess：生产前面若挂 Nginx/反代，.htaccess 根本
+   不会被读取。这里统一输出，Apache/Nginx 都生效。页面用了少量内联
+   script/style（登录弹窗、主题切换），所以这两项保留 'unsafe-inline'；
+   CSP 的价值在于不加载外域脚本、不被 iframe 套用、不执行 object。 */
+if (!headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'");
+    $__https = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+        || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    if ($__https) {
+        header('Strict-Transport-Security: max-age=31536000');
+    }
+}
+
 // 皮肤定义（hp_skins / hp_skin_safe）—— index、admin 都要用，放这里统一加载
 require_once __DIR__ . '/skins.php';
 // 展示形态清单（hp_layouts / hp_layout_safe）
@@ -44,6 +61,42 @@ if (!empty($CONFIG['debug'])) {
 } else {
     error_reporting(E_ALL);
     ini_set('display_errors', '0');
+}
+
+/**
+ * 轻量固定窗口限流。表懒创建，老库升级不用跑迁移脚本。
+ * 用途是「挡刷」（验证码图片、点击计数）而非安全边界，所以组件异常时
+ * 放行 —— 不能因为限流表坏了让全站不可用。
+ */
+function hp_rate_allow(string $key, int $limit, int $window): bool
+{
+    try {
+        $pdo = db();
+        $pdo->exec('CREATE TABLE IF NOT EXISTS rate_limits (
+            k TEXT PRIMARY KEY, n INTEGER NOT NULL, win INTEGER NOT NULL
+        )');
+        $now = time();
+        $st = $pdo->prepare('SELECT n, win FROM rate_limits WHERE k = ?');
+        $st->execute([$key]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row && $now - (int)$row['win'] < $window) {
+            if ((int)$row['n'] >= $limit) {
+                return false;
+            }
+            $pdo->prepare('UPDATE rate_limits SET n = n + 1 WHERE k = ?')->execute([$key]);
+        } else {
+            $pdo->prepare('INSERT INTO rate_limits(k, n, win) VALUES(?, 1, ?)
+                           ON CONFLICT(k) DO UPDATE SET n = 1, win = excluded.win')
+                ->execute([$key, $now]);
+        }
+        // 概率性清理，避免这张表无限膨胀
+        if (random_int(1, 200) === 1) {
+            $pdo->prepare('DELETE FROM rate_limits WHERE win < ?')->execute([$now - 86400]);
+        }
+        return true;
+    } catch (Throwable $e) {
+        return true;
+    }
 }
 
 // ---------- 数据库 ----------
