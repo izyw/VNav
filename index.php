@@ -164,8 +164,8 @@ hp_log_visit(false, '/');
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=47">
-<link rel="stylesheet" href="assets/skin-frame.css?v=49">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=48">
+<link rel="stylesheet" href="assets/skin-frame.css?v=50">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
@@ -415,7 +415,12 @@ hp_log_visit(false, '/');
                收起时只占一行、永远知道自己在哪组，展开时是竖排列表、
                手指直接上下滑，不用横向找。桌面端这条不显示。 */ ?>
       <button class="gnav-mtoggle" type="button" id="gnavMToggle"
-              aria-expanded="false" aria-controls="gnav-track">
+              aria-expanded="false" aria-controls="gnav-track"
+              <?php if (isset($ordered[0])): ?>style="--gt-h:<?= hp_group_hue($ordered[0]['name'], (string)($ordered[0]['icon'] ?? '')) ?>"<?php endif; ?>>
+        <?php /* 当前分组的颜色由 ui.js 同步到 --gt-h，左侧那条 3px 竖条跟着变色。
+               这里不做成彩色图标块：折叠条正下方紧挨着组标题，两个同款图标
+               上下叠着会像同一件事说了两遍。竖条是「当前位置」的语言，
+               和桌面侧栏选中项左边那条是同一个东西。 */ ?>
         <span class="gnav-mcurrent" id="gnavMCurrent">分组</span>
         <span class="gnav-mcount" id="gnavMCount"></span>
         <svg class="gnav-mchev" viewBox="0 0 24 24" width="16" height="16" fill="none"
@@ -797,14 +802,14 @@ hp_log_visit(false, '/');
 <?php endif; ?>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=43" defer></script>
+<script src="assets/ui.js?v=44" defer></script>
 <script src="assets/guest.js?v=52" defer></script>
 <script src="assets/app.js?v=42" defer></script>
 <?php else: ?>
 <?php /* 另一个分支（没有分组 / 没有内容）也把三个脚本全加载：
          guest.js 要负责把本地沙盒里的数据画出来，
          app.js 负责编辑模式 —— 少了任何一个，这类页面就是只读的。 */ ?>
-<script src="assets/ui.js?v=43" defer></script>
+<script src="assets/ui.js?v=44" defer></script>
 <script src="assets/guest.js?v=52" defer></script>
 <script src="assets/app.js?v=42" defer></script>
 <?php endif; ?>

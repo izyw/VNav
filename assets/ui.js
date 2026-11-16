@@ -361,6 +361,12 @@
         const c = (on.querySelector('.gnav-count')?.textContent || '').trim();
         mCount.textContent = c ? c + ' 个' : '';
       }
+      /* 折叠条左侧那条竖条跟着当前分组变色。--gt-h 直接取自侧栏那一项，
+         不在这里另算一遍色相 —— 色相表在 PHP 里，JS 再存一份迟早会漂移。 */
+      if (mtoggle) {
+        const h = on.style.getPropertyValue('--gt-h');
+        if (h) mtoggle.style.setProperty('--gt-h', h);
+      }
     };
 
     const closeM = () => {

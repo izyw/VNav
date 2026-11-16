@@ -628,7 +628,7 @@ html[data-theme='auto'] {
   --gt-s: 78%;
   --gt-l1: 60%;
   --gt-l2: 48%;
-  --gt-tint-a: 10%;
+  --gt-tint-a: 9%;
   --gt-tint-a2: 20%;
   --gt-ink-l: 38%;
   --gt-edge-a: 24%;
@@ -637,7 +637,7 @@ html[data-theme='atlas-dark'] {
   --gt-s: 60%;
   --gt-l1: 47%;
   --gt-l2: 38%;
-  --gt-tint-a: 22%;
+  --gt-tint-a: 18%;
   --gt-tint-a2: 30%;
   --gt-ink-l: 76%;
   --gt-edge-a: 32%;
@@ -647,7 +647,7 @@ html[data-theme='atlas-dark'] {
     --gt-s: 60%;
     --gt-l1: 47%;
     --gt-l2: 38%;
-    --gt-tint-a: 22%;
+    --gt-tint-a: 18%;
     --gt-tint-a2: 30%;
     --gt-ink-l: 76%;
     --gt-edge-a: 32%;
@@ -677,7 +677,7 @@ body.hp .gnav-item.is-active {
      但它跟任何一个分组都没有关系；换成 --gt-h 之后，选中的是哪一组
      由颜色自己说明。着色用 color-mix 叠透明，暗底自动跟着变深。 */
   background: color-mix(in srgb,
-      hsl(var(--gt-h, 220) 80% 48%) var(--gt-tint-a), transparent);
+      hsl(var(--gt-h, 220) 88% 64%) var(--gt-tint-a), transparent);
   border-color: color-mix(in srgb,
       hsl(var(--gt-h, 220) 60% 55%) var(--gt-edge-a), transparent);
   box-shadow: none;
@@ -698,7 +698,7 @@ body.hp .gnav-count {
 }
 body.hp .gnav-item.is-active .gnav-count {
   background: color-mix(in srgb,
-      hsl(var(--gt-h, 220) 78% 50%) var(--gt-tint-a2), transparent);
+      hsl(var(--gt-h, 220) 86% 58%) var(--gt-tint-a2), transparent);
   color: hsl(var(--gt-h, 220) 58% var(--gt-ink-l));
 }
 
@@ -854,6 +854,19 @@ body.hp .gnav-item:hover .gnav-ico {
 body.hp .gnav-item.is-active .gnav-ico {
   transform: none;
 }
+/* 窄屏折叠条左侧的组色竖条 —— 和桌面侧栏选中项左边那条同款。
+   折叠条正下方紧挨着组标题，用彩色图标块会和它撞脸；一条竖条表达的是
+   「当前位置」，正好补上窄屏丢掉的那点颜色。--gt-h 由 ui.js 同步。 */
+body.hp .gnav-mtoggle { position: relative; }
+body.hp .gnav-mtoggle::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 3px;
+  height: 17px;
+  border-radius: 2px;
+  background: hsl(var(--gt-h, 220) 76% 55%);
+  transition: background .2s;
+}
 body.hp .gnav--side .gnav-item::before { content: none; }
 /* 选中行左边一条 3px 组色短条。左侧栏的通用语言（Linear / Notion /
    shadcn），比整行换底色更安静，也让「当前在哪一组」在扫视时最先命中。 */
@@ -881,9 +894,11 @@ body.hp .gnav--side .gnav-count {
   padding: 0;
   color: var(--at-ink-3);
 }
+/* 侧栏的计数是纯数字（无胶囊），选中时跟着分组变色 —— 之前是统一的
+   强调蓝，一列七个分组全被染成同一个蓝，正好抵消了这套颜色。 */
 body.hp .gnav--side .gnav-item.is-active .gnav-count {
   background: transparent;
-  color: var(--at-accent);
+  color: hsl(var(--gt-h, 220) 58% var(--gt-ink-l));
 }
 body.hp .gnav--side .gnav-item.is-active {
   border-left-color: transparent;
