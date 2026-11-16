@@ -600,38 +600,122 @@ body.hp .gnav--side .gnav-track {
   }
 }
 
-/* 侧栏放不下时（<1140px），退化成顶部一行横条。
-   这是旧版最大的缺陷：<1180px 直接 display:none，分组导航凭空消失。 */
+/* 侧栏放不下时（<1140px）改成**顶部可折叠的一条**。
+   早先这里是「一行横向滚动条」：十几个分组排成一行，总宽 1193px 塞进
+   390px 的屏幕，必须横向滑才能看到后面的组 —— 滑到一半还看不见自己在
+   哪一组。现在改成：收起时只占一行、直接显示当前分组名；点开是一块
+   竖排下拉面板，上下滑就行，不需要任何横向操作。 */
 @media (max-width: 1139px) {
   body.hp .gnav--side {
     position: sticky;
+    /* top 由 JS 把顶栏实测高度写进 --hp-bar（窄屏顶栏是两行，写死 58 会让
+       这一条钻到顶栏下面去）。 */
     top: var(--hp-bar);
     left: auto;
     width: auto;
     max-height: none;
+    /* 下拉面板要溢出到内容上，所以这里不能出现 overflow:hidden */
     overflow: visible;
-    padding: 8px var(--pad-x);
-    margin-inline: calc(var(--pad-x) * -1);
-    background: color-mix(in srgb, var(--bg-0) 88%, transparent);
+    padding: 0;
+    margin: 8px 0 0;              /* 与顶栏拉开，原来 gapBetween = 0 是贴死的 */
+    background: color-mix(in srgb, var(--bg-0) 92%, transparent);
     backdrop-filter: blur(16px) saturate(150%);
     -webkit-backdrop-filter: blur(16px) saturate(150%);
     border-bottom: 1px solid var(--line);
     z-index: 30;
   }
-  body.hp .gnav--side .gnav-title { display: none; }
+  /* 桌面的大标题和底部版权在这条里没有位置 */
+  body.hp .gnav--side .gnav-head,
+  body.hp .gnav--side .gnav-foot { display: none; }
+
+  /* 面板默认收起；只有加了 .is-mopen 才展开 */
   body.hp .gnav--side .gnav-track {
-    flex-direction: row;
-    gap: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 62vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 6px 8px 10px;
+    background: inherit;
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, .10);
   }
-  body.hp .gnav--side .gnav-track::-webkit-scrollbar { display: none; }
+  body.hp .gnav--side.is-mopen .gnav-track { display: flex; }
   body.hp .gnav--side .gnav-item {
     flex: 0 0 auto;
-    min-height: 38px;
-    padding: 0 13px;
+    width: 100%;
+    min-height: 42px;
+    justify-content: flex-start;
+    padding: 0 12px;
   }
   body.hp .gnav--side .gnav-item.is-active::before { display: none; }
+
+  /* 折叠触发条：一行，当前分组名 + 条数 + 箭头 */
+  body.hp .gnav-mtoggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 46px;
+    padding: 0 var(--pad-x);
+    border: 0;
+    background: transparent;
+    color: var(--text-1);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.hp .gnav-mcurrent {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.hp .gnav-mcount {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-3);
+  }
+  body.hp .gnav-mchev {
+    flex: 0 0 auto;
+    margin-left: auto;
+    opacity: .55;
+    transition: transform .2s var(--ease-out);
+  }
+  body.hp .gnav--side.is-mopen .gnav-mchev { transform: rotate(180deg); }
+}
+
+/* 折叠触发条只在窄屏存在；桌面是整列侧栏，不需要它。
+   必须用 min-width 查询而不是在后面补一条裸规则 —— 裸规则与 media 内的
+   那条规定性相同、位置更靠后，会把窄屏的 display:flex 一起覆盖掉
+   （实测：手机上触发条直接不显示）。 */
+@media (min-width: 1140px) {
+  body.hp .gnav-mtoggle { display: none; }
+}
+
+/* 触屏上长按导航项会弹出系统菜单（"在新标签页打开 / 拷贝链接 / 分享"），
+   把整块导航盖住，看起来像页面坏了。这条菜单没有关闭它的 JS API，
+   只能靠 CSS 的 touch-callout 关掉；user-select 一起关，
+   否则长按还会顺手选中文字。
+   ⚠️ 只作用于导航项，不要往 body 上全局加 —— 正文需要能正常选中复制。 */
+body.hp .gnav-item,
+body.hp .gnav-mtoggle {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
 }
 
 /* ==========================================================================
@@ -658,27 +742,22 @@ body.hp .group:last-child { margin-bottom: 0; }
      · 必须自带不透明底色，否则下面的卡片会从字缝里透出来；
      · inset 负边距让底色横向铺满，看起来像一条横档而不是一块补丁。 */
 body.hp .group-head {
-  position: sticky;
-  top: calc(var(--hp-bar) - 1px);
-  z-index: 20;
+  /* 不吸顶。
+     曾经为了「滚动时知道自己在哪一组」做成 sticky + 渐变托底，但这条路
+     走不通：托底要够不透明才不会让卡片从字缝里透出来，而不透明底色铺在
+     渐变背景上必然留下一条色带（改过三轮）；Atlas 皮肤索性把底色改成
+     透明，结果更糟 —— 滚动时就是一行文字浮在卡片上面，既没托底也没边界。
+
+     现在改成静态：分组名跟着内容一起滚走。要判断「滚到哪一组」看左侧栏，
+     那里的 .is-active 高亮本来就在做这件事，而且是常驻可见的。
+     代价是失去一个「一直在动」的元素，换来的是内容区干净、没有东西压着卡片。 */
+  position: static;
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: var(--hp-ghead);
   margin: 0 calc(var(--pad-x) * -0.42) 10px;
   padding: 0 calc(var(--pad-x) * 0.42);
-  /* 底色只铺「文字那一条」，不铺满整个 44px 高度。
-     实测教训：整块铺 96% 的不透明底色，在深色皮肤上会变成一条
-     明显发灰的横带（浅色皮肤上因为与背景同色系所以看不出来）。
-
-     这里改成径向渐变：中心在左侧文字处、向右迅速淡出。
-     关键是半径要够小（38% 宽、120% 高），否则在深色下仍会看出
-     一条横贯整行的带子；半径小于文字区域宽度时，观感就是
-     「文字自带一小片托底」。 */
-  background: radial-gradient(38% 120% at 4% 50%,
-      color-mix(in srgb, var(--bg-0) 94%, transparent) 0%,
-      color-mix(in srgb, var(--bg-0) 70%, transparent) 38%,
-      transparent 72%);
 }
 body.hp .group-name {
   margin: 0;

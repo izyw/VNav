@@ -334,32 +334,105 @@
       });
     }
 
-    const items = $$('.gnav-item', gnav);
-    // data-gjump 现在两种模式都输出（tab 与 side 同源），取不到就退回 href
-    const targets = items.map(it => {
-      const idx = it.dataset.gjump;
-      return idx != null ? document.getElementById('g' + idx) : null;
+    /* --- 顶栏实际高度写进 --hp-bar ---
+       窄屏顶栏是两行（工具行 + 搜索行），实测 89px，而 CSS 里写死 58px。
+       下面这条 sticky 导航的 top 读的就是这个变量，写死会让它吸顶时
+       钻到顶栏底下。这里量一次写进去，尺寸变化时再量。 */
+    (function syncBarH() {
+      const tb = document.querySelector('.topbar');
+      if (!tb) return;
+      const apply = () => document.body.style.setProperty('--hp-bar', tb.offsetHeight + 'px');
+      apply();
+      if (window.ResizeObserver) new ResizeObserver(apply).observe(tb);
+      else window.addEventListener('resize', apply);
+    })();
+
+    /* --- 窄屏分组折叠条 ---
+       收起时只显示当前分组，点开是一块竖排面板。 */
+    const mtoggle = document.getElementById('gnavMToggle');
+    const mCurrent = document.getElementById('gnavMCurrent');
+    const mCount = document.getElementById('gnavMCount');
+
+    const syncMToggle = () => {
+      const on = gnav.querySelector('.gnav-item.is-active');
+      if (!on) return;
+      if (mCurrent) mCurrent.textContent = (on.querySelector('.gnav-name')?.textContent || '分组').trim();
+      if (mCount) {
+        const c = (on.querySelector('.gnav-count')?.textContent || '').trim();
+        mCount.textContent = c ? c + ' 个' : '';
+      }
+    };
+
+    const closeM = () => {
+      gnav.classList.remove('is-mopen');
+      mtoggle?.setAttribute('aria-expanded', 'false');
+    };
+
+    mtoggle?.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = !gnav.classList.contains('is-mopen');
+      gnav.classList.toggle('is-mopen', open);
+      mtoggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) syncMToggle();
+    });
+    // 首屏就把当前分组名写进折叠条，否则初始显示的是占位文案「分组」
+    syncMToggle();
+    // 点面板外面、或按 Esc 收起
+    document.addEventListener('click', e => {
+      if (gnav.classList.contains('is-mopen') && !gnav.contains(e.target)) closeM();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeM(); });
+    // 选了某一组就收起，不用再点一次折叠条
+    gnav.addEventListener('click', e => { if (e.target.closest('.gnav-item')) closeM(); });
+
+    /* 长按导航项时会弹系统菜单（打开新标签页 / 拷贝链接 / 分享），
+       把整条导航盖住。CSS 的 touch-callout 在部分 Android WebView 上
+       不生效，这里再用 contextmenu 兜一层。 */
+    gnav.addEventListener('contextmenu', e => {
+      if (e.target.closest('.gnav-item') || e.target.closest('.gnav-mtoggle')) e.preventDefault();
     });
 
+    const items = $$('.gnav-item', gnav);
+    /* 目标元素**每次点击时实时查**，不能在这里缓存引用。
+       游客态下 guest.js 会用本地数据重建 .groups（innerHTML），
+       初始化时抓到的 <section id="g3"> 那一刻就已经脱离文档了 ——
+       对脱离文档的元素调 scrollIntoView() 什么也不会发生，
+       表现就是「点了分组没反应」。登录态首屏不重建，所以看不出来。 */
+    const targetOf = it => {
+      const idx = it.dataset.gjump;
+      return idx != null ? document.getElementById('g' + idx) : null;
+    };
+
     const setActive = id => {
-      items.forEach((it, i) => {
-        const on = targets[i] && targets[i].id === id;
+      items.forEach(it => {
+        const on = it.dataset.gjump != null && ('g' + it.dataset.gjump) === id;
         it.classList.toggle('is-active', on);
         if (on) it.setAttribute('aria-current', 'true');
         else it.removeAttribute('aria-current');
       });
+      // 窄屏折叠条上显示的分组名跟着变
+      syncMToggle();
     };
 
-    items.forEach((it, i) => {
+    items.forEach(it => {
       it.addEventListener('click', e => {
-        const t = targets[i];
+        const t = targetOf(it);
         if (!t) return;              // 拿不到目标就让浏览器走默认锚点
         e.preventDefault();
-        // scrollIntoView 会尊重 .group 的 scroll-margin-top，
-        // 所以目标不会被吸顶顶栏 + 吸顶组签盖住
-        t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        history.replaceState(null, '', '#' + t.id);
+
+        /* 先切高亮，再滚。高亮是即时反馈 —— 即使滚动还在路上，
+           侧栏也立刻告诉你「点的就是这一组」，不会觉得点了没反应。 */
         setActive(t.id);
+        history.replaceState(null, '', '#' + t.id);
+
+        /* 距离远就瞬移，近了才平滑滚动。
+           全是 smooth 的时候，跨 2000+ 像素要滑一秒多，中途画面几乎不动，
+           很容易被当成「点了没跳」—— 用户就是这么报的。 */
+        const dist = Math.abs(t.getBoundingClientRect().top);
+        t.scrollIntoView({
+          behavior: dist > window.innerHeight * 1.2 ? 'auto' : 'smooth',
+          block: 'start',
+        });
       });
     });
 
@@ -382,7 +455,21 @@
         }
       }, { rootMargin: '-72px 0px -55% 0px', threshold: [0.01, 0.25, 0.5, 0.75] });
 
-      targets.forEach(t => t && io.observe(t));
+      /* 观察对象同样不能缓存：游客态下 guest.js 会整体重建 .groups，
+         旧节点脱离文档就再也收不到交叉事件，高亮会永久停在首屏那一组。
+         所以每次重建后重新扫一遍。 */
+      const observeAll = () => {
+        $$('.group').forEach(g => g.id && io.observe(g));
+      };
+      observeAll();
+      const groupsWrap = document.querySelector('.groups');
+      if (groupsWrap && window.MutationObserver) {
+        new MutationObserver(() => {
+          io.disconnect();
+          observeAll();
+          syncMToggle();
+        }).observe(groupsWrap, { childList: true });
+      }
     }
   }
 

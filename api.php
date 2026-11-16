@@ -108,13 +108,24 @@ if ($action === 'hit') {
 require_login();
 csrf_check();
 
-/* 本次请求能操作哪一份数据。
-   游客的增删改只存在浏览器本地，不该走到这里；真走到了就是越权，
-   直接拒掉（也避免游客把数据写进站点默认那份）。 */
-$U = hp_data_uid();
 if (!is_logged_in()) {
     json_err('游客数据只保存在本地浏览器，登录后才能同步到云端', 401);
 }
+
+/* 本次请求能操作哪一份数据。
+ *
+ * admin 有两份库（站点默认 / 自己的），由前端在每次请求里带 lib 字段
+ * 指明改哪一份（见 admin.js 的 api()，它从 <meta name="adm-lib"> 读当前值）。
+ * 服务端只认 site / mine 两个值，且只有 admin 能落到 mine ——
+ * 普通用户即使手动伪造 lib=mine，hp_data_uid_for() 也只会返回他自己的 id。
+ *
+ * 这是**服务端**的归属判定，不接受客户端传 user_id：
+ * 传什么 lib 决定「用哪个库」，但库与用户的绑定由服务端算。 */
+$__lib = (string)($body['lib'] ?? $_GET['lib'] ?? 'site');
+if ($__lib !== 'mine') {
+    $__lib = 'site'; // 脏值一律回落到默认库，不做猜测
+}
+$U = hp_data_uid_for($__lib);
 
 /* 系统级接口：只有 admin。
    这一层是硬闸门 —— 前端把按钮藏起来只是体验，绕过按钮直接打
@@ -413,6 +424,65 @@ try {
             if ($st->rowCount() === 0) json_err('没有这个分组');
             json_ok();
         }
+        /* 分组批量：删除 / 合并。
+           为什么需要合并而不是只有删除：分组一多，想整理就得「先建一个、
+           再把别的链接一条条移过去、最后删空的」——太绕。合并是一次到位：
+           把选中分组的链接全部划到目标分组，然后删掉这些空壳。
+
+           两个 op 都只碰 $U 名下的数据，行数不为 0 才算成功
+           （和单条接口一样，不谎报 ok）。 */
+        case 'groups_bulk': {
+            $op  = (string)($body['op'] ?? '');
+            $raw = $body['ids'] ?? [];
+            if (!is_array($raw)) json_err('参数格式不正确');
+            $ids = [];
+            foreach ($raw as $v) {
+                $v = (int)$v;
+                if ($v > 0) $ids[] = $v;
+            }
+            $ids = array_values(array_unique($ids));
+            if (!$ids) json_err('先选择要处理的分组');
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+
+            if ($op === 'delete') {
+                $st = db()->prepare("DELETE FROM groups WHERE id IN ($ph) AND user_id = ?");
+                $st->execute([...$ids, $U]);
+                if ($st->rowCount() === 0) json_err('没有可删除的分组');
+                json_ok(['affected' => $st->rowCount()]);
+            }
+
+            if ($op === 'merge') {
+                $target = (int)($body['target_id'] ?? 0);
+                if ($target <= 0) json_err('先选一个目标分组');
+                $stT = db()->prepare('SELECT id FROM groups WHERE id = ? AND user_id = ?');
+                $stT->execute([$target, $U]);
+                if (!$stT->fetchColumn()) json_err('目标分组不存在');
+                // 目标自己在选中列表里也没关系：不能把目标删掉
+                $src = array_values(array_diff($ids, [$target]));
+                if (!$src) json_err('选中的就是目标分组本身，没有可合并的');
+                $ph2 = implode(',', array_fill(0, count($src), '?'));
+
+                $pdo = db();
+                $pdo->beginTransaction();
+                try {
+                    // 先搬链接，再删空壳。顺序反了链接会被外键置空（回到未分组）
+                    $st1 = $pdo->prepare("UPDATE links SET group_id = ? WHERE group_id IN ($ph2) AND user_id = ?");
+                    $st1->execute([$target, ...$src, $U]);
+                    $moved = $st1->rowCount();
+
+                    $st2 = $pdo->prepare("DELETE FROM groups WHERE id IN ($ph2) AND user_id = ?");
+                    $st2->execute([...$src, $U]);
+                    $gone = $st2->rowCount();
+                    $pdo->commit();
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    json_err('合并失败：' . $e->getMessage(), 500);
+                }
+                json_ok(['affected' => $gone, 'moved' => $moved]);
+            }
+
+            json_err('不认识的操作');
+        }
         /* 设置分组图标。空字符串表示「恢复自动匹配」。
            白名单来自 inc/groupnav.php 的 hp_group_icon_keys() ——
            新增图标只需改那一处，这里不必跟着补。 */
@@ -427,6 +497,71 @@ try {
             $stG->execute([$icon, $id, $U]);
             if ($stG->rowCount() === 0) json_err('没有这个分组');
             json_ok(['icon' => $icon]);
+        }
+
+        /* ---------- 把「网站默认」整库复制到我自己的库 ----------
+           两份库拆开之后，「我的」一开始是空的，而默认库已经有几百条。
+           让用户从零一条条加显然不合理，所以给一次整库复制。
+
+           只在目标库为空时允许：这个动作会写几百行，一旦覆盖了用户
+           自己攒的东西没法撤回。想重来就先自己清空（或直接删）。
+           不搬 settings：那是站点与外观配置，跟「我的书签」不是一回事。 */
+        case 'library_clone': {
+            if (!is_admin()) json_err('只有管理员有这个入口', 403);
+            $me = (int)current_user_id();
+            if ($me <= 0) json_err('未登录', 401);
+
+            $pdo = db();
+            $has = $pdo->prepare('SELECT 1 FROM links WHERE user_id = ? LIMIT 1');
+            $has->execute([$me]);
+            if ($has->fetchColumn() !== false) {
+                json_err('「我的链接库」里已经有内容了，不能覆盖。要重新复制请先把它清空。');
+            }
+            // 分组也要判：可能只建了分组还没加链接
+            $hasG = $pdo->prepare('SELECT 1 FROM groups WHERE user_id = ? LIMIT 1');
+            $hasG->execute([$me]);
+            if ($hasG->fetchColumn() !== false) {
+                json_err('「我的链接库」里已经有分组了，不能覆盖。');
+            }
+
+            $pdo->beginTransaction();
+            try {
+                /* 分组要建 旧id → 新id 的映射：链接的 group_id 必须指向
+                   复制出来的新分组，直接照抄旧 id 会把链接挂到默认库的分组上
+                   （外键不跨 user 校验，但读的时候按 user_id 过滤就全丢了）。 */
+                $map = [];
+                $gs = $pdo->query('SELECT id, name, icon, sort FROM groups WHERE user_id = 0 ORDER BY sort ASC, id ASC');
+                $insG = $pdo->prepare('INSERT INTO groups(name, icon, sort, user_id, created_at) VALUES(?, ?, ?, ?, ?)');
+                foreach ($gs as $g) {
+                    $insG->execute([$g['name'], (string)$g['icon'], (int)$g['sort'], $me, now()]);
+                    $map[(int)$g['id']] = (int)$pdo->lastInsertId();
+                }
+
+                $ls = $pdo->query(
+                    'SELECT group_id, title, url, icon, icon_kind, descr, sort, hits, hidden, created_at, updated_at
+                       FROM links WHERE user_id = 0 ORDER BY sort ASC, id ASC'
+                );
+                $insL = $pdo->prepare(
+                    'INSERT INTO links(group_id, title, url, icon, icon_kind, descr, sort, hits, hidden, user_id, created_at, updated_at)
+                     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $n = 0;
+                foreach ($ls as $l) {
+                    $gid = $l['group_id'] === null ? null : ($map[(int)$l['group_id']] ?? null);
+                    $insL->execute([
+                        $gid, $l['title'], $l['url'], $l['icon'], $l['icon_kind'], $l['descr'],
+                        (int)$l['sort'], (int)$l['hits'], (int)$l['hidden'], $me,
+                        $l['created_at'], $l['updated_at'],
+                    ]);
+                    $n++;
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                json_err('复制失败：' . $e->getMessage(), 500);
+            }
+
+            json_ok(['links' => $n, 'groups' => count($map)]);
         }
 
         /* ---------- 把游客在本地攒的数据并进来 ----------
@@ -454,6 +589,9 @@ try {
                 'open_new_tab'  => 'bool',
                 'show_desc'     => 'bool',
                 'footer_note'   => 'str',
+                // 页脚版权：署名（留空退回作者名、再退站点名）与 ICP 备案号（留空不渲染）
+                'copyright_name' => 'str',
+                'icp_beian'      => 'str',
                 // 形态白名单同样来自 inc/layouts.php
                 'layout'        => 'enum:' . implode(',', hp_layout_keys()),
                 // 分组导航：side / tab / ''（空串表示不启用，清理时用）

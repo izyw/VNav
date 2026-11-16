@@ -42,7 +42,10 @@ if (!$__acl['allow']) {
     hp_acl_deny((string)$__acl['country']);
 }
 
-hp_compress_start(6);
+/* 第二个参数开启 HTML 空白折叠：这是纯排版缩进，游客分支下大量
+   <?php if ($__isAdmin): ?> 不成立会留下成片的空格 —— 实测占首页
+   原始体积的一半。只对首页开，api.php 的 JSON 绝不能走这条路。 */
+hp_compress_start(6, true);
 
 // 只接受白名单值：数据库里若是历史遗留的脏值，直接回退默认，
 // 否则 html[data-theme='...'] 匹配不到任何规则，整站变量全空（白屏）。
@@ -59,13 +62,32 @@ $showSrch = setting('show_search', '1') === '1';
 $engine   = hp_engine_safe(setting('search_engine', 'bing'));
 $engines  = hp_engines();
 $footer   = setting('footer_note', '');
+/* 版权署名三级兜底：专门填的 → 「Made By 作者名」 → 「Made By izyw」。
+   这样页脚永远不会出现「© 2026 」后面空着的半句。
+
+   注意第二级不是直接把作者名甩上去：页脚要的是完整的一句署名，
+   而 author_name 是个名字（izyw）。补上「Made By」这层壳，
+   后台只填名字就够了，不用为了页脚好看去填一句英文。 */
+$copyOwner = trim(setting('copyright_name', ''));
+if ($copyOwner === '') {
+    $copyAuthor = trim(setting('author_name', '')) ?: 'izyw';
+    $copyOwner  = 'Made By ' . $copyAuthor;
+}
+// ICP 备案号：留空就整段不渲染，不占位也不显示「暂无备案」
+$icpBeian  = trim(setting('icp_beian', ''));
+$copyYear  = date('Y');
 // 分组导航：side（左侧）/ tab（顶部标签）/ ''（不启用）
 $groupnav = hp_groupnav_safe(setting('groupnav', 'tab'));
 
 /* 一次查询取全部链接，分组在 PHP 里归并（比 N+1 次查询快得多）。
    隐藏链接在这里就过滤掉：游客的 HTML 里根本不会出现这些卡片，
    所以「隐藏」是真的隐藏，而不是靠 CSS 藏起来。 */
-$dataUid = hp_data_uid();
+/* 前台看到的是哪一份数据。
+   默认永远是「网站默认」（user_id = 0）—— 访客看它，管理员日常也看它，
+   这样管理员改完当场就能用访客的视角验证。
+   admin 想检查自己那份私人库时，带 ?lib=mine 即可（后台切换器里有入口）。
+   普通人带这个参数没用：hp_data_uid_for() 对游客和普通用户不认 lib。 */
+$dataUid = hp_data_uid_for(($_GET['lib'] ?? '') === 'mine' ? 'mine' : 'site');
 
 $sql = 'SELECT id, group_id, title, url, icon, icon_kind, descr, hits, hidden
           FROM links WHERE user_id = ?';
@@ -132,20 +154,24 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=39">
+<link rel="stylesheet" href="assets/app.css?v=40">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=39">
+<link rel="stylesheet" href="assets/home.css?v=42">
 <?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=39">
-<link rel="stylesheet" href="assets/skin-frame.css?v=47">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=47">
+<link rel="stylesheet" href="assets/skin-frame.css?v=49">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
+<?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
+         保证「看到哪份就改哪份」—— 否则 ?lib=mine 的页面上编辑，
+         实际会写进网站默认库。 */ ?>
+<meta name="adm-lib" content="<?= $dataUid === 0 ? 'site' : 'mine' ?>">
 <?php endif; ?>
 <script>
 /* 偏好要在首屏之前定，否则会先渲染默认形态/皮肤再被 JS 改，出现明显闪烁。
@@ -153,7 +179,12 @@ hp_log_visit(false, '/');
    —— 早于 CSS 首帧。白名单从 PHP 注入，新增皮肤不必回来改这段。 */
 (function () {
   var el = document.documentElement;
-  window.__VNAV = { guest: <?= is_logged_in() ? 'false' : 'true' ?> };
+  window.__VNAV = {
+    guest: <?= is_logged_in() ? 'false' : 'true' ?>,
+    /* 右下角提示是否已被永久关闭。以前只写进服务端、前端从不读，
+       等于换了设备或清了缓存提示又冒出来；现在两边一起认。 */
+    tipOff: <?= setting('hint_dismissed', '0') === '1' ? 'true' : 'false' ?>
+  };
   try {
     /* 改名迁移：存储键从 vlinks.* 换成 vnav.*。
        老用户浏览器里还留着旧键，不搬过来的话，升级后皮肤、布局、
@@ -378,15 +409,35 @@ hp_log_visit(false, '/');
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5L8 12l5.5 5.5"/><path d="M18.5 6.5L13 12l5.5 5.5" opacity=".38"/></svg>
         </button>
       </div>
-      <div class="gnav-track">
+      <?php /* 移动端专用的折叠触发条。
+               窄屏下分组有十几个，横着排必然要横向滑动 —— 滑到一半还
+               看不清是第几组。改成「一行显示当前分组 + 点开下拉全选」：
+               收起时只占一行、永远知道自己在哪组，展开时是竖排列表、
+               手指直接上下滑，不用横向找。桌面端这条不显示。 */ ?>
+      <button class="gnav-mtoggle" type="button" id="gnavMToggle"
+              aria-expanded="false" aria-controls="gnav-track">
+        <span class="gnav-mcurrent" id="gnavMCurrent">分组</span>
+        <span class="gnav-mcount" id="gnavMCount"></span>
+        <svg class="gnav-mchev" viewBox="0 0 24 24" width="16" height="16" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      <div class="gnav-track" id="gnav-track">
         <?php foreach ($ordered as $gi => $g):
-          $nm = $g['name'] !== '' ? $g['name'] : '全部'; ?>
+          $nm = $g['name'] !== '' ? $g['name'] : '全部';
+          /* 分组色相：图标块、选中的底色、计数徽章、组标题、卡片悬停
+             全用这一个数。写在 <a> 上而不是图标块上，是因为选中态的
+             底色属于 <a> 自己 —— CSS 变量只往下继承，写在子元素上
+             父级就取不到。 */
+          $ghue = hp_group_hue($nm, (string)($g['icon'] ?? '')); ?>
           <a class="gnav-item<?= $gi === 0 ? ' is-active' : '' ?>" href="#g<?= $gi ?>"
              data-gjump="<?= $gi ?>" data-group="<?= (int)$g['id'] ?>"
+             style="--gt-h:<?= $ghue ?>"
              aria-current="<?= $gi === 0 ? 'true' : 'false' ?>"
              title="<?= h($nm) ?>">
             <span class="gnav-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($nm, (string)($g['icon'] ?? '')) ?></svg>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($nm, (string)($g['icon'] ?? '')) ?></svg>
             </span>
             <span class="gnav-name"><?= h($nm) ?></span>
             <span class="gnav-count"><?= count($g['items']) ?></span>
@@ -394,18 +445,31 @@ hp_log_visit(false, '/');
         <?php endforeach; ?>
       </div>
 
-      <?php /* 侧栏最下方：版本 + 版权。
-               署名与链接来自后台设置（author_name / author_github）。
-               没填 GitHub 时只显示纯文本 —— 不留一个点不动的假链接。 */ ?>
+      <?php /* 侧栏最下方：版权与许可声明（用户要求只留侧栏）。
+               本项目以 MIT 协议开源，所以这里**不能写「保留所有权利」** ——
+               那句话与 MIT 直接冲突（MIT 恰恰是授权他人使用、修改、
+               再分发）。开源项目的通行写法是：年份 + 作者 + 协议名，
+               协议名链到根目录的 LICENSE 全文（rel="license" 是标准标注）。
+
+               换协议时改两处：这里的名字，以及根目录 LICENSE 的正文。 */ ?>
       <div class="gnav-foot">
-        <span class="gnav-ver"><?= h(hp_version()) ?></span>
-        <?php if (trim(setting('author_github', '')) !== ''): ?>
-          <a class="gnav-copy" href="<?= h(trim(setting('author_github', ''))) ?>"
-             target="_blank" rel="noopener noreferrer"
-             title="GitHub">© <?= date('Y') ?> <?= h(setting('author_name') !== '' ? setting('author_name') : setting('site_title', 'Vnav')) ?></a>
-        <?php else: ?>
-          <span class="gnav-copy">© <?= date('Y') ?> <?= h(setting('author_name') !== '' ? setting('author_name') : setting('site_title', 'Vnav')) ?></span>
+        <p class="gnav-copy">&copy; <?= h($copyYear) ?> <span class="gnav-owner"><?= h($copyOwner) ?></span></p>        <p class="gnav-rights">
+          <a class="gnav-license" href="LICENSE" rel="license">MIT License</a>
+        </p>
+        <?php if ($icpBeian !== ''): ?>
+          <?php /* 备案号与开源协议是两回事：前者是国内主机的合规要求，
+                   与是否开源无关。留空就整行不出现。 */ ?>
+          <p class="gnav-beian">
+            <a class="gnav-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer"><?= h($icpBeian) ?></a>
+          </p>
         <?php endif; ?>
+        <p class="gnav-meta">
+          <span class="gnav-ver">Vnav <?= h(hp_version()) ?></span>
+          <?php if (trim(setting('author_github', '')) !== ''): ?>
+            <a class="gnav-link" href="<?= h(trim(setting('author_github', ''))) ?>"
+               target="_blank" rel="noopener noreferrer">项目主页</a>
+          <?php endif; ?>
+        </p>
       </div>
     </nav>
     <?php endif; ?>
@@ -430,15 +494,25 @@ hp_log_visit(false, '/');
          同时可见，标签只是跳转入口。所以这里统一走 aria-labelledby 指 h2，
          组名是空的（唯一分组）才退回 aria-label。 */
       foreach ($ordered as $gi => $g):
+        /* 侧栏那个循环里的 $ghue 循环结束就停在最后一组上了，
+           这里必须按当前组重算 —— 复用会得到「所有分组同一个颜色」。 */
+        $ghue = hp_group_hue($g['name'], (string)($g['icon'] ?? ''));
         if ($g['name'] !== '') {
           $a11y = 'aria-labelledby="gh' . $gi . '"';
         } else {
           $a11y = 'aria-label="未分组链接"';
         }
       ?>
-        <section class="group" id="g<?= $gi ?>" <?= $a11y ?>>
+        <section class="group" id="g<?= $gi ?>" style="--gt-h:<?= $ghue ?>" <?= $a11y ?>>
           <?php if ($g['name'] !== ''): ?>
+            <?php /* 组标题前的彩色图标块：和侧栏是同一枚图标、同一个色相。
+                     两边重复不是偷懒 —— 侧栏与正文的颜色对上之后，
+                     「紫色那栏 = 紫色那组」才成立，颜色才成为导航线索。
+                     组名前的 6px 圆点因此退役。 */ ?>
             <div class="group-head">
+              <span class="gh-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($g['name'], (string)($g['icon'] ?? '')) ?></svg>
+              </span>
               <h2 id="gh<?= $gi ?>" class="group-name"><?= h($g['name']) ?></h2>
               <span class="group-count"><?= count($g['items']) ?></span>
               <span class="group-rule" aria-hidden="true"></span>
@@ -509,6 +583,9 @@ hp_log_visit(false, '/');
         </section>
       <?php endforeach; ?>
 
+      <?php /* 主区这里只放后台填的「页脚寄语」。
+               完整的版权声明按用户要求统一收在侧栏底部，两处都有会造成
+               同一页出现两个「©」，反而显得没收拾。 */ ?>
       <?php if ($footer !== ''): ?>
         <footer class="foot"><?= h($footer) ?></footer>
       <?php endif; ?>
@@ -517,9 +594,10 @@ hp_log_visit(false, '/');
 </main>
 </div>
 
-<?php if ($__isAdmin): ?>
-<!-- 粘贴添加浮层：默认隐藏，Ctrl+V 触发。游客态整块不输出，
-     所以未登录的人连这个 DOM 都拿不到，谈不上绕过。 -->
+<?php /* 粘贴添加浮层：游客也输出。
+         未登录时改动只落到 localStorage（assets/guest.js 的沙盒），
+         服务端一个字节都收不到，所以开放它不等于开放写权限。
+         它的兄弟浮层（就地编辑 / 快捷键面板）仍在下面的 is-admin 条件里。 */ ?>
 <div class="paste-scrim" id="pasteScrim" hidden></div>
 <div class="paste-box" id="pasteBox" role="dialog" aria-modal="true" aria-labelledby="pasteTitle" hidden>
   <div class="paste-head">
@@ -579,6 +657,7 @@ hp_log_visit(false, '/');
   </form>
 </div>
 
+<?php if ($__isAdmin): ?>
 <!-- ============ 就地编辑浮层 ============
      卡片上点铅笔走这里，不再跳后台。表单字段和后台那个编辑器
      保持一致，但少了「分组下拉以外的所有跳转」。 -->
@@ -687,6 +766,12 @@ hp_log_visit(false, '/');
     </section>
   </div>
   <p class="keys-foot">输入框内按 Esc 先清空再退出；有未保存改动时会先问一句。</p>
+  <?php /* 右下角提示关掉之后的召回入口。没有它，「不再提示」在用户眼里
+           就等同于「提示坏了」—— 这是唯一能把它叫回来的地方。 */ ?>
+  <p class="keys-foot" id="tipResetRow" hidden>
+    右下角的小提示已被关闭。
+    <button type="button" class="keys-reset" id="tipReset">重新显示</button>
+  </p>
 </div>
 
 <!-- ============ 右下角提示（可永久关闭） ============ -->
@@ -712,17 +797,55 @@ hp_log_visit(false, '/');
 <?php endif; ?>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=39" defer></script>
-<script src="assets/guest.js?v=50" defer></script>
-<script src="assets/app.js?v=39" defer></script>
+<script src="assets/ui.js?v=43" defer></script>
+<script src="assets/guest.js?v=52" defer></script>
+<script src="assets/app.js?v=42" defer></script>
 <?php else: ?>
 <?php /* 另一个分支（没有分组 / 没有内容）也把三个脚本全加载：
          guest.js 要负责把本地沙盒里的数据画出来，
          app.js 负责编辑模式 —— 少了任何一个，这类页面就是只读的。 */ ?>
-<script src="assets/ui.js?v=39" defer></script>
-<script src="assets/guest.js?v=50" defer></script>
-<script src="assets/app.js?v=39" defer></script>
+<script src="assets/ui.js?v=43" defer></script>
+<script src="assets/guest.js?v=52" defer></script>
+<script src="assets/app.js?v=42" defer></script>
 <?php endif; ?>
 
 </body>
 </html>
+<?php
+/* ---------- 条件请求：内容没变就回 304 ----------
+ *
+ * 为什么放在这里（文件最后一行之后）：
+ *   hp_compress_start() 已经用 ob_start 把整页兜进了缓冲区，所以此刻
+ *   缓冲区里就是完整 HTML。这里是唯一能「拿到全文、算指纹、再决定
+ *   要不要发」的位置 —— 提前算就得再渲染一遍，不值得。
+ *
+ * 为什么只对游客开：
+ *   登录后的页面带后台按钮、隐藏链接角标、data-* 属性，同一 URL 对不同
+ *   身份内容不同。给这类响应挂 ETag，一旦中间有共享缓存就会串味
+ *   （甲看到乙的页面）。游客看到的永远是同一份公开数据，安全。
+ *
+ * no-cache 而不是 no-store：
+ *   no-store 连存都不许，每次都得传整个 50KB；
+ *   no-cache 允许存但每次必须回源验证，内容没变就是几百字节的 304。
+ *   本站数据随时可能被改，不能用 max-age 直接放行 —— 会让改动延迟生效。
+ *
+ * 304 之前必须把缓冲清空：否则 compress 的回调会照样把 body 压出来，
+ * 变成「304 却带内容」的错误响应。
+ */
+if (!$__isAdmin) {
+    $__pageBuf = ob_get_contents();
+    if (is_string($__pageBuf) && $__pageBuf !== '') {
+        $__etag = '"' . substr(md5($__pageBuf), 0, 16) . '"';
+        header('ETag: ' . $__etag);
+        header('Cache-Control: no-cache');
+        // 兼容 W/"..." 形式的弱校验（部分代理会改写）
+        $__inm = preg_replace('~^W/~', '', trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''))) ?? '';
+        if ($__inm !== '' && $__inm === $__etag) {
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            http_response_code(304);
+            exit;
+        }
+    }
+}

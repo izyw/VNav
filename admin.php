@@ -27,13 +27,41 @@ if (isset($_GET['logout'])) {
 $tab = $_GET['tab'] ?? 'links';
 $tab = in_array($tab, ['links', 'groups', 'look', 'stats', 'security', 'upgrade', 'changelog', 'help'], true) ? $tab : 'links';
 
-$groups = db()->query('SELECT id, name, icon FROM groups ORDER BY sort ASC, id ASC')->fetchAll();
+/* 后台能编辑两份库：
+     site  → user_id = 0，「网站默认」，访客看到的就是这一份
+     mine  → admin 自己的 id，私人那份，访客看不到
+   切换状态走 URL 的 ?lib=，刷新 / 书签 / 前进后退都不会丢，
+   也不会出现「以为在改默认库，其实改了自己那份」。
+
+   这两个查询原先没有 user_id 条件，普通用户的数据会一并列进来
+   （admin 看到别人的私人书签，改却改不动 —— 写接口都带 user_id 条件）。 */
+$seqLib = (string)($_GET['lib'] ?? 'site');
+if ($seqLib !== 'mine') {
+    $seqLib = 'site';
+}
+$AU = hp_data_uid_for($seqLib);
+// 切 tab 时要把当前库带上，否则一点导航就跳回默认库
+$libQS    = $seqLib === 'mine' ? '&lib=mine' : '';
+$libLabel = $seqLib === 'mine' ? '我的链接库' : '网站默认';
+
+/* link_count 一并查出来：分组页要显示「删掉这个组会影响多少条链接」，
+   链接页的「选中本组」也用得到。子查询比逐组再查一遍省事。 */
+$stG = db()->prepare(
+    'SELECT g.id, g.name, g.icon,
+            (SELECT COUNT(*) FROM links l WHERE l.group_id = g.id AND l.user_id = g.user_id) AS link_count
+       FROM groups g WHERE g.user_id = ? ORDER BY g.sort ASC, g.id ASC'
+);
+$stG->execute([$AU]);
+$groups = $stG->fetchAll();
+
 $focus  = (int)($_GET['focus'] ?? 0);
 
-$links = db()->query(
+$stL = db()->prepare(
     'SELECT id, group_id, title, url, icon, icon_kind, descr, sort, hits, hidden
-       FROM links ORDER BY sort ASC, id ASC'
-)->fetchAll();
+       FROM links WHERE user_id = ? ORDER BY sort ASC, id ASC'
+);
+$stL->execute([$AU]);
+$links = $stL->fetchAll();
 
 $totalLinks = count($links);
 $totalHits  = array_sum(array_map(fn($r) => (int)$r['hits'], $links));
@@ -193,14 +221,17 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex, nofollow">
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
+<?php /* 当前在编辑哪一份库。admin.js 的 api() 每次请求都读它并带上 lib，
+         服务端据此决定 $U —— 前端不必在每个调用点手写。 */ ?>
+<meta name="adm-lib" content="<?= h($seqLib) ?>">
 <title>管理 · <?= h(setting('site_title', 'Vnav')) ?></title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/app.css?v=39">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=39">
-<link rel="stylesheet" href="assets/skin-frame.css?v=47">
-<link rel="stylesheet" href="assets/admin.css?v=40">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=46">
+<link rel="stylesheet" href="assets/skin-frame.css?v=48">
+<link rel="stylesheet" href="assets/admin.css?v=43">
 </head>
 <body class="adm-body">
 
@@ -231,12 +262,36 @@ if ($tab === 'upgrade' || $tab === 'security') {
           'help'      => ['使用说明', '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.6 2.4c-.7.35-1.1.9-1.1 1.8"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'],
       ];
       foreach ($tabs as $k => [$label, $svg]): ?>
-        <a class="adm-tab<?= $tab === $k ? ' is-on' : '' ?>" href="?tab=<?= $k ?>">
+        <a class="adm-tab<?= $tab === $k ? ' is-on' : '' ?>" href="?tab=<?= $k ?><?= $libQS ?>">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?= $svg ?></svg>
           <span><?= $label ?></span>
         </a>
       <?php endforeach; ?>
     </nav>
+
+    <?php /* 数据源切换。
+             两套库存在同一个表里，靠 user_id 区分：0 = 网站默认（访客看得到），
+             admin 自己的 id = 私人库（访客看不到）。
+
+             做成一条紧凑的两段切换器，**不是**带标题和说明的卡片：
+             侧栏高度是 100vh，里面已经装了品牌 + 8 个导航项 + 底部统计，
+             再加一块上百像素的说明文字，在 768 高的笔记本屏上会把
+             下面几个导航项直接顶出可视区。现在整条只有 34px。 */ ?>
+    <div class="adm-lib" role="group" aria-label="当前编辑的数据源">
+      <a class="adm-lib-opt<?= $seqLib === 'site' ? ' is-on' : '' ?>"
+         href="?tab=<?= h($tab) ?>&lib=site"
+         title="访客看到的就是这一份"
+         <?= $seqLib === 'site' ? 'aria-current="true"' : '' ?>>网站默认</a>
+      <a class="adm-lib-opt<?= $seqLib === 'mine' ? ' is-on' : '' ?>"
+         href="?tab=<?= h($tab) ?>&lib=mine"
+         title="只有你自己看得到，访客用的是「网站默认」"
+         <?= $seqLib === 'mine' ? 'aria-current="true"' : '' ?>>我的库</a>
+    </div>
+    <?php if ($seqLib === 'mine'): ?>
+      <?php /* 私人库在前台默认不显示，给一个直达入口，否则改完没处验证。
+               只在 mine 下出现，平时不占高度。 */ ?>
+      <a class="adm-lib-peek" href="./?lib=mine" target="_blank" rel="noopener noreferrer">在前台预览我的库 ↗</a>
+    <?php endif; ?>
 
     <div class="adm-side-foot">
       <div class="adm-stat">
@@ -263,7 +318,9 @@ if ($tab === 'upgrade' || $tab === 'security') {
     <?php if ($tab === 'links'): ?>
       <header class="adm-head">
         <div>
-          <h1 class="adm-title">链接管理</h1>
+          <h1 class="adm-title">链接管理
+            <span class="adm-lib-badge<?= $seqLib === 'mine' ? ' is-mine' : '' ?>"><?= h($libLabel) ?></span>
+          </h1>
           <p class="adm-sub">在主页直接按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴网址是最快的方式，这里是精修的地方。</p>
         </div>
         <button class="btn-primary" id="newLinkBtn" type="button">
@@ -373,9 +430,25 @@ if ($tab === 'upgrade' || $tab === 'security') {
 
       <!-- 列表 -->
       <?php if (!$links): ?>
-        <div class="adm-empty">
-          <p>还没有链接。点「新增」，或者回主页按 Ctrl+V 粘贴一个网址。</p>
-        </div>
+        <?php if ($seqLib === 'mine'): ?>
+          <?php /* 「我的链接库」是空的 —— 这是新拆出来的私人库，
+                   默认库那几百条不会自动过来，所以给一个一键复制。
+                   只在空库时出现，有内容就不再显示（后端也会再拦一次）。 */ ?>
+          <div class="adm-empty">
+            <p class="adm-empty-title">「我的链接库」还是空的</p>
+            <p class="adm-empty-sub">这一份只有你自己看得到，访客用的是「网站默认」那一份。<br>
+              可以从默认库复制一份过来打底，也可以直接新增。</p>
+            <div class="adm-empty-act">
+              <button class="btn-primary" id="cloneLibBtn" type="button">从「网站默认」复制一份</button>
+              <button class="btn-ghost" id="newLinkBtn2" type="button">直接新增</button>
+            </div>
+          </div>
+        <?php else: ?>
+          <div class="adm-empty">
+            <p class="adm-empty-title">「网站默认」里还没有链接</p>
+            <p class="adm-empty-sub">访客看到的就是这一份。点「新增」，或者回主页按 Ctrl+V 粘贴一个网址。</p>
+          </div>
+        <?php endif; ?>
       <?php else: ?>
         <?php
         // 按分组呈现，便于用户理解结构
@@ -387,6 +460,27 @@ if ($tab === 'upgrade' || $tab === 'security') {
             $bucket[$k][] = $l;
         }
         ?>
+        <?php /* 筛选栏。
+                 原来 300 多条平铺在一个页面上，想处理几条冷门链接得一路
+                 往下滚着找，滚到底已经不知道自己在选什么了。先按名称/网址
+                 搜、或按分组收窄，剩下的才是要操作的对象。
+                 筛选是纯前端隐藏，不打接口 —— 数据本来就已经在页面上了。 */ ?>
+        <div class="adm-filter">
+          <label class="adm-filter-q">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
+            <input type="search" id="linkFilter" placeholder="搜名称或网址" autocomplete="off" spellcheck="false">
+          </label>
+          <select id="filterGroup" class="adm-bulk-select" aria-label="按分组筛选">
+            <option value="">全部分组</option>
+            <?php foreach ($groups as $g): ?>
+              <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?> · <?= (int)($g['link_count'] ?? 0) ?></option>
+            <?php endforeach; ?>
+            <option value="0">未分组</option>
+          </select>
+          <button type="button" class="adm-mini" id="filterReset">重置</button>
+          <span class="adm-filter-n" id="filterCount" aria-live="polite"></span>
+        </div>
+
         <?php /* 批量操作条：默认隐藏，勾了任意一行才出现。
                  放在列表顶部并 sticky，滚到下面勾选时也还看得见。 */ ?>
         <div class="adm-bulkbar" id="bulkBar" hidden>
@@ -410,7 +504,12 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <div class="adm-list" id="admList">
           <?php foreach ($bucket as $gid => $items): ?>
             <div class="adm-list-group">
-              <p class="adm-list-label"><?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?> · <?= count($items) ?></p>
+              <?php /* 每个分组头上挂一个「选中本组」：
+                       要清理某个分组时，不必再一条条点 —— 这是最常用的一种批量。 */ ?>
+              <p class="adm-list-label" data-group="<?= (int)$gid ?>">
+                <span class="adm-list-name"><?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?> · <?= count($items) ?></span>
+                <button type="button" class="adm-pick-group" data-pick-group="<?= (int)$gid ?>">选中本组</button>
+              </p>
               <?php foreach ($items as $l):
                 $hasIcon = $l['icon'] !== ''
                     && $l['icon_kind'] === 'file'
@@ -476,7 +575,9 @@ if ($tab === 'upgrade' || $tab === 'security') {
     <?php elseif ($tab === 'groups'): ?>
       <header class="adm-head">
         <div>
-          <h1 class="adm-title">分组管理</h1>
+          <h1 class="adm-title">分组管理
+            <span class="adm-lib-badge<?= $seqLib === 'mine' ? ' is-mine' : '' ?>"><?= h($libLabel) ?></span>
+          </h1>
           <p class="adm-sub">分组会变成主页上的分区标题。删掉分组不会删链接，它们会回到「未分组」。</p>
         </div>
       </header>
@@ -489,20 +590,49 @@ if ($tab === 'upgrade' || $tab === 'security') {
         </form>
         <p class="f-error" id="groupErr" role="alert" hidden></p>
 
+        <?php /* 分组批量条。
+               分组一多，逐个点删除很费劲；而比删除更常用的是「这俩其实
+               是一回事，合并掉」——所以合并放前面，删除留一个 danger。
+               合并会把选中组的全部链接划到目标组，然后删掉空壳。 */ ?>
+        <div class="adm-bulkbar" id="gBulkBar" hidden>
+          <label class="adm-bulk-check">
+            <input type="checkbox" id="gBulkAll">
+            <span>全选</span>
+          </label>
+          <span class="adm-bulk-n" id="gBulkCount">已选 0 个</span>
+          <span class="adm-bulk-sp"></span>
+          <select id="gMergeTarget" class="adm-bulk-select" aria-label="合并到哪个分组">
+            <option value="">合并到…</option>
+            <?php foreach ($groups as $g): ?>
+              <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <button type="button" class="adm-mini" data-gbulk="merge">合并</button>
+          <button type="button" class="adm-mini is-danger" data-gbulk="delete">删除</button>
+        </div>
+
         <div class="adm-groups" id="groupList">
           <?php foreach ($groups as $g): ?>
             <?php
             $gIcon = (string)($g['icon'] ?? '');
             // 没手动选过时，按钮显示「按名称自动匹配」的结果，并用虚线框表示"自动"
             $gSvg  = hp_group_icon($g['name'], $gIcon);
+            $gN    = (int)($g['link_count'] ?? 0);
             ?>
-            <div class="adm-group-row" data-id="<?= (int)$g['id'] ?>">
+            <div class="adm-group-row" data-id="<?= (int)$g['id'] ?>" data-name="<?= h($g['name']) ?>" data-count="<?= $gN ?>">
+              <label class="adm-cb" title="选中「<?= h($g['name']) ?>」">
+                <input type="checkbox" data-gbulk-id="<?= (int)$g['id'] ?>">
+                <span class="sr-only">选中分组「<?= h($g['name']) ?>」</span>
+              </label>
               <button type="button" class="gicon-btn<?= $gIcon === '' ? ' is-auto' : '' ?>"
                       data-gact="icon" data-icon="<?= h($gIcon) ?>"
                       title="选择图标" aria-label="选择「<?= h($g['name']) ?>」的图标">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?= $gSvg ?></svg>
               </button>
               <input class="f-input f-input-tight" value="<?= h($g['name']) ?>" maxlength="24" aria-label="分组名">
+              <?php /* 链接数常驻可见：删除/合并前得知道这一组里到底有多少东西，
+                       否则「删掉」这个动作完全没有分量感。 */ ?>
+              <span class="adm-group-n" title="<?= $gN ?> 条链接"><?= $gN ?></span>
               <button type="button" class="icon-btn is-ok" data-gact="save" aria-label="保存名称">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
               </button>
@@ -564,8 +694,25 @@ if ($tab === 'upgrade' || $tab === 'security') {
               <input class="f-input" id="sTitle" name="site_title" type="text" maxlength="40" value="<?= h(setting('site_title')) ?>">
             </div>
             <div class="f-col">
-              <label class="f-label" for="sFoot">页脚小字（可留空）</label>
+              <label class="f-label" for="sFoot">页脚寄语（可留空）</label>
               <input class="f-input" id="sFoot" name="footer_note" type="text" maxlength="120" value="<?= h(setting('footer_note')) ?>">
+            </div>
+          </div>
+          <?php /* 版权与备案：页脚那行「© 年份 谁 · 保留所有权利」的署名来源。
+                   留空时依次退回作者名、站点名，不会出现空署名。 */ ?>
+          <div class="f-row">
+            <div class="f-col">
+              <label class="f-label" for="sCopy">版权署名</label>
+              <input class="f-input" id="sCopy" name="copyright_name" type="text" maxlength="60"
+                     placeholder="<?= h(setting('author_name') !== '' ? setting('author_name') : setting('site_title', 'Vnav')) ?>"
+                     value="<?= h(setting('copyright_name')) ?>">
+              <p class="f-hint">留空则用作者名，再留空用站点名称。</p>
+            </div>
+            <div class="f-col">
+              <label class="f-label" for="sIcp">ICP 备案号</label>
+              <input class="f-input" id="sIcp" name="icp_beian" type="text" maxlength="40"
+                     placeholder="如 京ICP备12345678号-1" value="<?= h(setting('icp_beian')) ?>">
+              <p class="f-hint">国内主机需要在首页底部展示。留空则不显示。</p>
             </div>
           </div>
         </section>
@@ -1575,6 +1722,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=19" defer></script>
+<script src="assets/admin.js?v=21" defer></script>
 </body>
 </html>

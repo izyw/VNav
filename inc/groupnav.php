@@ -77,6 +77,102 @@ function hp_group_icon_keys(): array
     return array_keys(hp_group_icon_set());
 }
 
+/**
+ * 分组配色 —— 每个图标键一枚色相（HSL 的 H，0~360）。
+ *
+ * 为什么绑在「图标键」上、而不是按分组在列表里的序号：
+ *   序号配色看着更「自动平衡」，但分母是分组数量 —— 删掉一组，后面
+ *   所有组的颜色会集体前移。用户刚记住「紫色是 AI」，第二天它变成了
+ *   资讯的颜色，那这套颜色就不再是信息，只是噪音。绑在语义上，
+ *   AI 永远是紫、开发永远是蓝、影音永远是红。
+ *
+ * 为什么不是均匀分布（i × 24°）：
+ *   28px 的色块上，相邻 24° 的两色几乎分不出来，而真实分类也就七八个。
+ *   这里是按「语义直觉」挑的色，再回头检查相邻组不撞色：实际用到的
+ *   七个分组（常用 / AI / 开发 / 设计 / 资讯 / 影音 / 效率）两两间距
+ *   都在 33° 以上。
+ *
+ * 兜底的 grid 用 214 的中性蓝灰：它是「没匹配上」的颜色，不该抢眼。
+ */
+function hp_group_icon_tones(): array
+{
+    return [
+        'star'  => 45,   // 琥珀金 —— 星标
+        'ai'    => 272,  // 紫 —— AI 的通用色
+        'code'  => 228,  // 蓝 —— 开发者蓝
+        'pen'   => 330,  // 粉 —— 设计
+        'news'  => 192,  // 青 —— 资讯
+        'play'  => 8,    // 红 —— 播放
+        'zap'   => 32,   // 橙 —— 闪电
+        'cloud' => 210,  // 天蓝
+        'book'  => 165,  // 翠绿
+        'bag'   => 350,  // 玫瑰
+        'users' => 250,  // 靛蓝
+        'home'  => 140,  // 绿
+        'music' => 300,  // 品红
+        'game'  => 80,   // 青柠
+        'grid'  => 214,  // 石板蓝（兜底，低饱和）
+    ];
+}
+
+/**
+ * 组名 → 图标键的匹配规则。顺序即优先级。
+ *
+ * AI 要排在「开发」前面，否则「AI 工具」里的「工具」会被效率规则抢走；
+ * 「常用」放最后，避免它吃掉别的词。
+ */
+function hp_group_icon_rules(): array
+{
+    return [
+        'ai'    => ['ai', '智能', '模型', 'gpt', 'claude'],
+        'play'  => ['影音', '视频', '音乐', '娱乐', '影视', '播客', 'media'],
+        'code'  => ['开发', '代码', '编程', '技术', '工程', 'dev', 'code'],
+        'pen'   => ['设计', '素材', '字体', 'icon'],
+        'news'  => ['资讯', '新闻', '阅读', '博客', '媒体', '日报'],
+        'cloud' => ['云', '服务', '存储', '服务器', '主机'],
+        'book'  => ['学习', '教育', '文档', '教程', '读书', '小说', '书'],
+        'bag'   => ['购物', '生活', '商城', '淘宝', '买'],
+        'users' => ['社交', '社区', '论坛', '群'],
+        'game'  => ['游戏', 'game'],
+        'music' => ['歌', '专辑'],
+        'home'  => ['首页', '主页'],
+        'zap'   => ['效率', '工具', '办公'],
+        'star'  => ['常用', '收藏', '推荐', '热门'],
+    ];
+}
+
+/**
+ * 解析出分组最终用哪个图标键：自定义优先，否则按组名匹配，兜底 grid。
+ *
+ * 抽出来是因为颜色也要跟图标走 —— 前台要「图标 + 色相」两样东西，
+ * 不能让两套匹配逻辑各自跑一遍，那迟早会不一致。
+ */
+function hp_group_icon_key(string $name, string $custom = ''): string
+{
+    $set = hp_group_icon_set();
+    if ($custom !== '' && isset($set[$custom])) {
+        return $custom;
+    }
+
+    $lower = mb_strtolower($name, 'UTF-8');
+    foreach (hp_group_icon_rules() as $key => $words) {
+        foreach ($words as $w) {
+            if (mb_strpos($lower, $w) !== false) {
+                return $key;
+            }
+        }
+    }
+    return 'grid';
+}
+
+/** 分组的色相。侧栏图标块、组标题、卡片悬停共用这一个数。 */
+function hp_group_hue(string $name, string $custom = ''): int
+{
+    $tones = hp_group_icon_tones();
+    $key   = hp_group_icon_key($name, $custom);
+    return (int)($tones[$key] ?? $tones['grid']);
+}
+
 /** 图标的中文名，给后台选择器做 aria-label 与 title */
 function hp_group_icon_labels(): array
 {
@@ -100,36 +196,5 @@ function hp_group_icon_labels(): array
 function hp_group_icon(string $name, string $custom = ''): string
 {
     $set = hp_group_icon_set();
-    if ($custom !== '' && isset($set[$custom])) {
-        return $set[$custom];
-    }
-
-    // AI 要排在「开发」前面，否则「AI 工具」里的「工具」会被效率规则抢走；
-    // 「常用」放最后，避免它吃掉别的词
-    $rules = [
-        'ai'    => ['ai', '智能', '模型', 'gpt', 'claude'],
-        'play'  => ['影音', '视频', '音乐', '娱乐', '影视', '播客', 'media'],
-        'code'  => ['开发', '代码', '编程', '技术', '工程', 'dev', 'code'],
-        'pen'   => ['设计', '素材', '字体', 'icon'],
-        'news'  => ['资讯', '新闻', '阅读', '博客', '媒体', '日报'],
-        'cloud' => ['云', '服务', '存储', '服务器', '主机'],
-        'book'  => ['学习', '教育', '文档', '教程', '读书'],
-        'bag'   => ['购物', '生活', '商城', '淘宝', '买'],
-        'users' => ['社交', '社区', '论坛', '群'],
-        'game'  => ['游戏', 'game'],
-        'music' => ['歌', '专辑'],
-        'home'  => ['首页', '主页'],
-        'zap'   => ['效率', '工具', '办公'],
-        'star'  => ['常用', '收藏', '推荐', '热门'],
-    ];
-
-    $lower = mb_strtolower($name, 'UTF-8');
-    foreach ($rules as $key => $words) {
-        foreach ($words as $w) {
-            if (mb_strpos($lower, $w) !== false) {
-                return $set[$key];
-            }
-        }
-    }
-    return $set['grid'];
+    return $set[hp_group_icon_key($name, $custom)] ?? $set['grid'];
 }

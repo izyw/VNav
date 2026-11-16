@@ -22,10 +22,61 @@
 declare(strict_types=1);
 
 /**
- * 开启输出压缩。在输出任何内容之前调用。
- * @param int $level gzip 级别，1~9。动态页建议 6。
+ * 折叠 HTML 里纯排版用的空白。
+ *
+ * 为什么值得做：首页是 PHP 模板边渲染边输出，为了可读性缩进得很规整。
+ * 游客分支下大量 `<?php if ($__isAdmin): ?>` 都不成立，只剩缩进留在
+ * 输出里 —— 实测 371KB 的首页里有约 190KB 是连续空格。gzip 能压掉大部分，
+ * 但压完之后仍有 2~3KB，而且压缩器本身要为此多花时间。
+ *
+ * 安全边界（任何一个破了都会改变页面观感）：
+ *   1. <pre> / <textarea> 里的空白是内容，原样保护。
+ *   2. <script> / <style> 里的空白可能落在字符串字面量内（本站首屏就有一段
+ *      内联脚本，里面有 '搜索 ' 这样的字符串），整块保护。
+ *   3. 只把「标签与标签之间」的空白整个删掉（>\s+<）。标签之间夹着文字的
+ *      （`按 <kbd>` 这种）不匹配，文字里的空格动不到。
+ *      → 本站布局以 flex / grid 为主，块级子项之间的空白不参与排版，
+ *        删掉不影响视觉；行内元素之间的空隙由 CSS gap 控制，不靠空白符。
+ *   4. 连续的水平空白折叠成一个，不会把两个词粘成一体。
+ *
+ * 只对 HTML 开，JSON 一定不能走这里（api.php 的响应会变成非法 JSON）。
  */
-function hp_compress_start(int $level = 6): void
+function hp_html_minify(string $html): string
+{
+    if ($html === '' || strlen($html) < 512) {
+        return $html;
+    }
+
+    // 1. 把不可动的块整段摘出来，换成占位符
+    $hold = [];
+    $out = preg_replace_callback(
+        '~<(pre|textarea|script|style)\b[^>]*>.*?</\1\s*>~is',
+        static function (array $m) use (&$hold): string {
+            $k = "\x01HPHOLD" . count($hold) . "\x01";
+            $hold[$k] = $m[0];
+            return $k;
+        },
+        $html
+    );
+    if ($out === null) {
+        return $html; // 正则出错（极端超长输入）：宁可不压，也不能吐坏内容
+    }
+
+    // 2. 标签之间的空白整体删除
+    $out = preg_replace('~>\s+<~', '><', $out) ?? $out;
+    // 3. 行内连续空白折叠成一个（保住词与词之间的那一个）
+    $out = preg_replace('~[ \t]{2,}~', ' ', $out) ?? $out;
+
+    // 4. 还原保护块
+    return $hold ? strtr($out, $hold) : $out;
+}
+
+/**
+ * 开启输出压缩。在输出任何内容之前调用。
+ * @param int  $level  gzip 级别，1~9。动态页建议 6。
+ * @param bool $minify 顺便折叠 HTML 排版空白。只给 HTML 页面开，JSON 绝对不要开。
+ */
+function hp_compress_start(int $level = 6, bool $minify = false): void
 {
     // 已经有人开了压缩（ob_gzhandler 或 zlib.output_compression），别叠
     if (ini_get('zlib.output_compression')) {
@@ -42,7 +93,10 @@ function hp_compress_start(int $level = 6): void
 
     // Brotli 需要扩展；没有就老实走 gzip
     if (function_exists('brotli_compress') && str_contains($accept, 'br')) {
-        ob_start(static function (string $buf): string {
+        ob_start(static function (string $buf) use ($minify): string {
+            if ($minify) {
+                $buf = hp_html_minify($buf);
+            }
             // 太短的不压，压缩头开销反而亏
             if (strlen($buf) < 1024) return $buf;
             try {
@@ -60,7 +114,10 @@ function hp_compress_start(int $level = 6): void
     }
 
     if (str_contains($accept, 'gzip') && function_exists('gzencode')) {
-        ob_start(static function (string $buf) use ($level): string {
+        ob_start(static function (string $buf) use ($level, $minify): string {
+            if ($minify) {
+                $buf = hp_html_minify($buf);
+            }
             if (strlen($buf) < 1024) return $buf;
             $out = gzencode($buf, max(1, min(9, $level)));
             if ($out !== false && strlen($out) < strlen($buf)) {

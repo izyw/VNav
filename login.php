@@ -219,8 +219,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/app.css?v=39">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=39">
-<link rel="stylesheet" href="assets/skin-frame.css?v=47">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=46">
+<link rel="stylesheet" href="assets/skin-frame.css?v=48">
 <link rel="stylesheet" href="assets/auth.css?v=39">
 <script>
 /* 抢先应用已保存的皮肤，避免登录页闪一下默认皮肤。

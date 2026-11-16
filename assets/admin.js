@@ -3,6 +3,12 @@
   'use strict';
 
   const CSRF = document.querySelector('meta[name="csrf"]')?.content || '';
+  /* 当前在编辑哪一份库（site = 网站默认 / mine = 我的）。
+     由 PHP 注入到 <meta name="adm-lib">。切换库是整页跳转，
+     所以这里读一次就够，不需要监听变化。
+     每个写请求都会自动带上它 —— 不这样做的话，任何一个新增的
+     api() 调用点都可能漏带，导致「在 A 库里点按钮，改到 B 库」。 */
+  const LIB = document.querySelector('meta[name="adm-lib"]')?.content || 'site';
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const toastEl = $('#toast');
@@ -24,7 +30,8 @@
     const res = await fetch('api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF': CSRF },
-      body: JSON.stringify(body),
+      // lib 打头，body 里的同名键（不该有）会覆盖它，属于调用方显式覆盖
+      body: JSON.stringify({ lib: LIB, ...body }),
       credentials: 'same-origin',
     });
     let data;
@@ -80,6 +87,29 @@
     };
 
     $('#newLinkBtn')?.addEventListener('click', () => openEditor(null));
+
+    /* 「我的链接库」为空时的一键打底：把网站默认那份整库搬过来。
+       会写入几百行且不可撤销（覆盖由后端拦，目标库非空就拒绝），
+       所以先让用户确认一次。 */
+    $('#cloneLibBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      if (!confirm('把「网站默认」里的全部分组和链接复制到「我的链接库」？\n\n'
+        + '复制之后两个库各自独立：改一边不会影响另一边，访客始终只看「网站默认」。')) return;
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '复制中…';
+      try {
+        const r = await api({ action: 'library_clone' });
+        toast('已复制 ' + (r.links ?? 0) + ' 条链接、' + (r.groups ?? 0) + ' 个分组');
+        setTimeout(() => location.reload(), 700);
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+    // 空态里的「直接新增」复用页头那颗按钮，不再写一套编辑器打开逻辑
+    $('#newLinkBtn2')?.addEventListener('click', () => $('#newLinkBtn')?.click());
     $('#cancelEdit')?.addEventListener('click', () => { editor.hidden = true; });
 
     // 行内按钮：编辑 / 删除 / 排序 / 隐藏开关
@@ -322,6 +352,9 @@
         action: 'save_settings',
         site_title: fd.get('site_title') ?? '',
         footer_note: fd.get('footer_note') ?? '',
+        // 页脚版权署名与备案号：留空是合法值（会退回作者名/站点名，备案则不显示）
+        copyright_name: fd.get('copyright_name') ?? '',
+        icp_beian: fd.get('icp_beian') ?? '',
         /* groupnav 已不是可选项（只剩左侧栏），界面上没有这个控件。
            这里必须整行删掉而不是留空串 —— 提交空值会把库里的 side 冲成 ''。
            save_settings 只遍历「payload 里存在的键」，不传就不动。 */
@@ -870,26 +903,98 @@
     });
   }
 
+  /* ---------- 链接列表筛选 ----------
+     300 多条平铺在一个页面上，找一条冷门链接要一路滚。先筛再操作：
+     搜索匹配标题与网址，分组下拉按 data-group 收窄。
+     纯前端隐藏，不打接口 —— 数据本来就已经在页面上了。 */
+  (function initLinkFilter() {
+    const input = $('#linkFilter');
+    const sel   = $('#filterGroup');
+    const box   = $('#admList');
+    if (!input || !sel || !box) return;
+    const countEl = $('#filterCount');
+
+    function apply() {
+      const q   = input.value.trim().toLowerCase();
+      const gid = sel.value;
+      const filtering = q !== '' || gid !== '';
+      let shown = 0, total = 0;
+
+      $$('.adm-list-group', box).forEach(block => {
+        const label = $('.adm-list-label', block);
+        const bg = label ? (label.dataset.group ?? '') : '';
+        let inBlock = 0;
+        $$('.adm-row', block).forEach(row => {
+          total++;
+          const okQ = !q
+            || (row.dataset.title || '').toLowerCase().includes(q)
+            || (row.dataset.url || '').toLowerCase().includes(q);
+          const okG = gid === '' || bg === gid;
+          const ok  = okQ && okG;
+          row.hidden = !ok;
+          if (ok) { shown++; inBlock++; }
+        });
+        // 整块都被筛掉就连组标题一起收起来，避免一长串空标题
+        block.hidden = inBlock === 0;
+      });
+
+      if (countEl) {
+        countEl.textContent = filtering ? '显示 ' + shown + ' / ' + total + ' 条' : '';
+      }
+      // 让批量条重算「全选」状态（筛选变化后可见集合变了）
+      document.dispatchEvent(new CustomEvent('vnav:listfilter'));
+    }
+
+    input.addEventListener('input', apply);
+    sel.addEventListener('change', apply);
+    const reset = $('#filterReset');
+    if (reset) {
+      reset.addEventListener('click', () => {
+        input.value = '';
+        sel.value = '';
+        apply();
+      });
+    }
+  })();
+
   /* ---------- 批量管理 ----------
-     勾选一批 → 一个动作。列表是按分组分块渲染的，所以选择状态统一用
-     data-bulk-id 收集，跟分组无关；「全选」也是全列表，不是全组。 */
+     勾选一批 → 一个动作。列表按分组分块渲染，选择状态统一用 data-bulk-id
+     收集，跟分组无关。
+
+     筛选改造后的两条约定：
+       1. 「全选」只作用于**当前可见**的行 —— 筛出「设计」再点全选，
+          选中的应该就是设计那 22 条，而不是页面上全部 300 条。
+       2. 被筛掉的已选条目不会自动取消（切个筛选就丢选择太反直觉），
+          但计数里会显式说明「其中 N 条在当前筛选外」，避免误删。 */
   (function initBulk() {
     const bar = $('#bulkBar');
     if (!bar) return;
-    const allBox  = $('#bulkAll');
-    const countEl = $('#bulkCount');
+    const allBox   = $('#bulkAll');
+    const countEl  = $('#bulkCount');
     const groupSel = $('#bulkGroup');
-    const boxes = () => $$('input[data-bulk-id]');
-    const picked = () => boxes().filter(b => b.checked);
+    const all     = () => $$('input[data-bulk-id]');
+    const isShown = b => {
+      const row = b.closest('.adm-row');
+      return !!row && !row.hidden;
+    };
+    const visible = () => all().filter(isShown);
+    const picked  = () => all().filter(b => b.checked);
 
     function sync() {
-      const list = boxes();
-      const n = list.filter(b => b.checked).length;
-      bar.hidden = n === 0;
-      countEl.textContent = '已选 ' + n + ' 条';
-      allBox.checked = n > 0 && n === list.length;
-      allBox.indeterminate = n > 0 && n < list.length;
-      list.forEach(b => {
+      const vis = visible();
+      const sel = picked();
+      const hiddenSel = sel.filter(b => !isShown(b)).length;
+
+      bar.hidden = sel.length === 0;
+      countEl.textContent = hiddenSel > 0
+        ? '已选 ' + sel.length + ' 条（其中 ' + hiddenSel + ' 条在当前筛选外）'
+        : '已选 ' + sel.length + ' 条';
+
+      const visOn = vis.filter(b => b.checked).length;
+      allBox.checked = vis.length > 0 && visOn === vis.length;
+      allBox.indeterminate = visOn > 0 && visOn < vis.length;
+
+      all().forEach(b => {
         const row = b.closest('.adm-row');
         if (row) row.classList.toggle('is-picked', b.checked);
       });
@@ -898,12 +1003,32 @@
     document.addEventListener('change', e => {
       if (e.target === allBox) {
         const on = allBox.checked;
-        boxes().forEach(b => { b.checked = on; });
+        visible().forEach(b => { b.checked = on; });
         sync();
         return;
       }
       if (e.target.matches && e.target.matches('input[data-bulk-id]')) sync();
     });
+
+    /* 「选中本组」：一个分组头一颗按钮，点了就把这一块里可见的行全勾上
+       （或全取消）。已有筛选时只作用在可见行上，不会波及筛掉的。 */
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('[data-pick-group]');
+      if (!btn) return;
+      const block = btn.closest('.adm-list-group');
+      if (!block) return;
+      const boxes = $$('.adm-row', block)
+        .filter(r => !r.hidden)
+        .map(r => $('input[data-bulk-id]', r))
+        .filter(Boolean);
+      if (!boxes.length) return;
+      const allOn = boxes.every(x => x.checked);
+      boxes.forEach(x => { x.checked = !allOn; });
+      sync();
+    });
+
+    // 筛选变化后重算状态
+    document.addEventListener('vnav:listfilter', sync);
 
     bar.addEventListener('click', async e => {
       const btn = e.target.closest('[data-bulk]');
@@ -918,7 +1043,11 @@
         if (!gid) { toast('先在上面选一个目标分组', true); return; }
         payload.group_id = gid;
       }
-      if (op === 'delete' && !confirm('确定删除选中的 ' + ids.length + ' 条链接？删了无法恢复。')) return;
+      if (op === 'delete') {
+        const hiddenSel = picked().filter(b => !isShown(b)).length;
+        const extra = hiddenSel > 0 ? '\n\n注意：其中 ' + hiddenSel + ' 条不在当前筛选结果里。' : '';
+        if (!confirm('确定删除选中的 ' + ids.length + ' 条链接？删了无法恢复。' + extra)) return;
+      }
 
       const label = btn.textContent;
       btn.disabled = true;
@@ -927,6 +1056,89 @@
         const r = await api(payload);
         toast('已处理 ' + (r.affected ?? ids.length) + ' 条');
         setTimeout(() => location.reload(), 500);
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+  })();
+
+  /* ---------- 分组批量 ----------
+     分组多了之后最想要的是「把这几个合成一个」：合并会把选中组的全部
+     链接划到目标组，再删掉空壳；删除则让链接回到「未分组」。
+     两个动作都不可撤销，所以都要二次确认，并把「会影响多少条链接」
+     说清楚（行上的 .adm-group-n 就是那个数字）。 */
+  (function initGroupBulk() {
+    const bar = $('#gBulkBar');
+    if (!bar) return;
+    const allBox  = $('#gBulkAll');
+    const countEl = $('#gBulkCount');
+    const targetSel = $('#gMergeTarget');
+    const rows = () => $$('.adm-group-row', $('#groupList') || document);
+    const boxes = () => $$('input[data-gbulk-id]');
+    const picked = () => boxes().filter(b => b.checked);
+
+    function sync() {
+      const sel = picked();
+      bar.hidden = sel.length === 0;
+      const links = sel.reduce((n, b) => {
+        const row = b.closest('.adm-group-row');
+        return n + (row ? Number(row.dataset.count || 0) : 0);
+      }, 0);
+      countEl.textContent = '已选 ' + sel.length + ' 个分组（共 ' + links + ' 条链接）';
+      allBox.checked = sel.length > 0 && sel.length === boxes().length;
+      allBox.indeterminate = sel.length > 0 && sel.length < boxes().length;
+      rows().forEach(r => {
+        const cb = $('input[data-gbulk-id]', r);
+        r.classList.toggle('is-picked', !!(cb && cb.checked));
+      });
+    }
+
+    document.addEventListener('change', e => {
+      if (e.target === allBox) {
+        const on = allBox.checked;
+        boxes().forEach(b => { b.checked = on; });
+        sync();
+        return;
+      }
+      if (e.target.matches && e.target.matches('input[data-gbulk-id]')) sync();
+    });
+
+    bar.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-gbulk]');
+      if (!btn) return;
+      const op  = btn.dataset.gbulk;
+      const ids = picked().map(b => Number(b.dataset.gbulkId)).filter(Boolean);
+      if (!ids.length) { toast('先勾选分组', true); return; }
+
+      const payload = { action: 'groups_bulk', op, ids };
+      if (op === 'merge') {
+        const t = Number(targetSel.value);
+        if (!t) { toast('先在右边选一个「合并到」的目标分组', true); return; }
+        payload.target_id = t;
+        const tName = targetSel.options[targetSel.selectedIndex].textContent;
+        if (!confirm('把选中的 ' + ids.length + ' 个分组合并到「' + tName + '」？\n'
+          + '这些分组里的链接会全部划过去，然后分组本身被删除。此操作不可撤销。')) return;
+      }
+      if (op === 'delete') {
+        const links = picked().reduce((n, b) => {
+          const row = b.closest('.adm-group-row');
+          return n + (row ? Number(row.dataset.count || 0) : 0);
+        }, 0);
+        if (!confirm('确定删除选中的 ' + ids.length + ' 个分组？\n'
+          + '其中 ' + links + ' 条链接不会被删除，会回到「未分组」。')) return;
+      }
+
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '处理中…';
+      try {
+        const r = await api(payload);
+        toast(op === 'merge'
+          ? '已合并 ' + (r.moved ?? 0) + ' 条链接，消掉 ' + (r.affected ?? 0) + ' 个分组'
+          : '已删除 ' + (r.affected ?? 0) + ' 个分组');
+        setTimeout(() => location.reload(), 600);
       } catch (err) {
         toast(err.message, true);
         btn.disabled = false;

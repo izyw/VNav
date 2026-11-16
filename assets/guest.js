@@ -57,17 +57,34 @@
   }
 
   /* ---------- 读写 ---------- */
+  /* 游客数据在本机保留 30 天。
+     不设期限的话，半年前随手试加的东西会一直占着，而且它优先级高于
+     服务端默认数据 —— 用户换了默认库也看不到，只会觉得「怎么不更新」。
+     30 天足够覆盖「先试试、回头再登录」的窗口。 */
+  var TTL = 30 * 24 * 60 * 60 * 1000;
+
   function read() {
     try {
       var raw = localStorage.getItem(KEY);
       if (!raw) return null;
       var d = JSON.parse(raw);
-      return (d && Array.isArray(d.groups) && Array.isArray(d.links)) ? d : null;
+      if (!(d && Array.isArray(d.groups) && Array.isArray(d.links))) return null;
+      var t = Number(d.savedAt || 0);
+      if (!t || Date.now() - t > TTL) {
+        // 过期或老格式（没有 savedAt）：直接作废，回到服务端默认数据
+        localStorage.removeItem(KEY);
+        return null;
+      }
+      return d;
     } catch (e) { return null; }
   }
 
   function write(d) {
-    try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {}
+    try {
+      var out = d || {};
+      out.savedAt = Date.now();   // 每次写入都续期
+      localStorage.setItem(KEY, JSON.stringify(out));
+    } catch (e) {}
   }
 
   function clear() {
@@ -140,13 +157,24 @@
     if (!wrap || !d) return;
 
     var html = '';
+    /* 索引要单独数，不能用 forEach 的第二个参数。
+       下面会跳过没有链接的分组，用 forEach 的下标会和侧栏对不上 ——
+       侧栏的 data-gjump 是「只数非空组」的连续序号。
+
+       id 必须写出来：服务端首屏渲染的 <section id="g0"> 是对的，
+       但游客第二次进来会走这里用本地数据重建 DOM，早先漏了 id，
+       结果 .gnav-item 的 href="#g0" 指向不存在的元素，
+       整条分组导航点了完全没反应（实测就是这个原因）。 */
+    var gi = 0;
     d.groups.forEach(function (g) {
       var items = d.links.filter(function (l) { return Number(l.group_id) === Number(g.id); });
       if (!items.length) return;
-      html += '<section class="group">';
+      var idx = gi++;
+      html += '<section class="group" id="g' + idx + '"'
+           + (g.name !== '' ? ' aria-labelledby="gh' + idx + '"' : '') + '>';
       if (g.name !== '') {
         html += '<div class="group-head" data-icon="' + esc(g.icon || '') + '">'
-             + '<h2 class="group-name">' + esc(g.name) + '</h2>'
+             + '<h2 class="group-name" id="gh' + idx + '">' + esc(g.name) + '</h2>'
              + '<span class="group-count">' + items.length + '</span>'
              + '<span class="group-rule" aria-hidden="true"></span></div>';
       }
@@ -264,14 +292,23 @@
     try { localStorage.removeItem(KEY); } catch (e) {}
     return;
   }
+  /* 过期的不再提示。这里读的是原始字符串（不是上面的 read()），
+     所以要自己判一次 savedAt，否则半年前的数据也会弹窗来问。 */
+  var savedAt = Number(data.savedAt || 0);
+  if (!savedAt || Date.now() - savedAt > 30 * 24 * 60 * 60 * 1000) {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    return;
+  }
 
-  var n = data.links.length;
+  var nLink = data.links.length;
+  var nGroup = (data.groups || []).length;
 
   setTimeout(function () {
     var merge = window.confirm(
-      '本机有 ' + n + ' 条未登录时添加的链接。\n\n' +
-      '确定：合并到当前账号（重复的网址会自动跳过）\n' +
-      '取消：丢弃本机这份数据'
+      '检测到你在未登录时保存了 ' + nLink + ' 条链接、' + nGroup + ' 个分组。\n\n' +
+      '要导入到当前账号吗？\n' +
+      '  确定：导入（重复的网址自动跳过，原有数据不受影响）\n' +
+      '  取消：不导入，并清除本机这份数据'
     );
 
     if (!merge) {

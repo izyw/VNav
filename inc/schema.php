@@ -12,9 +12,10 @@
 declare(strict_types=1);
 
 /** 结构版本。加字段/加表就 +1，并在 hp_migrate() 里补一段。 */
+/** v7：清掉历史的 UNIQUE(url) 单列索引，URL 唯一性只按 (user_id, url) 管。 */
 /** v6：多用户（users 表 + links/groups/settings 的 user_id 归属列）。 */
 /** v5：groups 增加 icon 列（分组图标可自定义）。 */
-const HP_SCHEMA_VERSION = 6;
+const HP_SCHEMA_VERSION = 7;
 
 /**
  * 建全部表与索引。纯 DDL，幂等。
@@ -52,7 +53,13 @@ SQL);
 
     // 主页是高频读、低频写，索引只留真正会被 WHERE/ORDER 用到的
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_links_sort ON links(group_id, sort, id)');
-    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_links_url ON links(url)');
+    /* 这里**不能**再建 UNIQUE(url) 单列索引。
+       v6 起链接按 user_id 分成多份（0 = 站点默认，N = 用户 N 的私有），
+       URL 的唯一性必须是 (user_id, url) —— 建在 url 上等于规定
+       「全站所有账号加起来同一个网址只能出现一次」，两个账号收藏同一个
+       站点就直接撞索引。V1.5.6 实测：把默认库复制到管理员私人库时
+       报 UNIQUE constraint failed: links.url，就是这个索引干的。
+       复合索引由 hp_migrate() 统一创建，见下面的 ux_links_owner_url。 */
 
     $pdo->exec(<<<'SQL'
 CREATE TABLE IF NOT EXISTS settings (

@@ -270,21 +270,32 @@ html[data-theme='frame'] body.hp .gnav-item.is-active {
 }
 
 /* 图标回归纯线条：Atlas 那枚 28px 灰方块是「侧栏宽、字大」时的体量补偿，
-   在 32px 行高的紧凑列表里反而让每行发重。 */
+   在 32px 行高的紧凑列表里反而让每行发重。
+   V1.5.12 起线条带分组色：程序框语言的克制在「无底、细线、零彩度」，
+   但零彩度不等于零信息 —— 一根 17px 的彩色线条既守住了克制，
+   又让分组颜色这条线索在这里也成立。 */
 html[data-theme='frame'] body.hp .gnav-ico {
   width: 17px;
   height: 17px;
   border-radius: 0;
   background: none;
-  color: var(--fr-ink-3);
+  box-shadow: none;
+  color: hsl(var(--gt-h, 220) 52% 46%);
+  transform: none;
 }
 html[data-theme='frame'] body.hp .gnav-item:hover .gnav-ico {
   background: none;
-  color: var(--fr-ink-2);
+  color: hsl(var(--gt-h, 220) 58% 40%);
+  transform: none;
 }
 html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-ico {
   background: none;
-  color: var(--fr-ink);
+  color: hsl(var(--gt-h, 220) 58% 38%);
+}
+/* 选中行左侧的组色彩条在程序框里不出现：这里的选中态是整块浅灰，
+   再加一条竖彩条会同时存在两种「当前项」语言。 */
+html[data-theme='frame'] body.hp .gnav--side .gnav-item.is-active::before {
+  content: none;
 }
 
 html[data-theme='frame'] body.hp .gnav--side .gnav-count {
@@ -349,8 +360,25 @@ html[data-theme='frame'] body.hp .group-count {
 }
 html[data-theme='frame'] body.hp .group-rule { display: none; }
 /* Atlas 的组名前有一颗 6px 强调色圆点 —— 那是「目录」语气的装饰。
-   窗口界面里分组标签不需要装饰，一个短横线的信息量都是多余的。 */
+   窗口界面里分组标签不需要装饰，一个短横线的信息量都是多余的。
+   V1.5.12 换成彩色图标块之后同理：框里只留一条彩色细线，
+   不摆 22px 的实色小方块 —— 那是 Atlas 的分量，放进 32px 行高会发重。 */
 html[data-theme='frame'] body.hp .group-name::before { display: none; }
+html[data-theme='frame'] body.hp .gh-ico {
+  width: 15px;
+  height: 15px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: hsl(var(--gt-h, 220) 52% 46%);
+}
+html[data-theme='frame'] body.hp .gh-ico svg { width: 15px; height: 15px; }
+/* 计数徽章的组色底只在 Atlas 出现。Atlas 那两条 background 用的是
+   --gt-* 变量，在 frame 下这些变量没有定义 —— 不显式关掉的话，
+   「关掉」这件事就取决于变量有没有定义，将来给 frame 补上变量块就
+   会突然冒出胶囊底。frame 里它一直是纯数字。 */
+html[data-theme='frame'] body.hp .group-count { color: hsl(var(--gt-h, 220) 34% 42%); background: none; }
+html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-count { background: none; }
 
 /* ==========================================================================
    6. 卡片
@@ -671,15 +699,38 @@ html[data-theme='frame'] body.hp .gnav-ver {
   letter-spacing: .01em;
   color: var(--fr-ink-3);
 }
+html[data-theme='frame'] body.hp .gnav-foot p { margin: 0; }
 html[data-theme='frame'] body.hp .gnav-copy {
   color: var(--fr-ink-3);
   text-decoration: none;
 }
-html[data-theme='frame'] body.hp a.gnav-copy:hover {
-  color: var(--fr-ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+html[data-theme='frame'] body.hp .gnav-owner {
+  font-weight: 700;
+  color: var(--fr-ink-2);
 }
+html[data-theme='frame'] body.hp .gnav-rights {
+  color: var(--fr-ink-3);
+  opacity: .72;
+}
+html[data-theme='frame'] body.hp .gnav-license,
+html[data-theme='frame'] body.hp .gnav-link {
+  color: var(--fr-ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color .14s, border-color .14s;
+}
+html[data-theme='frame'] body.hp .gnav-license:hover,
+html[data-theme='frame'] body.hp .gnav-link:hover {
+  color: var(--fr-ink);
+  border-bottom-color: var(--fr-line-hi, currentColor);
+}
+html[data-theme='frame'] body.hp .gnav-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 @media (max-width: 1139px) {
   html[data-theme='frame'] body.hp .gnav-foot { display: none; }
 }

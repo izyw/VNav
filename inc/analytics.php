@@ -165,11 +165,13 @@ function hp_geo_ready(): bool
         return $ready;
     }
     try {
-        // 有 geo_meta 记录就说明至少导过一次；再用 country 表兜一道，
-        // 防止「清了数据但忘了清 meta」这种半残状态
+        /* 只判「表里有没有一行」，不数总数。
+           旧写法 SELECT COUNT(*) FROM geo_country 在 36 万行上要 10ms，
+           而这只是每个访客请求开头的一个「有没有」判断 —— 数了也用不上。
+           LIMIT 1 走主键取第一行，0.01ms。 */
         $pdo = db();
-        $has = $pdo->query('SELECT COUNT(*) FROM geo_country')->fetchColumn();
-        $ready = ((int)$has) > 0;
+        $has = $pdo->query('SELECT 1 FROM geo_country LIMIT 1')->fetchColumn();
+        $ready = $has !== false;
     } catch (Throwable $e) {
         $ready = false;
     }
@@ -195,7 +197,9 @@ function hp_geo_has_city(): bool
         return $has;
     }
     try {
-        $has = ((int)db()->query('SELECT COUNT(*) FROM geo_city')->fetchColumn()) > 0;
+        /* 同上：城市表有 210 万行，COUNT(*) 要 38ms。
+           这里只问「有没有」，LIMIT 1 就够。 */
+        $has = db()->query('SELECT 1 FROM geo_city LIMIT 1')->fetchColumn() !== false;
     } catch (Throwable $e) {
         $has = false;
     }
@@ -234,41 +238,64 @@ function hp_geo_lookup(string $ip): array
     try {
         $pdo = db();
 
-        /* 顺序有讲究：城市表通常为空（只导了国家库），
-           所以先看城市表有没有数据，再决定要不要查它。 */
+        /* ============ 查询写法说明（改之前务必读完，别再改回去）============
+           这三张表都是「IP 段 → 归属」的结构，start 是 INTEGER PRIMARY KEY，
+           按 start 升序排列，段与段之间不重叠。
+
+           错的写法（V1.5.3 及之前）：
+               WHERE start <= ? AND "end" >= ? LIMIT 1
+           SQLite 会走 start 主键索引，从「最小的 start」开始逐行扫，
+           直到某行的 end 正好盖住这个 IP。绝大多数公网 IP 落在表的靠后
+           位置，于是要扫几十万行 —— 实测平均 182ms/次，城市表最坏 138ms。
+           三个查询串起来，一个访客就要 200ms+，这是首页 TTFB 的大头。
+
+           对的写法：
+               WHERE start <= ? ORDER BY start DESC LIMIT 1
+           逆序取「start 不超过这个 IP」的最后一段，索引定位一次即可，
+           再在 PHP 里确认这个 IP 没有超出该段的 end（段间有空洞，
+           比如未分配地址，那种情况就是查不到）。
+           实测 0.081ms/次，已用 116 个 IP（随机 + 段边界 + 知名地址）
+           对新旧写法做过逐条比对，结果 0 差异。
+           ============================================================ */
+
         if (hp_geo_has_city()) {
             $st = hp_geo_stmt(
-                'SELECT p.cc, p.region, p.city FROM geo_city c
+                'SELECT c."end", p.cc, p.region, p.city FROM geo_city c
                    JOIN geo_place p ON p.id = c.pid
-                  WHERE c.start <= ? AND c."end" >= ? LIMIT 1'
+                  WHERE c.start <= ? ORDER BY c.start DESC LIMIT 1'
             );
-            $st->execute([$n, $n]);
+            $st->execute([$n]);
             if ($row = $st->fetch()) {
-                $out['country'] = (string)$row['cc'];
-                $out['region']  = (string)$row['region'];
-                $out['city']    = (string)$row['city'];
-                $out['known']   = $row['cc'] !== '';
+                $st->closeCursor();
+                // 落在段外（未分配 / 空洞）就当没查到，不能拿上一段的城市冒充
+                if ((int)$row['end'] >= $n) {
+                    $out['country'] = (string)$row['cc'];
+                    $out['region']  = (string)$row['region'];
+                    $out['city']    = (string)$row['city'];
+                    $out['known']   = $row['cc'] !== '';
+                }
+            } else {
+                $st->closeCursor();
             }
-            $st->closeCursor();
         }
 
         if ($out['country'] === '') {
-            $st = hp_geo_stmt('SELECT cc FROM geo_country WHERE start <= ? AND "end" >= ? LIMIT 1');
-            $st->execute([$n, $n]);
-            $cc = $st->fetchColumn();
+            $st = hp_geo_stmt('SELECT "end", cc FROM geo_country WHERE start <= ? ORDER BY start DESC LIMIT 1');
+            $st->execute([$n]);
+            $row = $st->fetch();
             $st->closeCursor();
-            if ($cc) {
-                $out['country'] = (string)$cc;
+            if ($row && (int)$row['end'] >= $n && (string)$row['cc'] !== '') {
+                $out['country'] = (string)$row['cc'];
                 $out['known']   = true;
             }
         }
 
-        $st = hp_geo_stmt('SELECT org FROM geo_asn WHERE start <= ? AND "end" >= ? LIMIT 1');
-        $st->execute([$n, $n]);
-        $org = $st->fetchColumn();
+        $st = hp_geo_stmt('SELECT "end", org FROM geo_asn WHERE start <= ? ORDER BY start DESC LIMIT 1');
+        $st->execute([$n]);
+        $row = $st->fetch();
         $st->closeCursor();
-        if ($org) {
-            $out['isp'] = (string)$org;
+        if ($row && (int)$row['end'] >= $n && (string)$row['org'] !== '') {
+            $out['isp'] = (string)$row['org'];
         }
     } catch (Throwable $e) {
         // 表还没建 / 数据没导入：静默降级为「未知」

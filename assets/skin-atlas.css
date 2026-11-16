@@ -281,9 +281,14 @@ body.hp {
   --hp-bar: 58px;
   --hp-ghead: 34px;
   --hp-gap: 16px;
-  /* 1560 比 1440 视口宽，所以在 1440 上 stage 会铺满整屏、
-     内容宽度由左右的对称留白决定；到 1920 才由 maxw 接管。 */
-  --hp-maxw: 1560px;
+  /* 整个应用框的最大宽度（侧栏 + 主区一起算）。
+     取值由「主区要排几列」倒推，不是凭观感：
+       可用宽 = maxw − 侧栏 240 − 间距 26 − 右内距 40 = maxw − 306
+       4 列至少需要 4×240 + 3×16 = 1008
+       → maxw ≥ 1314。取 1340 留 26px 余量（防止滚动条/边框把第 4 列挤掉）。
+     1440 视口下：可用 1034，4 列 × 247，两侧各留 50 —— 有收束感但不铺满。
+     再窄（如 1280 屏）自动退回 3 列，这是 minmax 的自然行为。 */
+  --hp-maxw: 1340px;
   /* 240 是「整列」的舒适宽度，不是浮层面板的宽度：
      内距 12×2 + 图标 28 + 间距 10 + 计数 24 + 名称约 128，
      六个汉字都不用截断。上一版 180 是在「和卡片抢地方」的前提下的
@@ -306,11 +311,16 @@ body.hp {
   font-family: var(--at-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 空气感：顶部一团极淡的蓝、右上一点紫。淡到说不出哪里亮，但页面不死板。 */
+  /* 空气感：顶部一团极淡的蓝、右上一点紫、右下一点暖琥珀。
+     加第三层是因为前两层都在顶部 —— 整页上半冷、下半死灰，滚动到
+     第二屏之后背景就是一块平铺的 #f5f5f7。右下补一点暖色之后，
+     页面有了冷↔暖的对角，而且因为固定在视口（attachment: fixed），
+     滚到哪里都跟着，不会在中途「用完」。 */
   background-color: var(--at-paper);
   background-image:
     radial-gradient(1100px 520px at 50% -18%, rgba(0, 113, 227, .06), transparent 70%),
     radial-gradient(820px 460px at 88% 2%, rgba(120, 90, 255, .045), transparent 72%),
+    radial-gradient(960px 640px at 96% 112%, rgba(240, 180, 41, .055), transparent 70%),
     linear-gradient(180deg, var(--at-paper-hi) 0%, var(--at-paper) 46%, var(--at-paper) 100%);
   background-repeat: no-repeat;
   background-attachment: fixed;
@@ -343,7 +353,10 @@ body.hp .grain { display: none; }
    始终在，区域就分开了；滚动时叠磨砂，内容从线下面穿过。 */
 body.hp .topbar {
   min-height: var(--hp-bar);
-  padding: 0 var(--pad-x);
+  /* 左右内距跟着应用框走：maxw 之外的部分当作留白，顶栏内容收进框内。
+     只写 var(--pad-x) 的话顶栏是通栏的，logo 会孤零零钉在屏幕最左边，
+     而下面的侧栏已经跟着框居中到 120px 处 —— 一上一下两条基准线。 */
+  padding: 0 max(var(--pad-x), calc((100% - var(--hp-maxw)) / 2 + var(--pad-x)));
   gap: 20px;
   background: color-mix(in srgb, var(--at-paper-hi) 86%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
@@ -598,6 +611,49 @@ body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: #fff; }
 /* ==========================================================================
    5. 分组导航 —— 分段控件
    ========================================================================== */
+
+/* ---------- 分组色相刻度 ----------
+   --gt-h（0~360）由模板按分组写入（PHP: hp_group_hue），这里只定义
+   「同一枚色相在亮底 / 暗底上怎么用」。色相本身不进 CSS ——
+   15 个图标键各一个色相，写进 CSS 就是 15 条规则，而它原本是数据。
+
+   亮底那一档：渐变两端亮度 63% → 51%，色块在白卡旁不会被冲淡；
+   暗底要整体降饱和、压亮度，否则小色块在 #0b0b0d 上会「发光」。 */
+html[data-theme='atlas'],
+html[data-theme='auto'] {
+  /* 饱和度 78%、亮度 60% → 48%。第一版给的是 84% / 63% → 51%，
+     实测黄色（常用）和青柠（游戏）在白描边图标下面会「发亮」——
+     白线压在亮黄上几乎没有对比度，缩放看是一团糊。压到 60% 之后
+     白图标才立得住，其余色相只是从「糖果」变成「墨水」。 */
+  --gt-s: 78%;
+  --gt-l1: 60%;
+  --gt-l2: 48%;
+  --gt-tint-a: 10%;
+  --gt-tint-a2: 20%;
+  --gt-ink-l: 38%;
+  --gt-edge-a: 24%;
+}
+html[data-theme='atlas-dark'] {
+  --gt-s: 60%;
+  --gt-l1: 47%;
+  --gt-l2: 38%;
+  --gt-tint-a: 22%;
+  --gt-tint-a2: 30%;
+  --gt-ink-l: 76%;
+  --gt-edge-a: 32%;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] {
+    --gt-s: 60%;
+    --gt-l1: 47%;
+    --gt-l2: 38%;
+    --gt-tint-a: 22%;
+    --gt-tint-a2: 30%;
+    --gt-ink-l: 76%;
+    --gt-edge-a: 32%;
+  }
+}
+
 body.hp .gnav-item {
   min-height: 30px;
   padding: 0 11px;
@@ -617,9 +673,14 @@ body.hp .gnav-item:hover {
 }
 body.hp .gnav-item.is-active {
   color: var(--at-ink);
-  background: var(--at-card);
-  border-color: var(--at-rule);
-  box-shadow: var(--at-sh-xs);
+  /* 选中底色从「白卡」换成组色的一层薄雾：白色在浅灰侧栏上是「抬起」，
+     但它跟任何一个分组都没有关系；换成 --gt-h 之后，选中的是哪一组
+     由颜色自己说明。着色用 color-mix 叠透明，暗底自动跟着变深。 */
+  background: color-mix(in srgb,
+      hsl(var(--gt-h, 220) 80% 48%) var(--gt-tint-a), transparent);
+  border-color: color-mix(in srgb,
+      hsl(var(--gt-h, 220) 60% 55%) var(--gt-edge-a), transparent);
+  box-shadow: none;
 }
 body.hp .gnav-item.is-active::before { display: none; }
 
@@ -636,8 +697,9 @@ body.hp .gnav-count {
   letter-spacing: -.02em;
 }
 body.hp .gnav-item.is-active .gnav-count {
-  background: var(--at-accent-s);
-  color: var(--at-accent);
+  background: color-mix(in srgb,
+      hsl(var(--gt-h, 220) 78% 50%) var(--gt-tint-a2), transparent);
+  color: hsl(var(--gt-h, 220) 58% var(--gt-ink-l));
 }
 
 body.hp .gnav--tab {
@@ -683,7 +745,13 @@ body.hp .gnav--tab .gnav-item.is-active {
    底色用 --at-nav-bg（比主区深 3%），两个面靠色差 + 竖线双重分界。 */
 body.hp .gnav--side {
   top: var(--hp-bar);
-  left: 0;
+  /* 跟随应用框一起居中，不能写死 left:0。
+     stage 是靠 margin:auto 居中的，maxw 收到 1200 之后在 1440 上
+     左右各让出 120；侧栏若还钉在屏幕最左边，就会和内容之间空出
+     一道 146px 的缝 —— 左边贴边、中间悬空、右边一大片留白，整页看起来
+     是歪的。这里跟 stage 用同一个 maxw 算左边界，两者才能咬合。
+     窄屏时 maxw 大于视口，calc 为负，max() 兜回 0，仍然是贴边铺满。 */
+  left: max(0px, calc((100% - var(--hp-maxw)) / 2));
   bottom: 0;
   width: var(--hp-nav-w);
   max-height: none;
@@ -754,28 +822,54 @@ body.hp .gnav--side .gnav-item {
   font-weight: 500;
 }
 /* V1.3.8 起侧栏用图标代替小圆点：分类名是自建的，图标按名字匹配内置库。
-   图标坐在一枚 24px 的浅灰方块里 —— 单一描边图标在 140px 宽的栏里太轻，
-   加个底色块才有「这是一个分类」的体量感，选中时方块转蓝。 */
+   V1.5.12 起这枚图标带色 —— 每个分组一个固定色相，和组标题、卡片悬停
+   用同一个 --gt-h。
+
+   为什么这里破例用实色，而不是卡片图标那套「95% 亮度的淡底 + 深色图标」：
+   28px 的块里，15px 描边图标的彩色面积不到 3%，淡底在灰侧栏上看着
+   仍然是灰的。要让「一列彩色」真的成立，只能让色块本身是实色。
+   全站只有这一处这样做，所以它反而成了识别度最高的那一处。 */
 body.hp .gnav-ico {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--at-ink) 5%, transparent);
-  color: var(--at-ink-3);
-  transition: background .16s, color .16s;
+  border-radius: 9px;
+  background: linear-gradient(155deg,
+      hsl(var(--gt-h, 220) var(--gt-s) var(--gt-l1)),
+      hsl(calc(var(--gt-h, 220) + 9) var(--gt-s) var(--gt-l2)));
+  color: #fff;
+  box-shadow:
+    0 1px 2px hsl(var(--gt-h, 220) 70% 30% / .28),
+    0 4px 10px -4px hsl(var(--gt-h, 220) 72% 42% / .38),
+    inset 0 1px 0 hsl(0 0% 100% / .38);
+  transition: transform .18s cubic-bezier(.34, 1.4, .64, 1), box-shadow .18s;
 }
 body.hp .gnav-item:hover .gnav-ico {
-  background: color-mix(in srgb, var(--at-ink) 8%, transparent);
-  color: var(--at-ink-2);
+  transform: translateY(-1px) scale(1.05);
 }
+/* 选中项的图标块不再换色 —— 它本来就是这一组的颜色，换成强调蓝
+   反而会把「颜色 = 分组」这条规则打断。 */
 body.hp .gnav-item.is-active .gnav-ico {
-  background: var(--at-accent-s);
-  color: var(--at-accent);
+  transform: none;
 }
 body.hp .gnav--side .gnav-item::before { content: none; }
+/* 选中行左边一条 3px 组色短条。左侧栏的通用语言（Linear / Notion /
+   shadcn），比整行换底色更安静，也让「当前在哪一组」在扫视时最先命中。 */
+body.hp .gnav--side .gnav-item { position: relative; }
+body.hp .gnav--side .gnav-item.is-active::before {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 3px;
+  height: 15px;
+  margin-top: -7.5px;
+  border-radius: 2px;
+  background: hsl(var(--gt-h, 220) 76% 55%);
+}
 body.hp .gnav--side .gnav-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -854,6 +948,10 @@ html[data-gnav='tab'] body.hp .group {
 }
 
 body.hp .group-head {
+  /* 显式 static：home.css 的基座规则已经改成不吸顶，这里再钉一次，
+     防止以后有人改回 sticky —— 这个皮肤是浅色渐变底，一旦吸顶就必须
+     给托底，而托底在这里必然留下色带。frame 皮肤也是同样的处理。 */
+  position: static;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -865,7 +963,28 @@ body.hp .group-head {
 }
 body.hp .group-head::before { content: none; }
 
-/* 组名前一颗 6px 圆点：比箭头安静，比编号自然 */
+/* 组名前一枚 22px 彩色图标块 —— 和侧栏同一枚图标、同一个色相。
+   两边重复不是偷懒：侧栏和正文的颜色对上之后，「紫色那栏 = 紫色那组」
+   才成立，颜色才是导航线索而不是装饰。
+   V1.5.12 之前这里是 6px 圆点，靠 --at-accent 统一着色 —— 一颗蓝点
+   放在七个分组上，等于没有颜色。 */
+body.hp .gh-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(155deg,
+      hsl(var(--gt-h, 220) var(--gt-s) var(--gt-l1)),
+      hsl(calc(var(--gt-h, 220) + 9) var(--gt-s) var(--gt-l2)));
+  color: #fff;
+  box-shadow:
+    0 1px 3px -1px hsl(var(--gt-h, 220) 72% 38% / .45),
+    inset 0 1px 0 hsl(0 0% 100% / .34);
+}
+body.hp .gh-ico svg { width: 13px; height: 13px; }
+
 body.hp .group-name {
   display: flex;
   align-items: center;
@@ -877,16 +996,7 @@ body.hp .group-name {
   color: var(--at-ink);
   white-space: nowrap;
 }
-body.hp .group-name::before {
-  content: '';
-  display: block;
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  margin-right: 9px;
-  border-radius: 50%;
-  background: var(--at-accent);
-}
+body.hp .group-name::before { content: none; }
 body.hp .group-count {
   flex: 0 0 auto;
   font-size: 11px;
@@ -894,13 +1004,26 @@ body.hp .group-count {
   padding: 4px 8px;
   border-radius: var(--at-r-pill);
   border: 0;
-  background: color-mix(in srgb, var(--at-ink) 6%, transparent);
-  color: var(--at-ink-3);
+  background: color-mix(in srgb,
+      hsl(var(--gt-h, 220) 76% 50%) 9%, transparent);
+  color: hsl(var(--gt-h, 220) 45% var(--gt-ink-l));
   font-family: var(--at-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
 }
-body.hp .group-rule { flex: 1; height: 1px; background: transparent; }
+/* 计数之后一条渐隐的组色细线，把这一行「收」住。
+   它占的位置本来就存在（.group-rule 一直是 flex:1 的空元素），
+   之前是透明的 —— 现在让组色从计数后面淡淡拖出去再消失。
+   透明渐隐是关键：整条实线会变成表格分隔线，渐到 70% 就没了，
+   读起来是「这一区到这里」而不是「这是两行之间的格子」。 */
+body.hp .group-rule {
+  flex: 1;
+  height: 1px;
+  margin-left: 2px;
+  background: linear-gradient(90deg,
+      hsl(var(--gt-h, 220) 52% 55% / .34),
+      hsl(var(--gt-h, 220) 52% 55% / 0) 72%);
+}
 
 /* ==========================================================================
    7. 卡片基座 —— 横向：图标在左，文字在右
@@ -941,8 +1064,13 @@ body.hp .link {
 }
 body.hp .link:hover {
   transform: translateY(-1px);
-  border-color: var(--at-rule-2);
-  box-shadow: var(--at-sh-md);
+  /* 悬停时边框与投影里掺一点所属分组的颜色。只掺 22%，不换成组色 ——
+     卡片图标本身已经按域名着了一层色，边框再来一笔纯色就成了两套
+     打架的彩色系统；掺一点只是让「这张卡属于紫色那组」被余光读到。 */
+  border-color: color-mix(in srgb, hsl(var(--gt-h, 220) 58% 52%) 22%, var(--at-rule-2));
+  box-shadow:
+    0 2px 6px hsl(var(--gt-h, 220) 40% 35% / .05),
+    0 10px 26px -12px hsl(var(--gt-h, 220) 48% 35% / .20);
 }
 body.hp .link:active {
   transform: translateY(0);
@@ -963,7 +1091,15 @@ body.hp .link-icon {
   box-shadow: var(--at-ico-inset);
   transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
 }
-body.hp .link:hover .link-icon { transform: scale(1.04); }
+body.hp .link:hover .link-icon {
+  transform: scale(1.04);
+  /* 图标弹起时投出一层自己的颜色。--hue 是按域名算的稳定色，
+     所以每张卡的「光」都不同、但永远同一个 —— 这是让一屏白卡
+     读起来有温度的那一层，说不清哪里不一样，但关掉就觉得死。 */
+  box-shadow:
+    var(--at-ico-inset),
+    0 6px 14px -6px hsl(var(--hue, 220) 55% 42% / .42);
+}
 
 body.hp .link-icon.has-img {
   background: var(--at-img-bg);
@@ -1056,11 +1192,14 @@ html[data-layout='grid'] body.hp .link-item.is-hidden-link .link-icon {
    正好 4 列、每列 282px —— 够放「图标 36 + 14px 标题 + 12px 描述」。
    ========================================================================== */
 html[data-layout='card'] body.hp .links {
-  /* 1440 视口：主区让出侧栏 240 + 间距 26，右侧 40，
-     可用宽 = 1440 - 266 - 40 = 1134。要落成 4 列，最小列宽就得大于
-     1134 / 4.4 ≈ 258 —— 用 268 刚好 4 列、每列 271（4×268+3×16=1120）。
-     这个数不能凭感觉给：给 214 会排成 5 列、每列 216，比上一版还窄。 */
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  /* 列宽 240 是被 maxw 反推出来的，两者必须一起改：
+       可用宽 = maxw 1340 − 侧栏 240 − 间距 26 − 右内距 40 = 1034
+       4 列需要 4×240 + 3×16 = 1008 ≤ 1034  ✅
+       5 列需要 5×240 + 4×16 = 1264 > 1034  ✗ 不会意外变 5 列
+     所以 1440 上是稳定的 4 列、每列 247。
+     早先写 268 是因为那会儿 maxw 是 1560（铺满全屏），
+     现在框收窄到 1340，列宽必须跟着降，否则只剩 3 列。 */
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
 }
 html[data-layout='card'] body.hp .link {
@@ -1536,32 +1675,28 @@ body.hp ::selection {
     overflow: visible;
     z-index: 30;
   }
-  body.hp .gnav-head { display: none; }
-  body.hp .gnav--side .gnav-title { display: none; }
+  /* 窄屏下 track 的**布局**交给 home.css 的下拉面板处理。
+     这里只调视觉，绝不能重写 flex-direction / overflow-x ——
+     那会把面板又变回一条横向滚动条（这是上一版的做法，已被否）。 */
   body.hp .gnav--side .gnav-track {
-    flex-direction: row;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    background: var(--at-paper-hi);
+    gap: 0;
   }
-  body.hp .gnav--side .gnav-track::-webkit-scrollbar { display: none; }
-  /* 横条形态下必须把 width 收回 auto：竖排时为了「名称……计数」对齐
-     给过 width:100%，到了横排会把整行占满，只剩第一个分组可见
-     （实测：手机上只看到「常用 8」，其余分组全被挤到屏幕外）。 */
   body.hp .gnav--side .gnav-item {
     flex: 0 0 auto;
-    width: auto;
-    min-height: 32px;
-    padding: 0 13px;
-    border-radius: var(--at-r-pill);
+    width: 100%;
+    min-height: 42px;
+    padding: 0 12px;
+    border-radius: var(--at-r-sm);
   }
-  body.hp .gnav--side .gnav-count { margin-left: 0; }
-  /* 横条形态与「收起」无关：条子里名称必须照常显示 */
+  /* 计数推到右边，形成「名称 ……… 数字」的一行 */
+  body.hp .gnav--side .gnav-count { margin-left: auto; }
+  /* 窄屏这一条已经收成一行，mini 态没有意义；确保名称照常显示 */
   html[data-nav='mini'] body.hp .gnav-name,
   html[data-nav='mini'] body.hp .gnav-count { display: flex; }
   html[data-nav='mini'] body.hp .gnav--side .gnav-item {
     justify-content: flex-start;
-    padding: 0 13px;
+    padding: 0 12px;
     gap: 7px;
   }
 }
@@ -1739,16 +1874,45 @@ body.hp .gnav-ver {
   color: var(--at-ink-3);
   opacity: .85;
 }
+/* 版权区（四项：年份署名 / 权利声明 / 备案 / 程序版本）。
+   宽度只有 240px（收起后 68px），所以全部按单行排、字号压到 11px，
+   靠字重和明度分层，不靠加分割线 —— 窄栏里横线会切得很碎。 */
+body.hp .gnav-foot p { margin: 0; }
 body.hp .gnav-copy {
   color: var(--at-ink-3);
   text-decoration: none;
   transition: color .14s;
 }
-body.hp a.gnav-copy:hover {
-  color: var(--at-accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+body.hp .gnav-owner {
+  font-weight: 700;
+  color: var(--at-ink-2);
 }
+/* 权利声明比署名再淡一档：它是固定文案，不需要抢注意力 */
+body.hp .gnav-rights {
+  color: var(--at-ink-3);
+  opacity: .72;
+}
+body.hp .gnav-license,
+body.hp .gnav-link {
+  color: var(--at-ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color .14s, border-color .14s;
+}
+body.hp .gnav-license:hover,
+body.hp .gnav-link:hover {
+  color: var(--at-accent);
+  border-bottom-color: currentColor;
+}
+/* 版本与项目主页横排，省一行高度 */
+body.hp .gnav-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* 侧栏收起成 68px 只剩图标，这些文字没有落脚处 */
+html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 /* 窄屏侧栏退化成横向滚动条，底部这行在横条里没有位置 */
 @media (max-width: 1139px) {
   body.hp .gnav-foot { display: none; }

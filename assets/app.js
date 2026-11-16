@@ -10,6 +10,11 @@
   'use strict';
 
   const CSRF  = document.querySelector('meta[name="csrf"]')?.content || '';
+  /* 前台当前显示的是哪一份库。默认 site（网站默认）；admin 用 ?lib=mine
+     看自己那份时这里是 mine。写操作必须把同一个值传给服务端，
+     否则会出现「看到的是私人库、改的却是默认库」这种最难察觉的错。
+     游客不读这个（写操作全在本地沙盒里，见 guest.js）。 */
+  const LIB   = document.querySelector('meta[name="adm-lib"]')?.content || 'site';
   const stage = document.getElementById('stage');
   const toastEl = document.getElementById('toast');
   const $  = (s, r = document) => r.querySelector(s);
@@ -40,7 +45,7 @@
     const res = await fetch('api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF': CSRF },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ lib: LIB, ...body }),
       credentials: 'same-origin',
     });
     let data;
@@ -263,6 +268,25 @@
       identify(url);
     }
 
+    /* 剪贴板读不到时的兜底：开一个空框，光标直接落在网址输入框。
+       不做识别也不预填 —— 用户在输入框里按 Ctrl+V 走的是浏览器原生粘贴，
+       不受任何剪贴板 API 权限限制，这条路一定能走通。 */
+    function openBoxManual(msg) {
+      lastFocus = document.activeElement;
+      clearError();
+      fUrl.value = '';
+      fTitle.value = '';
+      if (fHidden) { fHidden.checked = false; syncHideHint(); }
+      hostEl.textContent = '';
+      paintIcon(iconEl, '', '', '');
+      setStatus(msg, '');
+      scrim.hidden = false;
+      box.hidden = false;
+      document.body.style.overflow = 'hidden';
+      fUrl.focus();
+      fUrl.setSelectionRange(0, 0);
+    }
+
     function closeBox() {
       scrim.hidden = true;
       box.hidden = true;
@@ -288,19 +312,45 @@
       openBox(url);
     });
 
-    document.addEventListener('keydown', async e => {
+    /* Ctrl+V 粘贴添加。
+       两条路：
+         1) 剪贴板 API 读得到 → 直接开框并预填，用户在页面任意处按一下就行
+         2) 读不到 → 开一个空框、光标落在网址输入框，让他自己按 Ctrl+V
+
+       第 2 条是必须的兜底。原先这里是：
+             if (!navigator.clipboard?.readText) return;
+             setTimeout(async () => { try { ... } catch {} }, 60);
+       三个问题叠在一起：
+         ① 不支持就直接 return，一点反馈都没有；
+         ② setTimeout 让它脱离了浏览器的 user gesture 判定，
+            readText() 更容易被判为「非用户触发」而拒绝；
+         ③ catch 是空的，权限被拒时同样静默。
+       结果就是「按了完全没反应」，看起来像功能坏了。 */
+    async function grabClipboard() {
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+        openBoxManual('这个浏览器不给读剪贴板，请把网址粘贴到下面');
+        return;
+      }
+      try {
+        const t = await navigator.clipboard.readText();
+        const url = extractUrl(t);
+        if (url) {
+          openBox(url);
+        } else {
+          openBoxManual('剪贴板里没找到网址，请粘贴到下面');
+        }
+      } catch (err) {
+        // NotAllowedError：页面未聚焦 / 拒绝授权 / 非安全上下文
+        openBoxManual('浏览器没授权读取剪贴板，请把网址粘贴到下面');
+      }
+    }
+
+    document.addEventListener('keydown', e => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return;
       if (!box.hidden) return;
       if (isTyping()) return;
-      if (!navigator.clipboard?.readText) return;
-      setTimeout(async () => {
-        if (!box.hidden) return;
-        try {
-          const t = await navigator.clipboard.readText();
-          const url = extractUrl(t);
-          if (url) openBox(url);
-        } catch { /* 无权限安静失败 */ }
-      }, 60);
+      // 拦掉默认行为只在确认要处理时做（输入框里已由 isTyping 提前退出）
+      grabClipboard();
     });
 
     document.getElementById('pasteClose')?.addEventListener('click', closeBox);
@@ -1382,7 +1432,18 @@
   const tip = document.getElementById('tipBubble');
   const TIP_KEY = 'vnav.tip.dismissed';
 
+  /* 提示是否已被永久关闭。
+     以**服务端**为准：hint_dismissed=1 才是真的关过，0 就是没关。
+     本地 localStorage 只在拿不到服务端值时兜底（游客、异常）。
+
+     以前是反过来的（本地优先），后果是两边永远对不上：
+       · 在 A 电脑点过「不再提示」→ 服务端记 1，B 电脑本地是空的 → 又弹
+       · 清过缓存的浏览器 → 本地空了，但服务端还记着 1 → 白记
+     更糟的是「本地有标记、服务端是 0」这种不一致会让人以为提示坏了 ——
+     明明没关过、服务端也说没关，就是不弹。 */
   function tipGone() {
+    const off = window.__VNAV && window.__VNAV.tipOff;
+    if (typeof off === 'boolean') return off;
     try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; }
   }
 
@@ -1403,6 +1464,22 @@
     document.getElementById('tipKeys')?.addEventListener('click', () => {
       tip.hidden = true;
       openKeys();
+    });
+  }
+
+  /* 提示被关掉之后的唯一召回入口，放在快捷键面板底部
+     （那里本来就叫「快捷键」，用户找「怎么关的提示」自然会翻到）。
+     没有这个入口的话，「关掉提示」在用户眼里就是「提示坏了」。 */
+  if (tip) {
+    const resetRow = document.getElementById('tipResetRow');
+    const resetBtn = document.getElementById('tipReset');
+    if (resetRow && tipGone()) resetRow.hidden = false;
+    resetBtn?.addEventListener('click', () => {
+      try { localStorage.removeItem(TIP_KEY); } catch {}
+      api({ action: 'save_settings', hint_dismissed: '0' }).catch(() => {});
+      if (resetRow) resetRow.hidden = true;
+      tip.hidden = false;
+      toast('右下角提示已恢复', 'ok');
     });
   }
 

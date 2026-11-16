@@ -24,6 +24,11 @@
   padding: 22px 16px;
   border-right: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+  /* 兜底：屏幕矮（1366×768 这类）或以后再加导航项时，
+     整个侧栏自己滚，而不是把下面几项裁掉看不见。 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -1744,3 +1749,195 @@
   color: var(--acc);
 }
 .gicon-name { font-size: 11px; line-height: 1; }
+
+/* ---------- 链接列表筛选栏 ---------- */
+/* 300 多条链接平铺时先筛再操作。
+   刻意不做 sticky：批量条是 sticky（勾选后要一直够得着操作），
+   两个都吸顶会争同一条 top，反而互相盖住。筛选是「操作之前」的动作，
+   滚回顶部改一次可以接受。 */
+.adm-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.adm-filter-q {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 220px;
+  min-width: 170px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-hi);
+  color: var(--text-3);
+  transition: border-color .16s, color .16s;
+}
+.adm-filter-q:focus-within { border-color: var(--acc); color: var(--text-1); }
+.adm-filter-q svg { flex: 0 0 auto; }
+.adm-filter-q input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.adm-filter-n {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 筛选掉的行与分组块必须真的消失。
+   .adm-row 是 display:flex，浏览器对 [hidden] 的默认 display:none
+   会被它覆盖 —— 不写这条，筛选按钮点了等于没反应。 */
+.adm-row[hidden],
+.adm-list-group[hidden] { display: none !important; }
+
+/* 分组标题行：左边名称，右边「选中本组」小胶囊 */
+.adm-list-label { display: flex; align-items: center; gap: 10px; }
+.adm-list-name { flex: 0 1 auto; }
+.adm-pick-group {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color .16s, border-color .16s, background .16s;
+}
+.adm-pick-group:hover {
+  color: var(--text-1);
+  border-color: var(--line-hi);
+  background: var(--surface-hi);
+}
+
+/* 分组行里的链接数：删除/合并前得知道这一组有多少东西 */
+.adm-group-n {
+  flex: 0 0 auto;
+  min-width: 36px;
+  padding: 2px 7px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-1) 60%, transparent);
+}
+.adm-group-row.is-picked {
+  border-color: var(--acc);
+  background: rgba(var(--acc-glow), .10);
+}
+
+/* 表单字段下方的补充说明（版权署名、备案号这类需要解释的字段用） */
+.f-hint {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.f-hint code { font-size: 11px; }
+
+/* ---------- 数据源切换（网站默认 / 我的链接库） ----------
+   侧栏高度是 100vh：品牌 + 8 个导航项 + 这块 + 底部统计。
+   所以这里只留一条约 34px 高的两段切换器，不带标题和说明文字 ——
+   最初做成「标题 + 两个选项 + 说明」的卡片（约 110px），在 768 高的
+   笔记本屏上直接把下面几个导航项顶出可视区（系统升级/更新日志看不见）。
+   说明文案挪进 title 属性，悬停可见，不占高度。 */
+.adm-lib {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-1) 65%, transparent);
+}
+.adm-lib-opt {
+  padding: 6px 4px;
+  border-radius: 7px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-3);
+  text-decoration: none;
+  transition: background .16s, color .16s, box-shadow .16s;
+}
+.adm-lib-opt:hover { color: var(--text-1); background: var(--surface-hi); }
+.adm-lib-opt.is-on {
+  color: var(--text-1);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .07);
+}
+/* mine 下的「在前台预览」：只在私人库时出现，平时完全不占高度 */
+.adm-lib-peek {
+  margin-top: -14px;
+  align-self: flex-start;
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  transition: color .16s, border-color .16s;
+}
+.adm-lib-peek:hover { color: var(--acc); border-bottom-color: currentColor; }
+
+/* 页头标题旁的库标识：进页面第一眼就知道在编辑哪一份 */
+.adm-lib-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 3px 9px;
+  vertical-align: middle;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-1) 50%, transparent);
+}
+.adm-lib-badge.is-mine {
+  color: var(--acc);
+  border-color: rgba(var(--acc-glow), .55);
+  background: rgba(var(--acc-glow), .10);
+}
+
+/* 空态：标题 / 说明 / 动作。不用首页那套 .empty-title，
+   那个是 clamp 到 2rem 的大字，在后台列表区里大得离谱。 */
+.adm-empty-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.adm-empty-sub {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-3);
+}
+.adm-empty-act {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}

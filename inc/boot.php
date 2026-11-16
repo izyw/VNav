@@ -221,6 +221,12 @@ function json_err(string $msg, int $code = 400): never
 }
 
 // ---------- 会话（只在需要时启动，主页游客不建 session，省一个 Cookie 与磁盘写） ----------
+
+/* 会话名单独拎成常量：current_user_id() 要在「还没启动 session」时
+   就能拿这个名字去查 cookie 有没有，不能用 session_name() ——
+   它默认返回 PHPSESSID，而本站用的是 HPSESSID，会在启动前读错名字。 */
+const HP_SESSION_NAME = 'HPSESSID';
+
 function session_boot(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -229,7 +235,7 @@ function session_boot(): void
     global $CONFIG;
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-    session_name('HPSESSID');
+    session_name(HP_SESSION_NAME);
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
@@ -248,6 +254,17 @@ function session_boot(): void
 /** 当前登录用户 id；游客为 0 */
 function current_user_id(): int
 {
+    /* 没有会话 cookie 就一定没有登录态 —— 此时绝不能 session_start()。
+       这一句决定了游客请求的整条路径：
+         · 不建 session 文件、不产生磁盘写
+         · 不返 Set-Cookie（少了响应头，也少了每次请求带回去的 Cookie）
+         · 不再被 PHP 默认的 no-store 拖累，页面头可以由我们自己说了算
+       代价为零：真登录过的浏览器一定带着 HPSESSID。
+       注意 login.php / admin.php / api.php 都是显式 session_boot() 的，
+       不依赖这里，所以登录流程不受影响。 */
+    if (empty($_COOKIE[HP_SESSION_NAME])) {
+        return 0;
+    }
     session_boot();
     return (int)($_SESSION['uid'] ?? 0);
 }
@@ -256,22 +273,38 @@ function current_user_id(): int
  * 当前请求该读哪一份数据。
  *
  *   游客      → 0（站点默认，只读）
- *   admin     → 0（他就是站点所有者，编辑的就是默认数据）
  *   普通用户  → 自己的 id
+ *   admin     → 看 $lib：
+ *                 'site'（默认）→ 0，即「网站默认链接库」，访客看到的就是它
+ *                 'mine'        → 自己的 id，admin 私人的那一份
  *
- * 把 admin 也映射到 0 是有意的：站点默认只有一份，admin 改完游客立刻
- * 就能看到；否则 admin 得同时维护「自己的」和「默认的」两份，必然漂移。
+ * 为什么 admin 要分成两个库（V1.5.6 起）：
+ *   之前 admin 只有一份数据（user_id = 0），他一改就改到访客看的内容上，
+ *   完全没有私人空间 —— 想给自己存几个私人书签只能勾「隐藏」，而那条
+ *   仍然躺在站点默认库里：语义是混的，也没法把「我的收藏」整体带走。
+ *   现在拆开，后台顶部显式切换，编辑的是哪一份一目了然。
+ *
+ * 这个函数只决定**读**哪一份；写接口必须用同一个值（api.php 的 $U），
+ * 否则会出现「看着在编辑 A，实际改的是 B」这种最难查的错。
  */
-function hp_data_uid(): int
+function hp_data_uid_for(string $lib = 'site'): int
 {
     $u = current_user();
     if ($u === null) {
         return 0;
     }
     if (($u['role'] ?? '') === 'admin') {
-        return 0;
+        return $lib === 'mine' ? (int)$u['id'] : 0;
     }
+    // 普通用户没有「站点默认」这个概念，永远只碰自己那一份。
+    // 即使前端伪造 lib=mine 也到不了这里以外的地方。
     return (int)$u['id'];
+}
+
+/** 前台用这个：admin 看站点默认（访客看到的那一份） */
+function hp_data_uid(): int
+{
+    return hp_data_uid_for('site');
 }
 
 /** 当前用户记录（id/username/role）；游客返回 null */
