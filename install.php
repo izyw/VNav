@@ -56,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
                 require_once __DIR__ . '/inc/seed.php';
                 $seed = hp_seed_apply($pdo);
                 if (!$seed['skipped']) {
-                    $seedMsg = '已导入 ' . $seed['groups'] . ' 个分组、' . $seed['links'] . ' 条常用站点。';
+                    $seedMsg = '已导入 ' . $seed['groups'] . ' 个分组、' . $seed['links']
+                             . ' 条常用站点（图标请在后台「图标」页点一次「补图标」抓取）。';
                 }
             } catch (Throwable $e) {
                 $seedMsg = '默认数据导入失败（不影响使用）：' . $e->getMessage();

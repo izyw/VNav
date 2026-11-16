@@ -6,9 +6,10 @@
  * 67 条站点。安装时如果 links 表是空的，就灌进去 ——
  * 新装的人一打开就有东西可点，而不是面对一个空页面从零加起。
  *
- * 图标放在 assets/seed-icons/ 而不是 data/icons/：data/ 是运行时目录，
- * 不随包分发；assets/ 是静态资源，跟着包一起走，安装后不需要再复制一遍。
- * 后台的「图标回收」只扫 data/icons，不会把这些默认图标当垃圾清掉。
+ * 种子**不带图标**。图标是各家站点的 favicon，商标归各站点所有，
+ * 不适合随 MIT 授权一起分发；而且它们本来就是抓一次就有的东西。
+ * 装完之后在后台「图标」页点一次「补图标」，或在主页编辑态勾选全部
+ * 再点「拉取图标」，几十秒就能补齐。
  */
 declare(strict_types=1);
 
@@ -81,7 +82,7 @@ function hp_seed_links(): array
     'title' => '爱奇艺 iQIYI-热门独播剧集在线观看',
     'url' => 'https://www.iqiyi.com',
     'descr' => '爱奇艺（iQIYI）是中国领先的在线视频平台，提供海量免费正版高清电视剧、短剧、电影、综艺、动漫等视频内容，成功打造了狂飙、新说唱、偶像练习生、我是刑警、迷雾剧场等现象级IP，热门大片、独播剧集实时更新，畅享流畅观影体验。',
-    'icon' => 'assets/seed-icons/iqiyi.com-9d195099.ico',
+    'icon' => '',
     'sort' => 1,
   ),
   1 => 
@@ -90,7 +91,7 @@ function hp_seed_links(): array
     'title' => '斗鱼 - 看见每种热爱',
     'url' => 'https://www.douyu.com',
     'descr' => '斗鱼 - 看见每种热爱 提供高清、快捷、流畅的视频直播和游戏赛事直播服务，包含英雄联盟lol直播、穿越火线cf直播、dota2直播、美女直播等各类热门游戏赛事直播和各种名家大神游戏直播，内容丰富，推送及时，带给你不一样的视听体验，一切尽在斗',
-    'icon' => 'assets/seed-icons/douyu.com-a55a4eca.ico',
+    'icon' => '',
     'sort' => 1,
   ),
   2 => 
@@ -99,7 +100,7 @@ function hp_seed_links(): array
     'title' => 'QQ音乐',
     'url' => 'https://y.qq.com',
     'descr' => 'QQ音乐是腾讯公司推出的一款网络音乐服务产品，海量音乐在线试听、新歌热歌在线首发、歌词翻译、手机铃声下载、高品质无损音乐试听、海量无损曲库、正版音乐下载、空间背景音乐设置、MV观看等，是互联网音乐播放和下载的优选。',
-    'icon' => 'assets/seed-icons/y.qq.com-18702323.ico',
+    'icon' => '',
     'sort' => 1,
   ),
   3 => 
@@ -108,7 +109,7 @@ function hp_seed_links(): array
     'title' => 'Qidian',
     'url' => 'https://www.qidian.com',
     'descr' => '国内领先的原创文学网站',
-    'icon' => 'assets/seed-icons/qidian.com-e5e4a45b.ico',
+    'icon' => '',
     'sort' => 1,
   ),
   4 => 
@@ -117,7 +118,7 @@ function hp_seed_links(): array
     'title' => '携程旅行网:酒店预订,机票预订查询,旅游度假,商旅管理',
     'url' => 'https://www.ctrip.com/?AllianceID=665756&sid=1195985&ouid=&app=0101F00',
     'descr' => '携程旅行网是中国领先的在线旅行服务公司，向超过9000万会员提供酒店预订、酒店点评及特价酒店查询、机票预订、飞机票查询、时刻表、票价查询、航班查询、度假预订、商旅管理、为您的出行提供全方位旅行服务。',
-    'icon' => 'assets/seed-icons/ctrip.com-17b09b1c.ico',
+    'icon' => '',
     'sort' => 1,
   ),
   5 => 
@@ -126,7 +127,7 @@ function hp_seed_links(): array
     'title' => '飞书文档-可多人实时编辑的在线文档高效协同办公软件',
     'url' => 'https://docs.feishu.cn',
     'descr' => '飞书文档作为新一代高效协作工具，融合了在线文档和协同文档的所有功能，不仅能插入在线表格，将数据表转换成看板，还能用思维笔记，将思考路径可视化，更有丰富模板满足多场景创作需求。用飞书文档，共创无限可能。',
-    'icon' => 'assets/seed-icons/docs.feishu.cn-5b975b56.png',
+    'icon' => '',
     'sort' => 1,
   ),
   6 => 
@@ -135,7 +136,7 @@ function hp_seed_links(): array
     'title' => '虎牙直播-技术驱动娱乐-弹幕式互动直播平台',
     'url' => 'https://www.huya.com',
     'descr' => '虎牙直播是以游戏直播为主的弹幕式互动直播平台，累计注册用户2亿，提供热门游戏直播、电竞赛事直播与游戏赛事直播，手游直播等。包含英雄联盟lol，王者荣耀，绝地求生，和平精英等游戏直播，lol、dota2、dnf等热门游戏直播以及单机游戏、手游',
-    'icon' => 'assets/seed-icons/huya.com-01bacd88.ico',
+    'icon' => '',
     'sort' => 2,
   ),
   7 => 
@@ -153,7 +154,7 @@ function hp_seed_links(): array
     'title' => '优酷-热门独播剧集综艺电影在线观看-为好内容全力以赴',
     'url' => 'https://www.youku.com',
     'descr' => '优酷视频是中国领先的在线视频平台，提供海量正版高清电视剧、电影、综艺、动漫、纪录片等视频内容，独家热播剧集实时更新，畅享流畅观影体验。',
-    'icon' => 'assets/seed-icons/youku.com-55c66e20.png',
+    'icon' => '',
     'sort' => 3,
   ),
   9 => 
@@ -180,7 +181,7 @@ function hp_seed_links(): array
     'title' => '芒果TV-天生青春',
     'url' => 'https://www.mgtv.com',
     'descr' => '芒果TV-大家都在看的在线视频网站-热门综艺最新电影电视剧在线观看',
-    'icon' => 'assets/seed-icons/mgtv.com-c528fcf8.ico',
+    'icon' => '',
     'sort' => 4,
   ),
   12 => 
@@ -189,7 +190,7 @@ function hp_seed_links(): array
     'title' => '快手',
     'url' => 'https://www.kuaishou.com',
     'descr' => '快手是一款国民级短视频App。在快手，了解真实的世界，认识有趣的人，也可以记录真实而有趣的自己。快手，拥抱每一种生活。',
-    'icon' => 'assets/seed-icons/kuaishou.com-bf63660d.ico',
+    'icon' => '',
     'sort' => 4,
   ),
   13 => 
@@ -207,7 +208,7 @@ function hp_seed_links(): array
     'title' => '石墨文档官网',
     'url' => 'https://shimo.im',
     'descr' => '石墨文档-在线协同办公软件,支持多人在线文档协同办公,实现多终端、跨地域、随时随地在线办公,涵盖在线文档、在线表格、应用表格等8大协作应用即写即存统一管理、高效共享是企业云协同办公系统与在线办公平台的更好选择。',
-    'icon' => 'assets/seed-icons/shimo.im-d2d331f4.ico',
+    'icon' => '',
     'sort' => 4,
   ),
   15 => 
@@ -216,7 +217,7 @@ function hp_seed_links(): array
     'title' => '百度一下，你就知道',
     'url' => 'https://www.baidu.com',
     'descr' => '全球领先的中文搜索引擎、致力于让网民更便捷地获取信息，找到所求。百度超过千亿的中文网页数据库，可以瞬间找到相关的搜索结果。',
-    'icon' => 'assets/seed-icons/baidu.com-80cf3ea6.png',
+    'icon' => '',
     'sort' => 5,
   ),
   16 => 
@@ -225,7 +226,7 @@ function hp_seed_links(): array
     'title' => '飞机票查询',
     'url' => 'https://www.fliggy.com',
     'descr' => '飞猪是阿里巴巴旗下的综合性旅游出行服务平台。飞猪整合数千家机票代理商、航空公司、旅行社、旅行代理商资源，直签酒店，客栈卖家等为广大旅游者提供特价机票，酒店预订，客栈查询，国内外度假信息，门票购买，签证代理，旅游卡券，租车，邮轮等旅游产品的信',
-    'icon' => 'assets/seed-icons/fliggy.com-cdc8d707.ico',
+    'icon' => '',
     'sort' => 5,
   ),
   17 => 
@@ -234,7 +235,7 @@ function hp_seed_links(): array
     'title' => '163网易免费邮-你的专业电子邮局',
     'url' => 'https://mail.163.com',
     'descr' => '网易163免费邮箱，你的专业电子邮局，注册用户数超10亿，专业稳定安全。网易邮箱官方App“邮箱大师”帮您高效处理邮件，支持所有邮箱，并可在手机、Windows和Mac上多端协同使用。',
-    'icon' => 'assets/seed-icons/mail.163.com-f63be94a.ico',
+    'icon' => '',
     'sort' => 6,
   ),
   18 => 
@@ -243,7 +244,7 @@ function hp_seed_links(): array
     'title' => '哔哩哔哩漫画 - bilibili 正版漫画平台',
     'url' => 'https://manga.bilibili.com',
     'descr' => '哔哩哔哩正版漫画阅读平台, 海量官方漫画连载在线观看, 二次元动漫迷的追漫神器, 热门漫画: 海贼王, 五等分的新娘, 约定的梦幻岛, 辉夜大小姐想让我告白 ~天才们的恋爱头脑战~, 关于我转生变成史莱姆这档事, 我的英雄学园, 修真聊天群',
-    'icon' => 'assets/seed-icons/manga.bilibili.com-f11abacf.ico',
+    'icon' => '',
     'sort' => 7,
   ),
   19 => 
@@ -252,7 +253,7 @@ function hp_seed_links(): array
     'title' => '小说,番茄小说网_好看的小说尽在番茄小说官网',
     'url' => 'https://fanqienovel.com',
     'descr' => '番茄小说是抖音旗下免费阅读产品，拥有海量正版小说资源，支持听书畅读，提供书荒广场、优质书圈社区，推广优秀原创网络小说文学，全方位满足读者需求。番茄小说网提供玄幻小说,武侠小说,原创小说,网游小说,都市小说,言情小说,青春小说,历史小说,军事',
-    'icon' => 'assets/seed-icons/fanqienovel.com-e83e759f.png',
+    'icon' => '',
     'sort' => 7,
   ),
   20 => 
@@ -261,7 +262,7 @@ function hp_seed_links(): array
     'title' => '机票查询预订，酒店预订，旅游团购，度假搜索，门票预订',
     'url' => 'https://www.qunar.com',
     'descr' => '去哪儿Qunar.com提供机票,飞机票,特价机票,打折机票的查询预订；99元春秋航空特惠折扣机票，百元南航、海航惊喜特价机票任您挑选,国航、深航1折特价机票和折扣机票一网打尽，更多打折机票尽在Qunar.com。实时提供上百家旅游预订网站',
-    'icon' => 'assets/seed-icons/qunar.com-929e3f04.ico',
+    'icon' => '',
     'sort' => 7,
   ),
   21 => 
@@ -270,7 +271,7 @@ function hp_seed_links(): array
     'title' => 'Accounts Google',
     'url' => 'https://mail.google.com',
     'descr' => '谷歌旗下的电子邮箱服务',
-    'icon' => 'assets/seed-icons/accounts.google.com-c375740a.ico',
+    'icon' => '',
     'sort' => 7,
   ),
   22 => 
@@ -279,7 +280,7 @@ function hp_seed_links(): array
     'title' => '七猫中文网-全本免费小说-免费小说排行榜',
     'url' => 'https://www.qimao.com',
     'descr' => '七猫中文网（免费小说大全）与国内各大小说站合作，为小说爱好者提供更多更全的各类免费小说上百万本。七猫免费小说包括言情小说，穿越小说，玄幻小说，校园小说，都市小说，武侠小说，网游小说等等。七猫中文网只有想不到，没有找不到！',
-    'icon' => 'assets/seed-icons/qimao.com-b709ceee.ico',
+    'icon' => '',
     'sort' => 8,
   ),
   23 => 
@@ -288,7 +289,7 @@ function hp_seed_links(): array
     'title' => '快看漫画_官方漫画_漫画大全免费在线观看',
     'url' => 'https://www.kuaikanmanhua.com',
     'descr' => '快看漫画是引领行业的新生代漫画阅读平台和兴趣社区。它为用户提供优质原创漫画内容，营造良好的二次元社区氛围，成为年轻一代的潮流文化阵地。',
-    'icon' => 'assets/seed-icons/kuaikanmanhua.com-5f447751.ico',
+    'icon' => '',
     'sort' => 9,
   ),
   24 => 
@@ -297,7 +298,7 @@ function hp_seed_links(): array
     'title' => '知乎 - 有问题，就会有答案',
     'url' => 'https://www.zhihu.com',
     'descr' => '知乎，中文互联网高质量的问答社区和创作者聚集的原创内容平台，于 2011 年 1 月正式上线，以「让人们更好的分享知识、经验和见解，找到自己的解答」为品牌使命。知乎凭借认真、专业、友善的社区氛围、独特的产品机制以及结构化和易获得的优质内容，',
-    'icon' => 'assets/seed-icons/zhihu.com-fcf3ce43.png',
+    'icon' => '',
     'sort' => 10,
   ),
   25 => 
@@ -306,7 +307,7 @@ function hp_seed_links(): array
     'title' => 'App unavailable in region',
     'url' => 'https://claude.ai',
     'descr' => 'Anthropic 的对话助手',
-    'icon' => 'assets/seed-icons/claude.com-ad15f962.png',
+    'icon' => '',
     'sort' => 10,
   ),
   26 => 
@@ -324,7 +325,7 @@ function hp_seed_links(): array
     'title' => '腾讯会议官方——腾讯会议 会开会',
     'url' => 'https://meeting.tencent.com',
     'descr' => '基于腾讯20多年音视频通讯经验，腾讯会议提供一站式音视频会议解决方案，让您能随时随地体验高清流畅的会议以及会议协作。',
-    'icon' => 'assets/seed-icons/meeting.tencent.com-4dd2cb56.png',
+    'icon' => '',
     'sort' => 11,
   ),
   28 => 
@@ -333,7 +334,7 @@ function hp_seed_links(): array
     'title' => 'Taptap',
     'url' => 'https://www.taptap.cn',
     'descr' => '发现好游戏',
-    'icon' => 'assets/seed-icons/taptap.cn-9d8464f7.ico',
+    'icon' => '',
     'sort' => 13,
   ),
   29 => 
@@ -342,7 +343,7 @@ function hp_seed_links(): array
     'title' => 'Apple',
     'url' => 'https://www.apple.com.cn',
     'descr' => '探索 Apple 充满创新的世界，选购各式 iPhone、iPad、Apple Watch 和 Mac，浏览各种配件、娱乐产品，并获得相关产品的专家支持服务。',
-    'icon' => 'assets/seed-icons/apple.com.cn-af4022e2.ico',
+    'icon' => '',
     'sort' => 14,
   ),
   30 => 
@@ -351,7 +352,7 @@ function hp_seed_links(): array
     'title' => 'Welcome to Steam',
     'url' => 'https://store.steampowered.com',
     'descr' => 'Steam is the ultimate destination for playing, discussing, and creating games.',
-    'icon' => 'assets/seed-icons/store.steampowered.com-08fb03a3.ico',
+    'icon' => '',
     'sort' => 15,
   ),
   31 => 
@@ -360,7 +361,7 @@ function hp_seed_links(): array
     'title' => '微信读书',
     'url' => 'https://weread.qq.com',
     'descr' => '微信读书提供海量正版书籍、小说、漫画、公众号、听书，多设备同步实现跨屏阅读。与微信好友一起发现更多精品好书，随时交流感想，让阅读不再孤独。',
-    'icon' => 'assets/seed-icons/weread.qq.com-932987f6.png',
+    'icon' => '',
     'sort' => 15,
   ),
   32 => 
@@ -369,7 +370,7 @@ function hp_seed_links(): array
     'title' => '爱范儿',
     'url' => 'https://www.ifanr.com',
     'descr' => '聚焦新创和消费主题的科技媒体，成立于 2008 年 10 月，关注产品及体验，致力于“独立，前瞻，深入”的原创报道和分析评论，是国内唯一一家在产业和产品领域同时具有强势影响力的科技媒体。旗下现有 ifanr.com、SocialBase.c',
-    'icon' => 'assets/seed-icons/ifanr.com-6094aeb1.ico',
+    'icon' => '',
     'sort' => 15,
   ),
   33 => 
@@ -378,7 +379,7 @@ function hp_seed_links(): array
     'title' => '游民星空',
     'url' => 'https://www.gamersky.com',
     'descr' => '游民星空是国内单机游戏门户网站,提供特色的游戏资讯,大量游戏攻略,经验,评测文章,以及热门游戏资料专题',
-    'icon' => 'assets/seed-icons/gamersky.com-07088332.ico',
+    'icon' => '',
     'sort' => 16,
   ),
   34 => 
@@ -387,7 +388,7 @@ function hp_seed_links(): array
     'title' => 'bilibili',
     'url' => 'https://www.bilibili.com',
     'descr' => '哔哩哔哩（bilibili.com)是国内知名的视频弹幕网站，这里有及时的动漫新番，活跃的ACG氛围，有创意的Up主。大家可以在这里找到许多欢乐。',
-    'icon' => 'assets/seed-icons/bilibili.com-75c6f209.png',
+    'icon' => '',
     'sort' => 20,
   ),
   35 => 
@@ -414,7 +415,7 @@ function hp_seed_links(): array
     'title' => '刺猬猫阅读',
     'url' => 'https://www.ciweimao.com',
     'descr' => '刺猬猫提供最新好看的全本二次元穿越，娘化百合，各种萌化后宫小说在线阅读，综漫小说，动漫小说，火影小说，海贼小说，动漫同人',
-    'icon' => 'assets/seed-icons/ciweimao.com-f98caef6.png',
+    'icon' => '',
     'sort' => 23,
   ),
   38 => 
@@ -423,7 +424,7 @@ function hp_seed_links(): array
     'title' => 'GitHub',
     'url' => 'https://github.com',
     'descr' => 'Join the world\'s most widely adopted, AI-powered developer platform where millions of developers, businesses, and the la',
-    'icon' => 'assets/seed-icons/github.com-468aab38.svg',
+    'icon' => '',
     'sort' => 30,
   ),
   39 => 
@@ -432,7 +433,7 @@ function hp_seed_links(): array
     'title' => '豆包 - 字节跳动旗下 AI 智能助手',
     'url' => 'https://www.doubao.com',
     'descr' => 'Seedance 2.0 视频生成模型现已全面接入豆包，现在登录即可免费使用！豆包 是你的 AI 聊天智能对话问答助手，写作文案翻译编程工具。豆包为你答疑解惑，提供灵感，辅助创作，也可以和你畅聊任何你感兴趣的话题',
-    'icon' => 'assets/seed-icons/doubao.com-9b29482e.png',
+    'icon' => '',
     'sort' => 30,
   ),
   40 => 
@@ -441,7 +442,7 @@ function hp_seed_links(): array
     'title' => '少数派 - 高效工作，品质生活',
     'url' => 'https://sspai.com',
     'descr' => '少数派致力于更好地运用数字产品或科学方法，帮助用户提升工作效率和生活品质',
-    'icon' => 'assets/seed-icons/sspai.com-bbd04c9d.ico',
+    'icon' => '',
     'sort' => 30,
   ),
   41 => 
@@ -450,7 +451,7 @@ function hp_seed_links(): array
     'title' => 'ChatGPT',
     'url' => 'https://chat.openai.com',
     'descr' => 'OpenAI 的对话助手',
-    'icon' => 'assets/seed-icons/chatgpt.com-b515fd8f.png',
+    'icon' => '',
     'sort' => 40,
   ),
   42 => 
@@ -459,7 +460,7 @@ function hp_seed_links(): array
     'title' => '今日头条',
     'url' => 'https://www.toutiao.com',
     'descr' => '个性化推荐信息资讯聚合平台',
-    'icon' => 'assets/seed-icons/toutiao.com-dea93479.ico',
+    'icon' => '',
     'sort' => 40,
   ),
   43 => 
@@ -468,7 +469,7 @@ function hp_seed_links(): array
     'title' => 'Chat Deepseek',
     'url' => 'https://chat.deepseek.com',
     'descr' => '国产推理模型，免费',
-    'icon' => 'assets/seed-icons/chat.deepseek.com-62909217.png',
+    'icon' => '',
     'sort' => 50,
   ),
   44 => 
@@ -486,7 +487,7 @@ function hp_seed_links(): array
     'title' => 'V2EX',
     'url' => 'https://www.v2ex.com',
     'descr' => '创意工作者的社区。讨论编程、设计、硬件、游戏等令人激动的话题。',
-    'icon' => 'assets/seed-icons/v2ex.com-b186e2a6.png',
+    'icon' => '',
     'sort' => 50,
   ),
   46 => 
@@ -495,7 +496,7 @@ function hp_seed_links(): array
     'title' => 'Sina Visitor System',
     'url' => 'https://weibo.com',
     'descr' => '随时随地发现新鲜事',
-    'icon' => 'assets/seed-icons/passport.weibo.com-13003d20.ico',
+    'icon' => '',
     'sort' => 60,
   ),
   47 => 
@@ -504,7 +505,7 @@ function hp_seed_links(): array
     'title' => '即梦AI - 即刻造梦',
     'url' => 'https://jimeng.jianying.com',
     'descr' => '即梦AI一站式智能创作平台，即刻造梦。提供AI绘画和AIGC视频创作体验，拥有激发无限创作灵感的社区。让即梦AI开启您的智能创作之旅，探索梦境实现的无限可能！',
-    'icon' => 'assets/seed-icons/jimeng.jianying.com-edf5ae77.ico',
+    'icon' => '',
     'sort' => 60,
   ),
   48 => 
@@ -513,7 +514,7 @@ function hp_seed_links(): array
     'title' => '虎嗅网',
     'url' => 'https://www.huxiu.com',
     'descr' => '虎嗅是一个聚焦科技与创新的资讯平台，致力于为一切热爱思考与发现的用户，提供有效率的信息服务。内容包含前沿科技、汽车、消费、商业、医疗、健康、社会文化、金融财经、出海、国际热点、游戏、娱乐、3C数码、书影音等',
-    'icon' => 'assets/seed-icons/huxiu.com-eeba3dca.png',
+    'icon' => '',
     'sort' => 60,
   ),
   49 => 
@@ -531,7 +532,7 @@ function hp_seed_links(): array
     'title' => 'Cloudflare: Build for the agent era',
     'url' => 'https://www.cloudflare.com',
     'descr' => 'Welcome to Cloudflare - Powering the next generation of applications',
-    'icon' => 'assets/seed-icons/cloudflare.com-cd98c114.ico',
+    'icon' => '',
     'sort' => 70,
   ),
   51 => 
@@ -540,7 +541,7 @@ function hp_seed_links(): array
     'title' => 'The AI workspace that works for you.',
     'url' => 'https://www.notion.so',
     'descr' => 'Build Custom Agents, search across all your apps, and automate busywork. The AI workspace where teams get more done, fas',
-    'icon' => 'assets/seed-icons/notion.com-a946578e.png',
+    'icon' => '',
     'sort' => 70,
   ),
   52 => 
@@ -549,7 +550,7 @@ function hp_seed_links(): array
     'title' => '东方财富网：财经门户，提供专业的财经、股票、行情、证券、基金、理财、银行、保险、',
     'url' => 'https://www.eastmoney.com',
     'descr' => '东方财富网，专业的互联网财经媒体，提供7*24小时财经资讯及全球金融市场报价，汇聚全方位的综合财经资讯和金融市场资讯，覆盖股票、财经、证券、金融、美股、港股、行情、基金、债券、期货、外汇、科创板、保险、信托、黄金、理财、商业、银行、博客、股',
-    'icon' => 'assets/seed-icons/eastmoney.com-d2735d1e.png',
+    'icon' => '',
     'sort' => 70,
   ),
   53 => 
@@ -558,7 +559,7 @@ function hp_seed_links(): array
     'title' => '雪球 - 聪明的投资者都在这里',
     'url' => 'https://xueqiu.com',
     'descr' => '雪球，聪明的投资者都在这里 - 超过7800万投资者都在用的投资社区和财富管理平台，沪深、港股、美股全球市场实时行情，公募私募股票基金债券免费热点资讯，与投资高手实战交流。支持股票基金在线开户，炒股、投资理财低佣金，交易安全、方便、快捷。提',
-    'icon' => 'assets/seed-icons/xueqiu.com-bfeda521.png',
+    'icon' => '',
     'sort' => 80,
   ),
   54 => 
@@ -567,7 +568,7 @@ function hp_seed_links(): array
     'title' => '‎Google Gemini',
     'url' => 'https://gemini.google.com',
     'descr' => 'Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of ge',
-    'icon' => 'assets/seed-icons/gemini.google.com-56aa9e1c.png',
+    'icon' => '',
     'sort' => 82,
   ),
   55 => 
@@ -576,7 +577,7 @@ function hp_seed_links(): array
     'title' => 'Docker Hub Container Image Library | App',
     'url' => 'https://hub.docker.com',
     'descr' => 'Welcome to the world\'s largest container registry built for developers and open source contributors to find, use, and sh',
-    'icon' => 'assets/seed-icons/hub.docker.com-661c16c0.png',
+    'icon' => '',
     'sort' => 90,
   ),
   56 => 
@@ -585,7 +586,7 @@ function hp_seed_links(): array
     'title' => '果壳 科技有意思',
     'url' => 'https://www.guokr.com',
     'descr' => '果壳网是一个泛科技主题网站，提供负责任、有智趣、贴近生活的内容，你可以在这里阅读、分享、交流、提问。果壳网致力于让科技兴趣成为人们文化生活和娱乐生活的重要元素。',
-    'icon' => 'assets/seed-icons/guokr.com-37848b42.ico',
+    'icon' => '',
     'sort' => 90,
   ),
   57 => 
@@ -603,7 +604,7 @@ function hp_seed_links(): array
     'title' => '阮一峰的网络日志',
     'url' => 'https://www.ruanyifeng.com/blog',
     'descr' => '中文技术写作的老牌博客',
-    'icon' => 'assets/seed-icons/ruanyifeng.com-c25b4f8c.ico',
+    'icon' => '',
     'sort' => 220,
   ),
   59 => 
@@ -612,7 +613,7 @@ function hp_seed_links(): array
     'title' => '1Panel',
     'url' => 'https://1panel.cn',
     'descr' => '1Panel 是现代化的开源 Linux 服务器运维管理面板，同时也是新一代的 AI 服务器管理面板。它通过直观的 Web 界面，为用户提供一站式的服务器管理能力。',
-    'icon' => 'assets/seed-icons/1panel.cn-0f95f3e0.png',
+    'icon' => '',
     'sort' => 230,
   ),
   60 => 
@@ -621,7 +622,7 @@ function hp_seed_links(): array
     'title' => '菜鸟教程',
     'url' => 'https://www.runoob.com',
     'descr' => '学的不仅是技术，更是梦想！',
-    'icon' => 'assets/seed-icons/runoob.com-04dda1b8.png',
+    'icon' => '',
     'sort' => 234,
   ),
   61 => 
@@ -630,7 +631,7 @@ function hp_seed_links(): array
     'title' => 'YouTube',
     'url' => 'https://www.youtube.com',
     'descr' => 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on Yo',
-    'icon' => 'assets/seed-icons/youtube.com-f5ddf991.png',
+    'icon' => '',
     'sort' => 350,
   ),
   62 => 
@@ -639,7 +640,7 @@ function hp_seed_links(): array
     'title' => '网易云音乐',
     'url' => 'https://music.163.com',
     'descr' => '网易云音乐是一款专注于发现与分享的音乐产品，依托专业音乐人、DJ、好友推荐及社交功能，为用户打造全新的音乐生活。',
-    'icon' => 'assets/seed-icons/music.163.com-b50ad134.ico',
+    'icon' => '',
     'sort' => 360,
   ),
   63 => 
@@ -648,7 +649,7 @@ function hp_seed_links(): array
     'title' => '豆瓣',
     'url' => 'https://www.douban.com',
     'descr' => '提供图书、电影、音乐唱片的推荐、评论和价格比较，以及城市独特的文化生活。',
-    'icon' => 'assets/seed-icons/douban.com-74ad8b86.ico',
+    'icon' => '',
     'sort' => 370,
   ),
   64 => 
@@ -657,7 +658,7 @@ function hp_seed_links(): array
     'title' => '腾讯视频',
     'url' => 'https://v.qq.com',
     'descr' => '腾讯视频官方网站，腾讯视频提供最新热门电视剧、电影、综艺、动漫、纪录片等高清正版视频在线观看。海量独家内容持续更新，涵盖国产剧、美剧、韩剧、院线大片、热门综艺，支持超清流畅播放，尽在腾讯视频，当前热播《NBA 步行者VS76人》，支持高清在',
-    'icon' => 'assets/seed-icons/v.qq.com-c6a5796b.png',
+    'icon' => '',
     'sort' => 380,
   ),
   65 => 
@@ -666,7 +667,7 @@ function hp_seed_links(): array
     'title' => '语雀，为每一个人提供优秀的文档和知识库工具 · 语雀',
     'url' => 'https://www.yuque.com',
     'descr' => '优雅高效的在线文档编辑与协同工具，让每个企业轻松拥有文档中心，阿里巴巴集团内部使用多年，众多中小企业首选。主流 Office 文件全兼容，多人协同，轻松拥有团队知识库。企业文档中心化管理，各类文档井然有序，独立域名，随时随地安全获取。语雀致',
-    'icon' => 'assets/seed-icons/yuque.com-90a4ebb5.svg',
+    'icon' => '',
     'sort' => 400,
   ),
   66 => 
@@ -675,7 +676,7 @@ function hp_seed_links(): array
     'title' => 'TinyPNG',
     'url' => 'https://tinypng.com',
     'descr' => 'Free online image optimizer for faster websites! Reduce the file size of AVIF, JPEG XL, WebP, PNG and JPEG images with T',
-    'icon' => 'assets/seed-icons/tinypng.com-9a83be5b.png',
+    'icon' => '',
     'sort' => 420,
   ),
 );
