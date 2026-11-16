@@ -497,6 +497,8 @@
     const eId     = document.getElementById('eId');
     const eUrl    = document.getElementById('eUrl');
     const eTitle  = document.getElementById('eTitle');
+    const eDescr  = document.getElementById('eDescr');
+    const eFetch  = document.getElementById('eFetch');
     const eGroup  = document.getElementById('eGroup');
     const eErr    = document.getElementById('editError');
     const eIcon   = document.getElementById('editIcon');
@@ -507,6 +509,9 @@
     const eSpinner = eSave.querySelector('.spinner');
     let editLastFocus = null;
     let editBusy = false;
+    /* 当前编辑项的图标地址（描述/名称是明文输入框，图标没有可编辑输入框，
+       抓取到新图标先放这里，保存时随 payload 一起写回）。 */
+    let editIcon = '';
 
     function showEditError(msg) {
       eErr.textContent = msg;
@@ -527,11 +532,14 @@
       eId.value = id;
       eUrl.value = li.dataset.url || '';
       eTitle.value = li.dataset.title || '';
+      eDescr.value = li.dataset.descr || '';
       eGroup.value = li.dataset.group || '0';
+      editIcon = li.dataset.icon || '';
+      resetFetchBtn();
 
       try { eHost.textContent = new URL(eUrl.value).hostname.replace(/^www\./, ''); }
       catch { eHost.textContent = ''; }
-      paintEditIcon(li.dataset.icon || '', eTitle.value, eHost.textContent);
+      paintEditIcon(editIcon, eTitle.value, eHost.textContent);
       eStatus.textContent = '改完按 Ctrl+S 或回车保存';
 
       eScrim.hidden = false;
@@ -550,6 +558,48 @@
         eIcon.innerHTML = `<span class="initials">${esc(initials(title || host))}</span>`;
       }
     }
+
+    const fetchText = eFetch?.querySelector('.btn-fetch-text');
+    const fetchSpin = eFetch?.querySelector('.spinner');
+    function setFetchBusy(on, text) {
+      if (!eFetch) return;
+      eFetch.disabled = on;
+      if (fetchSpin) fetchSpin.hidden = !on;
+      if (fetchText) fetchText.textContent = text || '抓取信息';
+    }
+    function resetFetchBtn() { setFetchBusy(false); }
+
+    /* 抓取：用当前网址重读页面元数据，填回名称/图标/描述。
+       人工输入优先——只在字段为空时才覆盖，避免用户改好的内容被冲掉；
+       图标没有输入框，抓取到就更新预览。任何失败只提示，不清空已填内容。 */
+    async function fetchMeta() {
+      if (!eFetch || editBusy) return;
+      const url = eUrl.value.trim();
+      if (!url) { showEditError('请先填写网址'); eUrl.focus(); return; }
+      clearEditError();
+      setFetchBusy(true, '抓取中');
+      eStatus.textContent = '正在读取页面信息…';
+      try {
+        const data = await api({ action: 'identify', url });
+        const m = data.meta || {};
+        let filled = [];
+        if (m.title) { eTitle.value = String(m.title).slice(0, 60); filled.push('名称'); }
+        if (m.desc) { eDescr.value = String(m.desc).slice(0, 200); filled.push('描述'); }
+        if (m.icon) { editIcon = String(m.icon); filled.push('图标'); }
+        paintEditIcon(editIcon, eTitle.value, eHost.textContent);
+        eStatus.textContent = filled.length
+          ? '已抓取：' + filled.join('、') + '（仍可手动修改）'
+          : '页面没有可读取的信息，请手动填写';
+        toast(filled.length ? '已抓取' + filled.join('、') : '未读取到页面信息', filled.length ? 'ok' : 'bad');
+      } catch (err) {
+        eStatus.textContent = '抓取失败，请手动填写';
+        showEditError(err.message || '抓取失败');
+      } finally {
+        resetFetchBtn();
+      }
+    }
+
+    eFetch?.addEventListener('click', fetchMeta);
 
     function closeEditor(force) {
       // 有改动时先确认，避免「按 Esc 手滑丢掉刚写的」
@@ -571,8 +621,9 @@
       if (!li) return false;
       return eUrl.value.trim() !== (li.dataset.url || '')
         || eTitle.value.trim() !== (li.dataset.title || '')
+        || eDescr.value.trim() !== (li.dataset.descr || '')
         || String(eGroup.value) !== String(li.dataset.group || '0')
-
+        || (editIcon || '') !== (li.dataset.icon || '');
     }
 
     async function saveEditor() {
@@ -582,6 +633,8 @@
       const id = Number(eId.value || 0);
       const url = eUrl.value.trim();
       const title = eTitle.value.trim();
+      const descr = eDescr.value.trim();
+      const icon = editIcon || '';
       if (!id) return showEditError('缺少链接 ID');
       if (!url) { eUrl.setAttribute('aria-invalid', 'true'); eUrl.focus(); return showEditError('请填写网址'); }
       if (!title) { eTitle.setAttribute('aria-invalid', 'true'); eTitle.focus(); return showEditError('请填写名称'); }
@@ -595,8 +648,8 @@
         url,
         title,
         group_id: newGroup,
-        descr: li?.dataset.descr || '',
-        icon: li?.dataset.icon || '',
+        descr,
+        icon,
       };
 
       editBusy = true;
@@ -610,8 +663,8 @@
         fillItem(li, {
           id, url, title,
           group_id: newGroup,
-            icon: li.dataset.icon || '',
-          descr: li.dataset.descr || '',
+          icon,
+          descr,
           hue: hue((() => { try { return new URL(url).hostname; } catch { return ''; } })()),
         });
       }
@@ -833,6 +886,14 @@
   function setEditing(on) {
     editing = on;
     body.classList.toggle('is-editing', on);
+    /* 编辑态跨刷新保留：拖拽排序/删分组成功后要 reload 才能让侧栏顺序、
+       主区分区顺序、#gN 锚点三者对齐，但 reload 不能把用户踢出编辑态。
+       写 sessionStorage，页面初始化时读回来；只有主动退出才清掉。
+       用 sessionStorage 而非 localStorage：关掉标签页即失效，不粘人。 */
+    try {
+      if (on) sessionStorage.setItem('vnav.editing', '1');
+      else sessionStorage.removeItem('vnav.editing');
+    } catch {}
     editToggle?.setAttribute('aria-pressed', on ? 'true' : 'false');
 
     /* 按钮的可见形态由 CSS 按 aria-pressed 切换（铅笔 ⇄ 叉），
@@ -888,6 +949,13 @@
   }
 
   editToggle?.addEventListener('click', () => setEditing(!editing));
+
+  /* 编辑态跨刷新恢复：删除分组后必须 reload 重建侧栏/主区，
+     reload 前 setEditing(true) 已把状态写进 sessionStorage。这里读回来，
+     让「删完还在编辑态」，而不是每次都被踢回浏览态。 */
+  try {
+    if (sessionStorage.getItem('vnav.editing') === '1' && !editing) setEditing(true);
+  } catch {}
 
   /* ==================================================================
      8.5 批量选择与批量操作
@@ -1825,10 +1893,12 @@
   })();
 
   /* ==================================================================
-     分组管理（前台）：侧栏「+」新建 / 双击组名改名 / 浮层里删除。
+     分组管理（前台）：侧栏「+」新建 / 双击组名改名 / 浮层里删除 /
+     编辑态每项左侧的删除按钮。
      接口 group_add / group_rename / group_delete 早就存在且带 user_id
      归属校验，这里只补一直缺着的入口。保存成功后整页刷新 ——
      分组一变，侧栏和主区分区都要重建，局部拼装反而容易漏。
+     （删除后也刷新；编辑态由 sessionStorage 自动恢复，不会被踢出。）
      ================================================================== */
   (() => {
     /* 桌面侧栏头一颗、窄屏折叠条旁一颗，两颗都开同一个浮层 */
@@ -1876,6 +1946,73 @@
     }
 
     addBtns.forEach(b => b.addEventListener('click', () => openGrp('add')));
+
+    /* 编辑态侧栏每组的删除按钮：两段式确认 + 即时反馈。
+       第一次点把按钮 armed（变红、文案「删除？」），3.5 秒内再点一次
+       才真删；点别的、超时、或按 Esc 都会解除。这样既清晰（按钮常驻
+       编辑态可见）又不会一次误触删掉分组。复用同一个 group_delete
+       接口和它的错误分支风格，成功后整页刷新让侧栏/主区一起重建。 */
+    let delArmed = null;      // 当前处于待确认的按钮
+    let delArmedTimer = 0;
+    const disarmSideDel = () => {
+      if (delArmed) {
+        delArmed.classList.remove('is-armed');
+        const t = delArmed.querySelector('.gnav-del-text');
+        if (t) t.textContent = '删除';
+      }
+      delArmed = null;
+      clearTimeout(delArmedTimer);
+    };
+
+    document.addEventListener('click', async e => {
+      const btn = e.target.closest('.gnav-del');
+      if (!btn) {
+        if (delArmed) disarmSideDel();
+        return;
+      }
+      /* 按钮长在 <a class="gnav-item"> 里：不拦就会触发锚点跳转 +
+         ui.js 的 setActive，甚至双击改名。这里全部截断。 */
+      e.preventDefault();
+      e.stopPropagation();
+      const id = Number(btn.dataset.delGroup || 0);
+      if (!(id > 0) || gBusy) return;
+
+      if (delArmed !== btn) {
+        disarmSideDel();
+        delArmed = btn;
+        btn.classList.add('is-armed');
+        const t = btn.querySelector('.gnav-del-text');
+        if (t) t.textContent = '删除？';
+        toast('再点一次「删除？」确认，组内链接会回到未分组');
+        delArmedTimer = setTimeout(disarmSideDel, 3500);
+        return;
+      }
+
+      // 第二次点击 —— 真删
+      disarmSideDel();
+      gBusy = true;
+      btn.classList.add('is-disabled');
+      try {
+        await api({ action: 'group_delete', id });
+        toast('分组已删除，里面的链接回到未分组', 'ok');
+        location.reload();
+      } catch (err) {
+        toast(err.message || '删除失败', 'bad');
+      } finally {
+        gBusy = false;
+        btn.classList.remove('is-disabled');
+      }
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && delArmed) { disarmSideDel(); return; }
+      /* role=button 的 <span> 不会响应 Enter/Space，手动转发成 click，
+         保证纯键盘用户也能走完两段式删除。 */
+      if (e.key === 'Enter' || e.key === ' ') {
+        const btn = e.target.closest?.('.gnav-del');
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+    });
+
     $$('.gnav-item').forEach(item => {
       item.addEventListener('dblclick', e => {
         e.preventDefault();
@@ -1965,6 +2102,22 @@
     const idleIds = () => $$('.gnav-item', track)
       .map(n => Number(n.dataset.group || 0)).filter(n => n > 0);
     const clearHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; } };
+
+    /* 主区分区跟着侧栏顺序走，但不重载页面（重载会清空编辑态）。
+       侧栏项按顺序排好后，逐项读 data-gjump（= 主区 section 的 #gN 序号），
+       用 appendChild 把对应 section 依次挪到 .groups 末尾 —— DOM 里移动
+       已有节点不会改它的 id，所以锚点跳转、IntersectionObserver 高亮
+       全部照旧。这是「保存后保持编辑态」的关键配套。 */
+    const syncStageOrder = () => {
+      const wrap = document.querySelector('.groups');
+      if (!wrap) return;
+      $$('.gnav-item', track).forEach(item => {
+        const idx = item.dataset.gjump;
+        if (idx == null) return;
+        const section = document.getElementById('g' + idx);
+        if (section && section.parentElement === wrap) wrap.appendChild(section);
+      });
+    };
 
     /* 快照排除正在拖的项：它的位置是被我们改的那个，
        拿它当参照会自证式抖动（卡片拖拽踩过同一个坑）。 */
@@ -2063,11 +2216,15 @@
       toast('正在保存分组顺序…');
       try {
         await api({ action: 'group_reorder', ids: after });
-        /* 侧栏顺序、主区分区顺序、#gN 锚点三者都由 PHP 按 sort 渲染，
-           刷新一次就全部对齐 —— 局部拼装很容易漏掉其中一处。 */
-        location.reload();
+        /* 用户明确要求：排序保存后**保持编辑态**，不许 reload 把人踢出去。
+           侧栏 DOM 已经被 place() 排成新顺序；这里只把主区 .group 同步成
+           同一顺序即可。#gN 锚点没动（data-gjump / section id 都没变），
+           所以跳转依旧正确，不必像从前那样整页刷新去对齐。 */
+        syncStageOrder();
+        toast('分组顺序已保存', 'ok');
+        el = null;
       } catch (err) {
-        restore(); // 存失败就把界面还原，别留一个刷新后必跳回去的假象
+        restore(); // 存失败就把界面还原，别留一个下次刷新必跳回去的假象
         toast(err.message || '排序保存失败', 'bad');
         el = null;
       }

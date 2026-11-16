@@ -472,6 +472,10 @@
     });
 
     const items = $$('.gnav-item', gnav);
+    /* 点击分组后到平滑滚动结束这段时间，锁住高亮不被 IntersectionObserver
+       抢走。否则滚动途中「路过」哪组就点亮哪组，图标在彩色/中性之间来回
+       切换，肉眼就是「一点侧栏图标就闪」。900ms 覆盖一屏内最长 smooth 滚动。 */
+    let activeLockUntil = 0;
     /* 目标元素**每次点击时实时查**，不能在这里缓存引用。
        游客态下 guest.js 会用本地数据重建 .groups（innerHTML），
        初始化时抓到的 <section id="g3"> 那一刻就已经脱离文档了 ——
@@ -499,6 +503,11 @@
         if (!t) return;              // 拿不到目标就让浏览器走默认锚点
         e.preventDefault();
 
+        /* 锁住高亮 900ms：下面的平滑滚动会让 IntersectionObserver 连续
+           触发，若不锁，它会把 is-active 在途经的各组之间反复搬，图标颜色
+           跟着一闪一闪。锁定期内只认这一次点击的高亮，稳定不闪。 */
+        activeLockUntil = Date.now() + 900;
+
         /* 先切高亮，再滚。高亮是即时反馈 —— 即使滚动还在路上，
            侧栏也立刻告诉你「点的就是这一组」，不会觉得点了没反应。 */
         setActive(t.id);
@@ -520,6 +529,9 @@
          两组交界处会有两个同时相交，取第一个会导致高亮乱跳。 */
       const seen = new Map();
       const io = new IntersectionObserver(entries => {
+        /* 点击后的锁定期内不接管高亮 —— 这是「点图标闪烁」的根因修复。
+           锁一过，正常滚动的高亮跟随照常生效。 */
+        if (Date.now() < activeLockUntil) return;
         entries.forEach(en => seen.set(en.target.id, en.isIntersecting ? en.intersectionRatio : 0));
         let bestId = '', bestRatio = 0;
         seen.forEach((ratio, id) => {

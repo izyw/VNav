@@ -127,31 +127,39 @@
 }
 .adm-title {
   font-family: var(--font-display);
-  font-size: clamp(1.9rem, 3.6vw, 2.7rem);
-  font-weight: 750;
-  letter-spacing: -.04em;
-  line-height: 1;
+  /* 43px / 750 / -.04em 是西文大标题的排法，中文在这个组合下
+     就是一个 43px 的粗黑墨块。收到 33px、降到 600、字距放到
+     -.015em —— 和首页组标题、登录页大标题同一条规则：
+     中文靠字号和位置拉层级，不靠加重和挤压。 */
+  font-size: clamp(1.55rem, 2.4vw, 2.05rem);
+  font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.18;
   margin: 0 0 8px;
 }
 .adm-sub { color: var(--text-2); font-size: 14.5px; margin: 0; max-width: 62ch; }
 
 .adm-panel {
   padding: 22px;
-  border-radius: var(--r-lg);
+  /* 20 → 14px：圆角要落在和卡片（8px）同一个家族里。26px 的
+     外层圆角配 46px 高的输入框，每个控件都像被肥皂包着。 */
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--surface);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  /* 去掉 backdrop-filter：面板背后是静态底色，没有东西可糊，
+     它只是一层白底；留着反而每块面板都开一个合成层。 */
   margin-bottom: 18px;
 }
 .panel-title {
   font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  /* .06em + uppercase 是为英文小标题定的。中文没有大小写，
+     字距一拉就等于把词拆了；这里归零，靠字重和颜色分层。 */
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  margin: 0 0 14px;
 }
 .panel-hint { font-size: 13.5px; color: var(--text-3); margin: -10px 0 16px; }
 .panel-actions {
@@ -176,10 +184,12 @@
 .adm-list { display: flex; flex-direction: column; gap: 26px; }
 .adm-list-group { display: flex; flex-direction: column; gap: 6px; }
 .adm-list-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  /* 12px/700/.09em/uppercase 是英文分组名的写法。中文在这套数值下
+     会被拉成一行散字，而且 700 会落到合成 Bold。 */
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: .01em;
+  text-transform: none;
   color: var(--text-3);
   margin: 0 0 6px 2px;
 }
@@ -190,7 +200,9 @@
   gap: 13px;
   min-height: 62px;
   padding: 9px 12px;
-  border-radius: var(--r-md);
+  /* 14 → 10px：跟首页卡片（8px）同一家族，比面板（14px）小一档。
+     行本身是「列表里的一个单位」，圆角不能比外层面板还大。 */
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--surface);
   transition: border-color .18s, background .18s, transform .18s var(--ease-out);
@@ -198,7 +210,7 @@
 .adm-row:hover { border-color: var(--line-hi); background: var(--surface-hi); }
 .adm-row.is-focus {
   border-color: var(--acc);
-  box-shadow: 0 0 0 3px rgba(var(--acc-glow), .2);
+  box-shadow: 0 0 0 3px rgb(var(--acc-glow) / .2);
 }
 
 .adm-row-icon {
@@ -207,21 +219,24 @@
   place-items: center;
   width: 38px; height: 38px;
   border-radius: 10px;
-  background: hsl(var(--hue) 58% 30%);
-  color: hsl(var(--hue) 90% 88%);
-  border: 1px solid hsl(var(--hue) 45% 42% / .5);
+  /* 原来是「深彩底 + 亮彩字」（58%/30% 与 90%/88%），和首页卡片的
+     「极浅底 + 中彩字」正好相反 —— 同一个站点的图标在两页上是两种东西。
+     这里改成和首页那套同源：浅底、净字、淡描边。 */
+  background: color-mix(in srgb, var(--text) 4%, var(--surface-solid));
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
   overflow: hidden;
 }
-.adm-row-icon.has-img { background: transparent; border-color: var(--line); padding: 3px; }
+.adm-row-icon.has-img { background: var(--surface-solid); border-color: var(--line); padding: 3px; }
 .adm-row-icon img { width: 100%; height: 100%; object-fit: contain; }
 .adm-row-icon .initials { font-size: 12px; }
 
 .adm-row-body { flex: 1; min-width: 0; }
 .adm-row-title {
-  font-size: 15.5px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 500;
   margin: 0;
-  letter-spacing: -.01em;
+  letter-spacing: -.004em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -264,7 +279,7 @@
 }
 .adm-row.is-picked {
   border-color: var(--acc);
-  background: rgba(var(--acc-glow), .10);
+  background: rgb(var(--acc-glow) / .10);
 }
 .adm-bulkbar {
   display: flex;
@@ -635,6 +650,10 @@
   position: relative;
   flex: 1 1 0;
   min-width: 4px;
+  /* 封顶 26px。只有一天数据时，flex 会把唯一那根柱子拉成整条横线
+     （实测：30 天没数据时页面上就是一条蓝色虚线横贯卡片）。
+     有了上限，单日的数据就是一根细柱，有多少画多少。 */
+  max-width: 26px;
   height: var(--h, 4%);
   min-height: 3px;
   border-radius: 3px 3px 1px 1px;
@@ -647,6 +666,15 @@
 .spark-bar.is-today {
   background: linear-gradient(180deg, var(--acc), color-mix(in srgb, var(--acc) 42%, transparent));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent);
+}
+/* 零值那天：只留一条极浅的基线，不参与「数据」的颜色语言。
+   之前它们和真实数据一样用强调色，30 根 3px 的柱子连成一条蓝虚线，
+   看着像图表加载失败。 */
+.spark-bar.is-zero,
+.spark-bar.is-zero.is-today {
+  min-height: 2px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow: none;
 }
 .spark-tip {
   position: absolute;
@@ -1318,7 +1346,7 @@
    这一块的存在理由是「很多链接没有 logo，而且站点会自动变化」，
    所以它必须看起来像「一次批量动作」而不是「一条顺手的小工具」：
    给个独立的头部 + 数字 + 进度条。 */
-.meta-refresh { border-color: rgba(var(--acc-glow), .28); }
+.meta-refresh { border-color: rgb(var(--acc-glow) / .28); }
 
 .mr-head {
   display: flex;
@@ -1880,7 +1908,7 @@
 }
 .adm-group-row.is-picked {
   border-color: var(--acc);
-  background: rgba(var(--acc-glow), .10);
+  background: rgb(var(--acc-glow) / .10);
 }
 
 /* 表单字段下方的补充说明（版权署名、备案号这类需要解释的字段用） */
@@ -1952,8 +1980,8 @@
 }
 .adm-lib-badge.is-mine {
   color: var(--acc);
-  border-color: rgba(var(--acc-glow), .55);
-  background: rgba(var(--acc-glow), .10);
+  border-color: rgb(var(--acc-glow) / .55);
+  background: rgb(var(--acc-glow) / .10);
 }
 
 /* 空态：标题 / 说明 / 动作。不用首页那套 .empty-title，

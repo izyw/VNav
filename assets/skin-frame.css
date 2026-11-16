@@ -273,26 +273,28 @@ html[data-theme='frame'] body.hp .gnav-item.is-active {
 
 /* 图标回归纯线条：Atlas 那枚 28px 灰方块是「侧栏宽、字大」时的体量补偿，
    在 32px 行高的紧凑列表里反而让每行发重。
-   V1.5.12 起线条带分组色：程序框语言的克制在「无底、细线、零彩度」，
-   但零彩度不等于零信息 —— 一根 17px 的彩色线条既守住了克制，
-   又让分组颜色这条线索在这里也成立。 */
+   V1.5.12 起线条带分组色：程序框语言的克制在「无底、细线」，
+   但克制不等于灰暗 —— 一根 17px 的高饱和细线既守住了体量，
+   又让分组颜色这条线索在这里也成立。
+   用户反馈「太暗」后饱和度 52% → 70%、亮度 46% → 50%，
+   只动颜色，形态仍是零底色的细线。 */
 html[data-theme='frame'] body.hp .gnav-ico {
   width: 17px;
   height: 17px;
   border-radius: 0;
   background: none;
   box-shadow: none;
-  color: hsl(var(--gt-h, 220) 52% 46%);
+  color: hsl(var(--gt-h, 220) 70% 50%);
   transform: none;
 }
 html[data-theme='frame'] body.hp .gnav-item:hover .gnav-ico {
   background: none;
-  color: hsl(var(--gt-h, 220) 58% 40%);
+  color: hsl(var(--gt-h, 220) 76% 42%);
   transform: none;
 }
 html[data-theme='frame'] body.hp .gnav-item.is-active .gnav-ico {
   background: none;
-  color: hsl(var(--gt-h, 220) 58% 38%);
+  color: hsl(var(--gt-h, 220) 78% 40%);
 }
 /* 选中行左侧的组色彩条在程序框里不出现：这里的选中态是整块浅灰，
    再加一条竖彩条会同时存在两种「当前项」语言。 */
@@ -747,3 +749,37 @@ html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 @media (max-width: 1139px) {
   html[data-theme='frame'] body.hp .gnav-foot { display: none; }
 }
+
+/* ==========================================================================
+   编辑态侧栏管理：虚线边框 + 删除入口（与 Atlas 同款交互，frame 配色）
+   ========================================================================== */
+html[data-theme='frame'] body.hp.is-editing .gnav--side .gnav-item {
+  border: 1px dashed color-mix(in srgb, var(--fr-ink-2, #71717a) 45%, transparent);
+  background-clip: padding-box;
+}
+html[data-theme='frame'] body.hp.is-editing .gnav--side .gnav-item:hover {
+  border-color: hsl(var(--gt-h, 220) 52% 50% / .6);
+}
+html[data-theme='frame'] body.hp .gnav-del {
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--fr-ink-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s, color .14s;
+}
+html[data-theme='frame'] body.hp .gnav-del svg { display: block; flex: 0 0 auto; }
+html[data-theme='frame'] body.hp .gnav-del-text { font-size: 11px; font-weight: 600; }
+html[data-theme='frame'] body.hp .gnav-del:hover,
+html[data-theme='frame'] body.hp .gnav-del:focus-visible {
+  background: color-mix(in srgb, #d92d20 12%, transparent);
+  color: #d92d20;
+  outline: none;
+}
+html[data-theme='frame'] body.hp .gnav-del.is-armed { background: #d92d20; color: #fff; }
+html[data-theme='frame'] body.hp .gnav-del.is-armed .gnav-del-text::after { content: '？'; }
+html[data-theme='frame'] body.hp .gnav-del.is-disabled { opacity: .5; pointer-events: none; }

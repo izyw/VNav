@@ -205,18 +205,18 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=44">
+<link rel="stylesheet" href="assets/app.css?v=45">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=46">
+<link rel="stylesheet" href="assets/home.css?v=48">
 <?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=57">
-<link rel="stylesheet" href="assets/skin-frame.css?v=52">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=60">
+<link rel="stylesheet" href="assets/skin-frame.css?v=55">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
@@ -546,6 +546,18 @@ hp_log_visit(false, '/');
             </span>
             <span class="gnav-name"><?= h($nm) ?></span>
             <span class="gnav-count"><?= count($g['items']) ?></span>
+            <?php /* 编辑态下的删除入口。放在 <a> 里用 <span role=button> 而不是
+                     <button>：a 里嵌 button 是非法 HTML，且会破坏这一行的
+                      整行点击跳转/拖拽。span 点击时 stopPropagation 即可。
+                     id=0 是「未分组/全部」，不是真分组，不给删。 */ ?>
+            <?php if ($__isAdmin && (int)$g['id'] > 0): ?>
+            <span class="gnav-del" role="button" tabindex="0"
+                  data-del-group="<?= (int)$g['id'] ?>"
+                  title="删除分组「<?= h($nm) ?>」" aria-label="删除分组：<?= h($nm) ?>">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg>
+              <span class="gnav-del-text">删除</span>
+            </span>
+            <?php endif; ?>
           </a>
         <?php endforeach; ?>
       </div>
@@ -898,8 +910,20 @@ hp_log_visit(false, '/');
     <label class="f-label" for="eUrl">网址</label>
     <input class="f-input" id="eUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
 
-    <label class="f-label" for="eTitle">名称</label>
+    <div class="f-label-row">
+      <label class="f-label" for="eTitle">名称</label>
+      <?php /* 抓取按钮：按当前网址重读页面的标题 / 图标 / 描述，填回下面三个字段。
+             用户只想改其中一两项时也方便——抓取后仍可手动覆盖任何字段。 */ ?>
+      <button type="button" class="btn-fetch" id="eFetch" title="从网址重新抓取名称、图标和描述">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+        <span class="btn-fetch-text">抓取信息</span>
+        <span class="spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
     <input class="f-input" id="eTitle" name="title" type="text" required maxlength="60" autocomplete="off">
+
+    <label class="f-label" for="eDescr">描述</label>
+    <textarea class="f-input f-textarea" id="eDescr" name="descr" rows="2" maxlength="200" autocomplete="off" placeholder="一句话说明这个站点是做什么的（可留空）"></textarea>
 
     <label class="f-label" for="eGroup">分组</label>
     <select class="f-input" id="eGroup" name="group_id">
@@ -1069,9 +1093,9 @@ hp_log_visit(false, '/');
      游客没有服务端身份，但 guest.js 要负责把本地沙盒画出来、
      app.js 要挂编辑模式与提示条 —— 少一个，这类页面就是只读的。 -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=46" defer></script>
+<script src="assets/ui.js?v=47" defer></script>
 <script src="assets/guest.js?v=53" defer></script>
-<script src="assets/app.js?v=47" defer></script>
+<script src="assets/app.js?v=48" defer></script>
 
 </body>
 </html>

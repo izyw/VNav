@@ -1,9 +1,9 @@
 <div align="center">
   <img src="docs/logo.svg" width="88" height="88" alt="Vnav">
   <h1>Vnav</h1>
-  <p><strong>自托管的浏览器起始页。一个 PHP 目录、一个 SQLite 文件，传上去就能用。</strong></p>
+  <p><strong>真正好用的开源上网导航（浏览器起始页）。一个 PHP 目录、一个 SQLite 文件，传上去就能用。</strong></p>
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.1.1-blue">
+    <img alt="Version" src="https://img.shields.io/badge/version-1.1.2-blue">
     <img alt="PHP" src="https://img.shields.io/badge/PHP-8.1%2B-777bb4">
     <img alt="SQLite" src="https://img.shields.io/badge/SQLite-单文件-003b57">
     <img alt="无构建" src="https://img.shields.io/badge/构建步骤-无-brightgreen">
@@ -15,6 +15,12 @@
 ![Vnav 主页](docs/home-atlas.png)
 
 把常用站点按分组摆成一屏，点开即走。不需要 Docker、MySQL 或 Node，PHP 能跑它就能跑。备份就是拷走 `data/home.db` 一个文件，换台机器再拷回来。
+
+## 初衷
+
+商业导航站广告多、页面花哨，点进去先看一屏推广，交互逻辑也谈不上。找开源的替代品同样不顺手：多数要先登进后台，逐条添加链接、编辑分组、调整排序，改一遍要点好几页；有的还收费。
+
+所以动手写了一个：能拖的就不填表，一步能做完的不拆成三步。用着顺手，就开源出来，谁都可以拿去用。
 
 ## 特性
 

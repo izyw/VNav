@@ -1429,3 +1429,60 @@ body.hp .link:focus-visible { border-radius: var(--hp-r-card); }
   body.hp .link-icon { transition: none !important; }
   body.hp .link:hover { transform: none; }
 }
+
+/* ==========================================================================
+   侧栏管理入口的显隐（两套皮肤共用）
+   --------------------------------------------------------------------------
+   「+ 新建分组」和每组的删除按钮都是**编辑态专属**。非编辑态它们是噪音
+   （看一眼就去触碰的诱饵），编辑态才需要。用 ID 选择器拿最高特异性，
+   压过上面媒体查询里 .gnav-madd 的 display:grid。游客态这两个按钮根本
+   不会渲染（PHP 里由 $__isAdmin 控制），这里纯 CSS 不碰权限。
+   ========================================================================== */
+body.hp:not(.is-editing) #grpAdd,
+body.hp:not(.is-editing) #grpAddM { display: none; }
+
+body.hp .gnav-del { display: none; }
+body.hp.is-editing .gnav-del { display: inline-flex; }
+
+/* ==========================================================================
+   编辑浮层：描述字段 + 抓取按钮
+   ========================================================================== */
+/* 名称标签与「抓取信息」按钮同一行：按钮贴右，label 的上下间距保留 */
+.f-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+.f-label-row .f-label { margin: 0; }
+.btn-fetch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+  color: var(--acc);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color .16s, background .16s;
+}
+.btn-fetch:hover { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 10%, transparent); }
+.btn-fetch:focus-visible { outline: 2px solid rgb(var(--acc-glow) / .6); outline-offset: 1px; }
+.btn-fetch:disabled { opacity: .6; cursor: default; }
+.btn-fetch svg { display: block; flex: 0 0 auto; }
+.btn-fetch .spinner { width: 13px; height: 13px; }
+/* textarea：沿用 f-input 观感，允许纵向拉伸，固定最小高度 */
+textarea.f-input {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.55;
+  font-size: 15px;
+}

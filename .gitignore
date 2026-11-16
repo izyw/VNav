@@ -21,3 +21,6 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 界面验证截图（.artifacts 里跑出来的临时产物）
+/docs/final/

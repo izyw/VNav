@@ -228,10 +228,10 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=44">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=54">
-<link rel="stylesheet" href="assets/skin-frame.css?v=52">
-<link rel="stylesheet" href="assets/admin.css?v=45">
+<link rel="stylesheet" href="assets/app.css?v=45">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=55">
+<link rel="stylesheet" href="assets/skin-frame.css?v=53">
+<link rel="stylesheet" href="assets/admin.css?v=46">
 </head>
 <body class="adm-body">
 
@@ -919,8 +919,12 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <div class="spark" role="img" aria-label="近 <?= (int)$stats['days'] ?> 天每日访问量柱状图">
           <?php foreach ($stats['daily'] as $d => $c):
             $hh = max(2, (int)round($c / $maxDaily * 100));
-            $isToday = $d === date('Y-m-d'); ?>
-            <span class="spark-bar<?= $isToday ? ' is-today' : '' ?>" style="--h:<?= $hh ?>%"
+            $isToday = $d === date('Y-m-d');
+            /* 0 的那天也要占一格（否则柱宽会随时间跳），但不能用强调色画 ——
+               30 根 3px 高的彩色柱子连起来，看起来就是一条横贯卡片的蓝色虚线，
+               像是「图画坏了」。给个 is-zero，样式里退成一条极浅的基线。 */
+            $isZero = (int)$c === 0; ?>
+            <span class="spark-bar<?= $isToday ? ' is-today' : '' ?><?= $isZero ? ' is-zero' : '' ?>" style="--h:<?= $hh ?>%"
                   title="<?= h($d) ?>：<?= $c ?> 次">
               <span class="spark-tip"><?= h(substr($d, 5)) ?> · <?= $c ?></span>
             </span>

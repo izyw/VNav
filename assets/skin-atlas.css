@@ -63,12 +63,21 @@ html[data-theme='auto'] {
   --at-sh-md: 0 2px 6px rgba(0, 0, 0, .05), 0 8px 20px -8px rgba(0, 0, 0, .12);
   --at-sh-lg: 0 4px 10px rgba(0, 0, 0, .06), 0 16px 36px -14px rgba(0, 0, 0, .18);
   --at-sh-xl: 0 8px 20px rgba(0, 0, 0, .07), 0 28px 64px -22px rgba(0, 0, 0, .24);
+  /* 卡片静止态的「厚度」投影。不到会发灰的程度，只让白卡边缘
+     从纸片变成一张实体卡 —— 1px 边框单独用的时候，125%/150%
+     缩放下边缘会显得虚。 */
+  --at-card-rest: 0 1px 2px rgba(0, 0, 0, .018), 0 0 0 .5px rgba(0, 0, 0, .012);
 
   /* 图标色拆成四个数：--hue 是每个卡片自带的，而自定义属性在声明处就会
      替换 var()，html 上还没有 --hue，整条会失效。 */
-  --at-ico-bg-s: 62%;  --at-ico-bg-l: 95%;
-  --at-ico-fg-s: 56%;  --at-ico-fg-l: 38%;
-  --at-ico-ln-s: 50%;  --at-ico-ln-l: 89%;
+  /* 首字母占位图标：从「域名彩色块」收成「一丝色温的浅灰块」。
+     原来 62%/56% 的饱和度下，一屏 40 张卡里有十几个彩色方块，
+     和旁边真正带 logo 的白底图标是两套语言，整片网格读起来发花。
+     现在底色几乎只剩亮度差，字母是中灰带一点色相 —— 远看统一成
+     「白底 logo + 浅灰占位」两层，近看每个站仍有自己的温度。 */
+  --at-ico-bg-s: 34%;  --at-ico-bg-l: 96.5%;
+  --at-ico-fg-s: 24%;  --at-ico-fg-l: 41%;
+  --at-ico-ln-s: 28%;  --at-ico-ln-l: 92.5%;
   --at-ico-inset: inset 0 1px 0 rgba(255, 255, 255, .6);
   --at-img-bg:  #ffffff;
 
@@ -157,10 +166,13 @@ html[data-theme='atlas-dark'] {
   --at-sh-md: 0 2px 6px rgba(0, 0, 0, .5), 0 8px 20px -8px rgba(0, 0, 0, .7);
   --at-sh-lg: 0 4px 10px rgba(0, 0, 0, .55), 0 16px 36px -14px rgba(0, 0, 0, .8);
   --at-sh-xl: 0 8px 20px rgba(0, 0, 0, .6), 0 28px 64px -22px rgba(0, 0, 0, .9);
+  --at-card-rest: 0 1px 2px rgba(0, 0, 0, .3);
 
-  --at-ico-bg-s: 24%;  --at-ico-bg-l: 23%;
-  --at-ico-fg-s: 60%;  --at-ico-fg-l: 80%;
-  --at-ico-ln-s: 20%;  --at-ico-ln-l: 31%;
+  /* 暗底同理：80% 亮度 + 60% 饱和的字母在 #1e1e24 卡上会「发光」，
+     压到 72% / 24% 之后是「安静的浅灰」，白 logo 才是唯一亮的东西。 */
+  --at-ico-bg-s: 18%;  --at-ico-bg-l: 24%;
+  --at-ico-fg-s: 18%;  --at-ico-fg-l: 60%;
+  --at-ico-ln-s: 16%;  --at-ico-ln-l: 31%;
   --at-ico-inset: inset 0 1px 0 rgba(255, 255, 255, .07);
   --at-img-bg:  #2a2a2e;
 
@@ -500,14 +512,17 @@ body.hp .eng-logo--sm { width: 26px; height: 26px; border-radius: 0; }
 /* ==========================================================================
    4. 工具按钮与下拉面板
    ========================================================================== */
-body.hp .tb-tools { gap: 4px; }
+body.hp .tb-tools { gap: 6px; }
 
 body.hp .tbm-btn {
   position: relative;
-  width: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  border-radius: var(--at-r-sm);
+  /* 38 → 36：搜索框 40 是输入区，工具区 36 是操作区，差一档刚好
+     分成两层；两颗按钮并排时也不会比中间的搜索框更高。 */
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  /* 6 → 8px：圆角跟卡片（8px）对齐后，顶栏和主区共用同一套圆角语言 */
+  border-radius: var(--at-r-md);
   border: 1px solid transparent;
   background: transparent;
   color: var(--at-ink-2);
@@ -575,23 +590,26 @@ body.hp .tbo-hint--default { color: var(--at-accent); font-weight: 550; }
 body.hp .tbm-btn--login {
   width: auto;
   flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 15px;
-  border-radius: var(--at-r-pill);
-  border-color: color-mix(in srgb, var(--at-accent) 34%, transparent);
+  /* 和左边三枚图标同一高度、同一圆角。原来是 34px 胶囊 ——
+     一排「方角幽灵按钮」尽头挂一颗胶囊，两种形状语言并排，
+     怎么调间距都看着像没对齐。现在差别只留在「有没有底色」。 */
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--at-r-md);
+  border-color: transparent;
   color: var(--at-accent);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -.005em;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--at-accent) 6%, transparent);
+  background: color-mix(in srgb, var(--at-accent) 12%, transparent);
 }
 body.hp .tbm-btn--login .tbm-ico { color: inherit; }
 body.hp .tbm-btn--login:hover {
   background: var(--at-accent);
-  border-color: var(--at-accent);
+  border-color: transparent;
   color: #fff;
-  box-shadow: 0 4px 12px -3px rgba(0, 113, 227, .45);
+  box-shadow: 0 4px 12px -4px rgba(0, 113, 227, .45);
 }
 body.hp .tbm-btn--login:hover .tbm-ico { color: #fff; }
 
@@ -677,32 +695,71 @@ html[data-theme='auto'] {
      实测黄色（常用）和青柠（游戏）在白描边图标下面会「发亮」——
      白线压在亮黄上几乎没有对比度，缩放看是一团糊。压到 60% 之后
      白图标才立得住，其余色相只是从「糖果」变成「墨水」。 */
-  --gt-s: 78%;
-  --gt-l1: 60%;
-  --gt-l2: 48%;
-  --gt-tint-a: 9%;
-  --gt-tint-a2: 20%;
-  --gt-ink-l: 38%;
-  --gt-edge-a: 24%;
+  /* 饱和度 78% → 70%，亮度端点各收一档。这个色相同时喂三处：
+     主区组图标（实色渐变）、侧栏选中态、左侧竖条。78% 那版在
+     125% 缩放的屏上是「糖果色」，九个分组竖着排一列，颜色比内容
+     还抢眼。70% / 58→47% 之后它们从「贴纸」退成「墨水」——
+     仍然一眼可分，但不再压过标题。 */
+  --gt-s: 70%;
+  --gt-l1: 58%;
+  --gt-l2: 47%;
+  --gt-tint-a: 8%;
+  --gt-tint-a2: 18%;
+  --gt-ink-l: 40%;
+  --gt-edge-a: 20%;
+  /* 侧栏图标三件套（底色饱和 / 底色亮度 / 图标饱和 / 图标亮度）。
+     底色 89% → 94%、饱和 84% → 56%：七枚并列时不再像七个不同 App
+     的图标，而是一列同族的浅色纸片；描边从「彩色细框」改成
+     「同色系极淡内描边」，去掉塑料感。 */
+  --gt-ico-bg-s: 48%;
+  --gt-ico-bg-l: 95%;
+  --gt-ico-bg-a: .9;
+  --gt-ico-ink-s: 58%;
+  --gt-ico-ink-l: 40%;
+  --gt-ico-edge-l: 88%;
+  --gt-ico-edge-a: .45;
+  --gt-ico-hover-bg-l: 89%;
+  --gt-ico-hover-ink-l: 34%;
 }
 html[data-theme='atlas-dark'] {
-  --gt-s: 60%;
-  --gt-l1: 47%;
+  --gt-s: 56%;
+  --gt-l1: 46%;
   --gt-l2: 38%;
-  --gt-tint-a: 18%;
-  --gt-tint-a2: 30%;
-  --gt-ink-l: 76%;
-  --gt-edge-a: 32%;
+  --gt-tint-a: 16%;
+  --gt-tint-a2: 26%;
+  --gt-ink-l: 74%;
+  --gt-edge-a: 26%;
+  /* 暗底下侧栏图标本来就该亮一档，但底色不能再「发光」：
+     底色透明度 .72 → .62，描边透明度 .5 → .38，让七枚并排时
+     是「深底 + 亮线」而不是七个发光色块。 */
+  --gt-ico-bg-s: 42%;
+  --gt-ico-bg-l: 27%;
+  --gt-ico-bg-a: .55;
+  --gt-ico-ink-s: 58%;
+  --gt-ico-ink-l: 70%;
+  --gt-ico-edge-l: 52%;
+  --gt-ico-edge-a: .38;
+  --gt-ico-hover-bg-l: 35%;
+  --gt-ico-hover-ink-l: 80%;
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme='auto'] {
-    --gt-s: 60%;
-    --gt-l1: 47%;
+    --gt-s: 56%;
+    --gt-l1: 46%;
     --gt-l2: 38%;
-    --gt-tint-a: 18%;
-    --gt-tint-a2: 30%;
-    --gt-ink-l: 76%;
-    --gt-edge-a: 32%;
+    --gt-tint-a: 16%;
+    --gt-tint-a2: 26%;
+    --gt-ink-l: 74%;
+    --gt-edge-a: 26%;
+    --gt-ico-bg-s: 42%;
+    --gt-ico-bg-l: 27%;
+    --gt-ico-bg-a: .55;
+    --gt-ico-ink-s: 58%;
+    --gt-ico-ink-l: 70%;
+    --gt-ico-edge-l: 52%;
+    --gt-ico-edge-a: .38;
+    --gt-ico-hover-bg-l: 35%;
+    --gt-ico-hover-ink-l: 80%;
   }
 }
 
@@ -874,19 +931,23 @@ body.hp .gnav--side .gnav-item {
      的「重量差」，同样字号下笔画细一档；在 #efeff2 的浅灰侧栏上，
      500 字重的汉字几乎糊成一片浅灰线。加一号、加到 600 才和其它界面
      （Linear / Notion 的中文）在一个密度上。 */
+  /* 15px / 500。原来 600 —— Windows 的中文字族（雅黑/等线）只有
+     Regular 与 Bold 两档，600 会被合成成 Bold，七行中文全是粗体，
+     在浅灰侧栏上像一列夯实的黑条。降到 500 落回 Regular：中文方块字
+     本身笔画密度就够，Regular 15px 比合成 Bold 14px 更清楚也更干净。 */
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
 }
 /* V1.3.8 起侧栏用图标代替小圆点：分类名是自建的，图标按名字匹配内置库。
 
-   设计改版：默认态回到中性 —— 浅灰块 + 中性描边图标，无渐变无投影。
-   旧版是每组一枚实色渐变块（78% 饱和、60→48% 亮度、双层彩色投影），
-   一整列七枚在灰侧栏上像贴纸，和主区那套零彩度卡片不是一套语言，
-   用户直接反馈「很丑、突兀」。现在颜色只在「当前位置」出现：
-   选中组的图标块才染上该组的组色（同一个 --gt-h），其余保持中性灰。
-   这样组色从「七个静态色块」变成「一个会移动的焦点」，信息量不减，
-   噪音大降。主区组标题的小图标 (gh-ico) 仍保留实色 —— 那是内容区的
-   分类标识，和侧栏导航是两回事，不一起改。 */
+   用户明确要求「恢复彩色，不要全部灰白」：默认态改为每组一枚**组色**图标 ——
+   浅色组色底 + 组色描边图标，九组就是九种颜色，扫一眼就能按颜色定位。
+   （更早那版曾把七枚做成实色渐变块，用户嫌「像贴纸、突兀」，所以默认态
+   用低饱和的浅色底，不铺满整块；选中态才升级成实色渐变 + 白图标。）
+   用户又反馈「颜色太暗」——上一版浅底亮度只有 20%、描边 38%，
+   远看是一列沉色块。现在底色提到 89% 的浅彩、描边 44% 的高饱和，
+   亮色主题下九组是九枚明快但不刺眼的彩块；暗色主题另有一档高亮值。
+   组色来自每项的 --gt-h，选中/计数/竖条同一个色相，不会漂移。 */
 body.hp .gnav-ico {
   flex: 0 0 auto;
   display: grid;
@@ -894,20 +955,24 @@ body.hp .gnav-ico {
   width: 28px;
   height: 28px;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--at-ink) 7%, var(--at-nav-bg));
-  color: var(--at-ink-3);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--at-ink) 8%, transparent);
-  transition: transform .18s cubic-bezier(.34, 1.4, .64, 1), background .18s, color .18s;
+  /* 饱和度和描边全部走变量：亮/暗两套皮肤各给一组数，
+     别再在规则里写死 84%/76%/74% —— 那样换底色就得回来改三处。 */
+  background: hsl(var(--gt-h, 220) var(--gt-ico-bg-s, 56%) var(--gt-ico-bg-l, 94%) / var(--gt-ico-bg-a, .92));
+  color: hsl(var(--gt-h, 220) var(--gt-ico-ink-s, 62%) var(--gt-ico-ink-l, 40%));
+  /* 内描边只为「纸片有边」，不是彩色细框：同色相、更亮、半透明 */
+  box-shadow: inset 0 0 0 1px hsl(var(--gt-h, 220) 50% var(--gt-ico-edge-l, 87%) / var(--gt-ico-edge-a, .5));
+  /* 只过渡颜色，不再过渡 transform —— 点击时 is-active 切换 transform
+     会与 hover 的 scale 打架，是「图标一闪一缩」的直接来源。位置交给颜色，
+     手感稳定。 */
+  transition: background .18s, color .18s, box-shadow .18s;
 }
 body.hp .gnav-item:hover .gnav-ico {
-  transform: translateY(-1px) scale(1.05);
-  background: color-mix(in srgb, var(--at-ink) 11%, var(--at-nav-bg));
-  color: var(--at-ink-2);
+  background: hsl(var(--gt-h, 220) var(--gt-ico-bg-s, 56%) var(--gt-ico-hover-bg-l, 88%) / 1);
+  color: hsl(var(--gt-h, 220) var(--gt-ico-ink-s, 62%) var(--gt-ico-hover-ink-l, 34%));
 }
-/* 选中组才染组色：用组色的实色渐变 + 白图标，是全列唯一带色的一枚，
-   和左侧那条 3px 组色竖条是同一个「你在这里」的信号。 */
+/* 选中组升级成组色实色渐变 + 白图标，是全列最实的一枚，
+   和左侧那条组色竖条是同一个「你在这里」的信号。 */
 body.hp .gnav-item.is-active .gnav-ico {
-  transform: none;
   background: linear-gradient(155deg,
       hsl(var(--gt-h, 220) var(--gt-s) var(--gt-l1)),
       hsl(calc(var(--gt-h, 220) + 9) var(--gt-s) var(--gt-l2)));
@@ -938,8 +1003,10 @@ body.hp .gnav--side .gnav-item.is-active::before {
   left: 2px;
   top: 50%;
   width: 3px;
-  height: 15px;
-  margin-top: -7.5px;
+  /* 竖线与 28px 图标齐高：旧版 15px 只有图标一半，看着像一小截红线。
+     行高 44px，28px 居中上下各留 8px，既够醒目又不顶到行边缘。 */
+  height: 28px;
+  margin-top: -14px;
   border-radius: 2px;
   background: hsl(var(--gt-h, 220) 76% 55%);
 }
@@ -973,6 +1040,12 @@ html[data-nav='mini'] body.hp .gnav--side { padding: 18px 10px 24px; }
 html[data-nav='mini'] body.hp .gnav-title,
 html[data-nav='mini'] body.hp .gnav-name,
 html[data-nav='mini'] body.hp .gnav-count { display: none; }
+/* 收起态只剩 40px 可用宽，「站点库 / 我的库」这个两段切换器塞不进去 ——
+   实测被压成竖排（每个字一行）叠在页脚上，还把版权压掉一半。
+   收起态本来就不是「精细操作」的场景，直接藏起来；
+   展开后它照旧在页脚上方。 */
+html[data-nav='mini'] body.hp .gnav-lib { display: none; }
+html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 html[data-nav='mini'] body.hp .gnav-head { justify-content: center; padding-left: 0; }
 html[data-nav='mini'] body.hp .gnav-fold svg { transform: rotate(180deg); }
 html[data-nav='mini'] body.hp .gnav--side .gnav-item {
@@ -1074,8 +1147,11 @@ body.hp .group-head::before { content: none; }
 /* 组名前一枚 22px 彩色图标块 —— 和侧栏同一枚图标、同一个色相。
    两边重复不是偷懒：侧栏和正文的颜色对上之后，「紫色那栏 = 紫色那组」
    才成立，颜色才是导航线索而不是装饰。
-   V1.5.12 之前这里是 6px 圆点，靠 --at-accent 统一着色 —— 一颗蓝点
-   放在七个分组上，等于没有颜色。 */
+   2026-11-16 精修：改成和侧栏完全同款的「浅彩纸片」。
+   原来这里是实色渐变 + 白线图标，22px 的黄块比旁边 15.5px 的「常用」
+   两个字还重，一屏十几个组标题块 = 十几个实心色点。既然侧栏已经是
+   浅彩，主区也浅彩，「同一种紫」才真的成立（深浅两档的同一色，
+   观感上仍是两种颜色）。分区的存在感交给文字和那条渐隐线。 */
 body.hp .gh-ico {
   flex: 0 0 auto;
   display: grid;
@@ -1083,14 +1159,14 @@ body.hp .gh-ico {
   width: 22px;
   height: 22px;
   border-radius: 7px;
-  background: linear-gradient(155deg,
-      hsl(var(--gt-h, 220) var(--gt-s) var(--gt-l1)),
-      hsl(calc(var(--gt-h, 220) + 9) var(--gt-s) var(--gt-l2)));
-  color: #fff;
-  box-shadow:
-    0 1px 3px -1px hsl(var(--gt-h, 220) 72% 38% / .45),
-    inset 0 1px 0 hsl(0 0% 100% / .34);
+  background: hsl(var(--gt-h, 220) var(--gt-ico-bg-s, 56%) var(--gt-ico-bg-l, 94%) / var(--gt-ico-bg-a, .92));
+  color: hsl(var(--gt-h, 220) var(--gt-ico-ink-s, 62%) var(--gt-ico-ink-l, 40%));
+  box-shadow: inset 0 0 0 1px hsl(var(--gt-h, 220) 50% var(--gt-ico-edge-l, 87%) / var(--gt-ico-edge-a, .5));
 }
+/* 同一个色相，22px 的块比 28px 的块「淡」一档 —— 小面积承载不住浅色，
+   远看就是一块模糊的底。这里单独把组图标的线条压深，尺寸上的差异
+   用颜色补回来，色相仍然一致。 */
+body.hp .gh-ico { color: hsl(var(--gt-h, 220) 62% 35%); }
 body.hp .gh-ico svg { width: 13px; height: 13px; }
 
 body.hp .group-name {
@@ -1098,9 +1174,13 @@ body.hp .group-name {
   align-items: center;
   margin: 0;
   font-family: var(--at-font-d);
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -.021em;
+  /* 16px / 600 → 15.5px / 600。650 一样会落到 Bold，只是大字号的
+     Bold 中文比小字号的更容易「糊成一团墨」。收半号，同时把
+     letter-spacing 从 -.021em 放松到 -.012em：负字距在中文上会把
+     字与字挤到一起，只在西文标题里才划算。 */
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -.008em;
   color: var(--at-ink);
   white-space: nowrap;
 }
@@ -1109,12 +1189,15 @@ body.hp .group-count {
   flex: 0 0 auto;
   font-size: 11px;
   line-height: 1;
-  padding: 4px 8px;
+  /* 4px 8px → 3px 7px：胶囊太高会比旁边的 15.5px 组名更占视觉份量 */
+  padding: 3px 7px;
   border-radius: var(--at-r-pill);
   border: 0;
   background: color-mix(in srgb,
-      hsl(var(--gt-h, 220) 76% 50%) 9%, transparent);
-  color: hsl(var(--gt-h, 220) 45% var(--gt-ink-l));
+      hsl(var(--gt-h, 220) 70% 50%) 7%, transparent);
+  /* 45%/38% → 34%：原来的黄褐字压在同色淡底上，两个都亮，
+     读起来发"脏"；把字压深，背景才退成底 */
+  color: hsl(var(--gt-h, 220) 42% 34%);
   font-family: var(--at-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
@@ -1163,9 +1246,10 @@ body.hp .link {
   border-radius: var(--hp-r-card);
   border: 1px solid var(--at-rule);
   background: var(--at-card);
-  /* 静止态不投影：白卡在浅底上叠阴影会发灰，整个页面显脏。
-     层次交给 1px 边框，悬停时才浮起来。 */
-  box-shadow: none;
+  /* 静止态只留一层 1px 的「厚度」投影，不是完整的卡片阴影 ——
+     白卡在浅底上叠满阴影会发灰、整页显脏；但完全没有又像贴在
+     底色上的一张纸。alpha .018 正好在「感觉得到、说不出」之间。 */
+  box-shadow: var(--at-card-rest, none);
   color: var(--at-ink);
   transition: transform .2s cubic-bezier(.2, .8, .3, 1),
               box-shadow .2s, border-color .2s;
@@ -1206,7 +1290,7 @@ body.hp .link:hover .link-icon {
      读起来有温度的那一层，说不清哪里不一样，但关掉就觉得死。 */
   box-shadow:
     var(--at-ico-inset),
-    0 6px 14px -6px hsl(var(--hue, 220) 55% 42% / .42);
+    0 6px 14px -6px hsl(var(--hue, 220) 34% 45% / .26);
 }
 
 body.hp .link-icon.has-img {
@@ -1232,17 +1316,21 @@ body.hp .link-body { gap: 2px; }
 body.hp .link-title {
   font-family: var(--at-font);
   font-size: 14.5px;
-  font-weight: 560;
-  letter-spacing: -.012em;
-  line-height: 1.36;
+  /* 560 → 500：中文在这个尺寸下 560 就是合成 Bold，「百度一下，你就知道」
+     看着比旁边的英文站名粗一圈。Regular 14.5px 配深墨色，
+     层级靠「比描述大两号 + 深浅差」立起来，而不是靠加粗。 */
+  font-weight: 500;
+  /* 负字距只管西文：中文每个字都是满格方块，-.012em 会让字缝黏住 */
+  letter-spacing: -.004em;
+  line-height: 1.38;
   color: var(--at-ink);
 }
-/* 描述：真实描述优先（后端已输出），没有时回落域名。12px 灰 —— 它是注释。 */
+/* 描述：真实描述优先（后端已输出），没有时回落域名。12.5px 灰 —— 它是注释。 */
 body.hp .link-sub {
   font-family: var(--at-font);
   font-size: 12.5px;
   font-weight: 400;
-  letter-spacing: -.003em;
+  letter-spacing: 0;
   line-height: 1.42;
   color: var(--at-ink-3);
 }
@@ -1362,8 +1450,13 @@ html[data-layout='card'] body.hp .link-edit {
    名称在下。静止无框，悬停浮出白卡。
    ========================================================================== */
 html[data-layout='grid'] body.hp .links {
+  /* justify-content 从 start 改成 space-between：128px 的列宽上限固定
+     （图标宫格的列不能再宽，否则一屏只放得下五行大图标），
+     但 auto-fill 算出来是 7 列 944px，容器有 1074px —— 右边会空出
+     130px，整块宫格看着像没铺满。space-between 把这 130px 均分给
+     6 道间隙，卡片本身宽度不变，右边缘齐平。 */
   grid-template-columns: repeat(auto-fill, minmax(108px, 128px));
-  justify-content: start;
+  justify-content: space-between;
   gap: 8px;
 }
 html[data-layout='grid'] body.hp .link {
@@ -1809,6 +1902,14 @@ body.hp ::selection {
     justify-self: stretch;
   }
   body.hp .search input { font-size: 16px; } /* 防 iOS 聚焦缩放 */
+  /* 桌面把工具按钮从 38 收到 36 是为了跟搜索框（40）分出层次；
+     手机上 36px 低于 40px 的触摸下限，手指点不准，这里补回 40。 */
+  body.hp .tbm-btn {
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  body.hp .tbm-btn--login { min-height: 40px; }
   /* 窄屏不要键帽：手机没有物理键盘，它只会挡住输入 */
   body.hp .search-kbd { display: none; }
   body.hp .search input { padding-right: 14px; }
@@ -1851,64 +1952,79 @@ body.hp ::selection {
    17. 管理侧：登录页跟随同一套语言
    ========================================================================== */
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-card {
-  border-radius: var(--at-r-xl);
-  border: 1px solid var(--at-rule);
+  /* 26 → 18px：26 是 app.css 的 --r-xl，一个给「大浮层」的尺寸。
+     登录卡片里装着 46px 高的输入框，外框圆角是内控件的两倍，
+     看着像一块肥皂。18 刚好比控件大一号。 */
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--at-ink) 8%, transparent);
   background: var(--at-card);
-  box-shadow: var(--at-sh-xl);
+  /* at-sh-xl 是四层重影，在浅灰底上会拖出一圈灰味；
+     换成「一近一远」两层：近的那层交代厚度，远的那层交代悬浮。 */
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, .04),
+    0 24px 56px -28px rgba(0, 0, 0, .26);
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-kicker {
   font-family: var(--at-font);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: .14em;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .18em;
   color: var(--at-accent);
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-big {
   font-family: var(--at-font-d);
-  letter-spacing: -.045em;
-  font-weight: 700;
+  font-size: clamp(2.2rem, 4.2vw, 3rem);
+  line-height: 1.14;
+  /* -.045em / 700 是西文大标题的写法：西文靠挤压字母间距做张力。
+     中文每个字都是满格方块，-.045em 两行一叠就是一块黑板，
+     中文标题要「松」一点才显贵。 */
+  letter-spacing: -.01em;
+  font-weight: 600;
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-note {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 14.5px;
+  line-height: 1.75;
   color: var(--at-ink-2);
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-title {
   font-family: var(--at-font-d);
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -.026em;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.005em;
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-submit {
-  border-radius: var(--at-r-sm);
+  border-radius: 11px;
   background: var(--at-accent);
   color: #fff;
-  font-size: 14px;
-  font-weight: 550;
-  box-shadow: 0 1px 2px rgba(0, 113, 227, .25), 0 8px 20px -8px rgba(0, 113, 227, .55);
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 113, 227, .22), 0 8px 20px -10px rgba(0, 113, 227, .5);
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-submit:hover {
   background: var(--at-accent-2);
   filter: none;
-  box-shadow: 0 2px 4px rgba(0, 113, 227, .3), 0 12px 26px -8px rgba(0, 113, 227, .6);
+  box-shadow: 0 2px 4px rgba(0, 113, 227, .26), 0 12px 26px -10px rgba(0, 113, 227, .55);
 }
-html:is([data-theme^='atlas'], [data-theme='auto']) .auth-alert { border-radius: var(--at-r-sm); }
+html:is([data-theme^='atlas'], [data-theme='auto']) .auth-alert { border-radius: 11px; }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-back { border-radius: var(--at-r-xs); }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-input {
-  border-radius: var(--at-r-sm);
-  border-color: var(--at-rule);
-  background: var(--at-sunken);
+  /* 原来默认态是 --at-sunken（#e9ecf1）实填，聚焦才变白 ——
+     于是「没聚焦的那个框」看着像禁用态，两个框永远不是同一种东西。
+     现在两边都是白底 + 淡描边，聚焦只改边框颜色和一圈柔光。 */
+  border-radius: 11px;
+  border-color: color-mix(in srgb, var(--at-ink) 10%, transparent);
+  background: color-mix(in srgb, var(--at-ink) 3%, var(--at-card));
   font-family: var(--at-font);
-  font-size: 14px;
+  font-size: 15px;
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-input:focus {
   border-color: color-mix(in srgb, var(--at-accent) 55%, transparent);
   background: var(--at-card);
-  box-shadow: 0 0 0 4px var(--at-accent-s);
+  box-shadow: 0 0 0 3.5px var(--at-accent-s);
 }
 html:is([data-theme^='atlas'], [data-theme='auto']) .auth-body .f-label {
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12.5px;
+  font-weight: 500;
   letter-spacing: .01em;
   color: var(--at-ink-2);
 }
@@ -2104,3 +2220,53 @@ body.hp .gnav-item.is-nav-dragging {
   opacity: .58;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
 }
+
+/* 编辑态：给侧栏**每一组**套上虚线框，明确「这些都能拖动」。
+   平时靠 cursor:grab 提示太弱（触屏没有光标），虚线是可见的承诺。
+   用 inset 画框不占布局：gnav-item 已有 1px 透明实边框，再加一层
+   box-shadow 描边就不会把行高撑大、也不会让计数错位。 */
+body.hp.is-editing .gnav--side .gnav-item {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--at-ink) 26%, transparent);
+  /* 虚线用 repeating-linear-gradient 铺一条 1px 边，四边都可见。
+     背景裁剪到 padding-box，渐变只在 border-box 那一圈露出 => 虚线。 */
+  border: 1px dashed color-mix(in srgb, var(--at-ink) 34%, transparent);
+  background-clip: padding-box;
+}
+body.hp.is-editing .gnav--side .gnav-item:hover {
+  border-color: hsl(var(--gt-h, 220) var(--gt-s) 56% / .55);
+}
+
+/* 编辑态的删除入口。平时 display:none（home.css），这里只管外观：
+   垃圾桶 + 「删除」小字，默认低调灰，hover 转组色危险红。
+   margin-left 不放 auto —— 计数已经在最右，删除紧贴其后。 */
+body.hp .gnav-del {
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  color: var(--at-ink-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .16s, color .16s;
+}
+body.hp .gnav-del svg { display: block; flex: 0 0 auto; }
+body.hp .gnav-del-text {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+body.hp .gnav-del:hover,
+body.hp .gnav-del:focus-visible {
+  background: color-mix(in srgb, #d92d20 12%, transparent);
+  color: #d92d20;
+  outline: none;
+}
+/* 二次确认的「armed」态：整颗按钮变实心危险红，一眼看出再点就真删。 */
+body.hp .gnav-del.is-armed {
+  background: #d92d20;
+  color: #fff;
+}
+body.hp .gnav-del.is-armed .gnav-del-text::after { content: '？'; }
+body.hp .gnav-del.is-disabled { opacity: .5; pointer-events: none; }

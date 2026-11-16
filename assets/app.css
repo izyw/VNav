@@ -1462,9 +1462,11 @@ html[data-layout='grid'] .link-edit {
 
 .f-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .05em;
+  /* 12px uppercase + .05em 是照英文界面定的。中文没有大小写，
+     .05em 只会把「账号」两个字拉开，看着像间距出错。 */
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: .01em;
   text-transform: uppercase;
   color: var(--text-3);
   margin: 14px 0 6px;
@@ -1474,15 +1476,29 @@ html[data-layout='grid'] .link-edit {
   min-height: 46px;
   padding: 10px 14px;
   border-radius: 11px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+  /* 输入框的边界靠「底色比卡片暗一档 + 一道淡描边」两层，
+     而不是只靠一道线。原来的 bg-0 55% 混出来几乎就是卡片色，
+     白卡上的输入区看不出是个输入区（登录页那句「密码框像禁用态」
+     就是这个原因）。用 text 色 3.5% 叠到卡片色上，
+     亮底得浅灰、暗底得深灰，一套值两种主题都对。 */
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  background: color-mix(in srgb, var(--text) 2.6%, var(--surface-solid));
   color: var(--text);
   font: inherit;
   font-size: 16px;
-  transition: border-color .18s, background .18s;
+  transition: border-color .18s, background .18s, box-shadow .18s;
 }
-.f-input:hover { border-color: var(--line-hi); }
-.f-input:focus { border-color: var(--acc); outline: 2px solid rgb(var(--acc-glow) / .5); outline-offset: 1px; }
+.f-input:hover { border-color: color-mix(in srgb, var(--text) 16%, transparent); }
+/* 聚焦：边框变强调色 + 一圈柔光。原来是一圈 2px 实心 outline、
+   offset 1px —— 那圈线在 11px 圆角外面是方的，和卡片、按钮的
+   圆角对不上，看着像浏览器默认的 focus ring 没被接管。
+   改成 box-shadow 光晕：跟着圆角走，也没有 outline 的直角。 */
+.f-input:focus {
+  border-color: color-mix(in srgb, var(--acc) 60%, transparent);
+  outline: none;
+  background: var(--surface-solid);
+  box-shadow: 0 0 0 3.5px rgb(var(--acc-glow) / .14);
+}
 .f-input[aria-invalid='true'] { border-color: #ff7d92; }
 select.f-input { cursor: pointer; }
 
@@ -2404,5 +2420,51 @@ body.is-editing .tip-bubble { display: none !important; }
   transition: background .16s var(--ease-out), color .16s var(--ease-out);
 }
 .keys-reset:hover {
-  background: rgba(var(--acc-glow), .14);
+  background: rgb(var(--acc-glow) / .14);
+}
+
+/* ==========================================================================
+   页面主滚动条
+   --------------------------------------------------------------------------
+   Windows 默认那根是 17px 宽的实心灰槽，两边还带箭头按钮；这套界面
+   全是 1px 线、8px 圆角、半透明层，旁边挂一根老式滚动条非常出戏。
+   这里换成「细轨 + 圆角 + 半透明拇指」，默认几乎看不见，滚动时才显形。
+
+   Chrome 121+ 同时支持标准属性（scrollbar-width/color）和 ::-webkit-*，
+   两套一起写会互相打架 —— 标准属性一出现，-webkit 的 border 留白就失效。
+   所以 webkit 那套只当浏览器不支持 ::-webkit-scrollbar 时才让位给标准属性。
+   ========================================================================== */
+html {
+  --sb-thumb: rgba(0, 0, 0, .18);
+  --sb-thumb-hi: rgba(0, 0, 0, .32);
+}
+html[data-theme='atlas-dark'],
+html[data-theme='night'],
+html[data-theme='cyber'] {
+  --sb-thumb: rgba(255, 255, 255, .16);
+  --sb-thumb-hi: rgba(255, 255, 255, .3);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] {
+    --sb-thumb: rgba(255, 255, 255, .16);
+    --sb-thumb-hi: rgba(255, 255, 255, .3);
+  }
+}
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  /* border + background-clip 造出「拇指比轨道窄一圈」的留白，
+     直接写 width 是改不动这条的 */
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hi);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {
+  html { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
 }

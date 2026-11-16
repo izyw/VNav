@@ -11,31 +11,42 @@
 .auth-wrap {
   display: grid;
   grid-template-columns: 1fr;
-  gap: clamp(28px, 5vw, 64px);
+  gap: clamp(28px, 5vw, 80px);
   align-items: center;
   width: 100%;
-  max-width: 1000px;
+  /* 1000 → 940：1000 的两列在 1440 屏上会把两块内容推得很开，
+     中间的空白比内容还抢眼；940 让「左文案 / 右卡片」像一组，
+     而不是两件各自漂流的东西。宽屏下由下面的
+     minmax(0,1fr) / 420px 接管。 */
+  max-width: 940px;
 }
 
 .auth-aside { max-width: 34ch; }
 
 .auth-kicker {
   font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .22em;
+  /* .22em 的字距是英文小标签的排法，放到「Vnav」上还行，
+     但它决定了整个左侧文案的「精致度基线」—— 字距松一档、
+     字重降一档，才不像贴上去的一枚徽标。 */
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--acc);
-  margin: 0 0 18px;
+  margin: 0 0 16px;
 }
 
 .auth-big {
   font-family: var(--font-display);
-  font-size: clamp(2.6rem, 6.5vw, 4rem);
-  line-height: .96;
-  letter-spacing: -.045em;
-  font-weight: 750;
-  margin: 0 0 16px;
+  /* 4rem(64px) / .96 是西文海报的数值。中文两行字在 .96 的行高下
+     上下几乎黏住，两个字间距又巨大 —— 那版看着「像 PPT 封面」
+     就是这个原因。收到 3.4rem、行高提到 1.08、字距从 -.045em
+     放到 -.01em（中文是方块字，负字距会把字与字挤成一团）。 */
+  font-size: clamp(2.2rem, 4.2vw, 3rem);
+  line-height: 1.14;
+  letter-spacing: -.01em;
+  font-weight: 600;
+  margin: 0 0 18px;
   color: var(--text);
 }
 .auth-big em {
@@ -48,21 +59,28 @@
 
 .auth-note {
   color: var(--text-2);
-  font-size: 15.5px;
+  font-size: 14.5px;
   margin: 0;
-  line-height: 1.65;
+  line-height: 1.75;
+  letter-spacing: .002em;
 }
 
 .auth-card {
   width: 100%;
   max-width: 420px;
-  padding: clamp(24px, 4vw, 34px);
-  border-radius: var(--r-xl);
-  border: 1px solid var(--line-hi);
-  background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  box-shadow: 0 40px 90px -32px rgba(0, 0, 0, .85);
+  padding: clamp(26px, 3vw, 32px);
+  /* --r-xl 是 26px。26px 圆角配 46px 高的输入框，
+     等于每个控件都被“软”包起来；卡片的圆角要比内部控件大一号，
+     但不是大两号 —— 18px 刚好。 */
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  background: var(--surface-solid);
+  /* 去掉 backdrop-filter：卡片下面是静态渐变底，能模糊的东西本来就不存在，
+     而它会变成一个「包含块」，以后往里面放任何 fixed 元素都会出错。
+     阴影也收一档：.85 的黑影在这套浅色界面上像一块压着的铅。 */
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, .04),
+    0 24px 56px -28px rgba(0, 0, 0, .26);
   animation: cardRise .55s var(--ease-out) both;
 }
 @keyframes cardRise {
@@ -71,10 +89,10 @@
 
 .auth-title {
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -.028em;
-  margin: 0 0 20px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  margin: 0 0 18px;
 }
 
 .auth-alert {
@@ -110,9 +128,10 @@ html[data-theme='celadon'] .auth-alert { color: #a3122f; background: #fde8ec; bo
 
 .auth-submit {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 22px;
   min-height: 48px;
-  font-size: 16px;
+  font-size: 15px;
+  border-radius: 11px;
 }
 
 .auth-back {
@@ -181,7 +200,12 @@ html[data-theme='celadon'] .auth-alert { color: #a3122f; background: #fde8ec; bo
 
 @media (min-width: 860px) {
   .auth-wrap {
-    grid-template-columns: 1.05fr .95fr;
+    /* 右列钉成 420px（卡片的最大宽），剩下的全给左列。
+       原来两列都是 1fr，卡片只有 354 宽却又 max-width 420 ——
+       它既没撑满列也没居中，整组看上去偏左一截。
+       钉死右列之后，卡片宽度恒定、整组重心在视口正中。 */
+    grid-template-columns: minmax(0, 1fr) 420px;
+    max-width: 900px;
   }
 }
 @media (max-width: 859px) {
