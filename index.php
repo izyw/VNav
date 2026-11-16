@@ -164,15 +164,17 @@ foreach ($rows as $r) {
 $ordered = [];
 foreach ($groups as $g) {
     $gid = (int)$g['id'];
-    if (!empty($byGroup[$gid])) {
-        $ordered[] = [
-            'id'    => $gid,
-            'name'  => $g['name'],
-            // 后台选过的图标优先，空则前台按组名自动匹配（见 hp_group_icon）
-            'icon'  => (string)($g['icon'] ?? ''),
-            'items' => $byGroup[$gid],
-        ];
-    }
+    /* 空分组也要渲染。以前只收有链接的组，于是前台新建一组、
+       刷新页面它就凭空消失（只有添加浮层的下拉里还看得到），
+       用户会以为没建成。侧栏和主区都得看得见这个空组，
+       才能把它当成「往里放链接的地方」。 */
+    $ordered[] = [
+        'id'    => $gid,
+        'name'  => $g['name'],
+        // 后台选过的图标优先，空则前台按组名自动匹配（见 hp_group_icon）
+        'icon'  => (string)($g['icon'] ?? ''),
+        'items' => $byGroup[$gid] ?? [],
+    ];
 }
 if (!empty($byGroup[0])) {
     $ordered[] = ['id' => 0, 'name' => count($ordered) ? '未分组' : '', 'icon' => '', 'items' => $byGroup[0]];
@@ -203,17 +205,17 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=43">
+<link rel="stylesheet" href="assets/app.css?v=44">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=45">
+<link rel="stylesheet" href="assets/home.css?v=46">
 <?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=53">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=55">
 <link rel="stylesheet" href="assets/skin-frame.css?v=52">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
@@ -419,42 +421,57 @@ hp_log_visit(false, '/');
         </span>
         <span class="sr-only" id="editToggleLabel">编辑模式</span>
       </button>
-      <?php if ($__isSuper): /* 后台只有 admin 能进；普通账号这里什么都不输出 */ ?>
-      <?php /* 未登录时这里叫「登录」，登录后必须换名字 ——
-               同一个位置、同一个形状，只换字和链接。原先登录后只剩一枚
-               没有文字的齿轮，看起来像「登录按钮消失了」，而不是
-               「我已经在管理态里」。 */ ?>
-      <a class="tbm-btn tbm-btn--login" href="admin.php" title="管理后台">
+      <?php if ($__isSuper): /* 管理员：改密码按钮左侧的「管理齿轮」。
+               后台只有 admin 能进。普通账号在它该在的位置看到的是自己的用户名。 */ ?>
+      <a class="tbm-btn tbm-btn--login tbm-btn--quiet tbm-btn--gear" href="admin.php" title="管理后台" aria-label="管理后台">
         <span class="tbm-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.55 1z"/></svg>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.55 1z"/></svg>
         </span>
-        <span class="tbm-login-text">管理</span>
       </a>
       <?php endif; ?>
-      <?php if ($__isAdmin): /* 登录后多一个「退出」。
-               普通账号是这里唯一能做的账号动作（它没有后台），
-               管理员则和管理按钮并排两颗。token 拼在地址里，
-               防的是外站拿 <img src="/?logout=x"> 把人踢下线。 */ ?>
-      <a class="tbm-btn tbm-btn--login tbm-btn--quiet" href="?logout=<?= h(csrf_token()) ?>" title="退出登录">
+      <?php if ($__isAdmin): /* 改密码不单独占一个按钮：管理员与普通用户
+               都必须从用户名菜单里的「修改密码」进入（见下），这样两者
+               顶栏长得一模一样，管理员只多一个齿轮。这里保留 DOM 是给
+               ui.js 的 #acctPass -> #passToggle.click() 转发当目标。 */ ?>
+      <button class="tbm-btn tbm-btn--login tbm-btn--quiet tbm-btn--acct hp-hide" id="passToggle" type="button" title="修改密码" aria-haspopup="dialog" aria-controls="passBox">
         <span class="tbm-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M17 6l2 2"/><path d="M14 9l2 2"/></svg>
         </span>
-        <span class="tbm-login-text">退出</span>
-      </a>
+        <span class="tbm-login-text">改密码</span>
+      </button>
+      <?php endif; ?>
+      <?php if ($__isAdmin): /* 账户菜单：用户名的悬停菜单，装「修改密码 / 退出登录」。
+               退出按钮不再单独显示，收进这里。token 防外站 <img> 踢人。 */ ?>
+      <?php $__me = current_user(); $__uname = (string)($__me['username'] ?? ''); ?>
+      <div class="tb-menu tb-menu--acct" id="acctMenu">
+        <button class="tbm-btn tbm-btn--login tbm-btn--quiet tbm-btn--acct-name" type="button"
+                title="<?= h($__uname) ?>" aria-haspopup="menu" aria-expanded="false" aria-controls="acctPanel">
+          <span class="tbm-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          </span>
+          <span class="tbm-login-text acct-name-text"><?= h($__uname) ?></span>
+        </button>
+        <div class="tbm-panel tbm-panel--acct" id="acctPanel" role="menu" hidden>
+          <button class="tbm-opt" type="button" role="menuitem" id="acctPass">
+            <span class="tbo-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M17 6l2 2"/><path d="M14 9l2 2"/></svg></span>
+            <span class="tbo-body"><span class="tbo-name">修改密码</span></span>
+          </button>
+          <a class="tbm-opt" role="menuitem" href="?logout=<?= h(csrf_token()) ?>">
+            <span class="tbo-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></span>
+            <span class="tbo-body"><span class="tbo-name">退出登录</span></span>
+          </a>
+        </div>
+      </div>
       <?php endif; ?>
     <?php if (!$__isAdmin): ?>
-      <?php /* 游客 / 普通账号的登录入口。
-               v1.2.2 之前这里什么都没有 —— 用户只能自己去敲 admin.php，
-               而且敲 /admin 还会落到主页（PATH_INFO 被忽略），
-               等于「没有入口也没有捷径」。现在补一颗明确的按钮。
-               窄屏只留图标（文字进 sr-only 会让按钮变成无字方块，
-               所以这里用 CSS 隐藏文字 span，图标 + aria-label 仍然达意）。 */ ?>
-      <a class="tbm-btn tbm-btn--login" href="login.php" title="登录管理后台">
+      <?php /* 游客登录入口：点击弹卡片，不再跳 login.php。
+               注册 / 完整登录页仍在登录卡片底部留链接。 */ ?>
+      <button class="tbm-btn tbm-btn--login" id="loginToggle" type="button" title="登录" aria-haspopup="dialog" aria-controls="loginBox">
         <span class="tbm-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
         </span>
         <span class="tbm-login-text">登录</span>
-      </a>
+      </button>
     <?php endif; ?>
   </div>
 </header>
@@ -472,6 +489,14 @@ hp_log_visit(false, '/');
                唯一能由用户自己解除的开关。 */ ?>
       <div class="gnav-head">
         <p class="gnav-title">分组</p>
+        <?php /* 登录用户可以在自己那份库里建分组。接口 group_add 早就开着，
+                 但前台一直没有入口 —— 功能做了却够不着，这里补上。
+                 双击任意组名可以改名，浮层里还有删除（链接会回到未分组）。 */ ?>
+        <?php if ($__isAdmin): ?>
+        <button class="gnav-fold gnav-add" id="grpAdd" type="button" title="新建分组" aria-label="新建分组">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <?php endif; ?>
         <button class="gnav-fold" type="button" data-nav-fold aria-expanded="true"
                 aria-controls="gnav" aria-label="收起侧栏" title="收起侧栏">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5L8 12l5.5 5.5"/><path d="M18.5 6.5L13 12l5.5 5.5" opacity=".38"/></svg>
@@ -496,6 +521,13 @@ hp_log_visit(false, '/');
           <path d="M6 9l6 6 6-6"/>
         </svg>
       </button>
+      <?php /* 窄屏下 .gnav-head 整块被隐藏，桌面那颗「+」看不见。
+               分组入口不能只在宽屏有 —— 这里给折叠条配一颗同款按钮。 */ ?>
+      <?php if ($__isAdmin): ?>
+      <button class="gnav-madd" id="grpAddM" type="button" title="新建分组" aria-label="新建分组">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <?php endif; ?>
       <div class="gnav-track" id="gnav-track">
         <?php foreach ($ordered as $gi => $g):
           $nm = $g['name'] !== '' ? $g['name'] : '全部';
@@ -563,6 +595,15 @@ hp_log_visit(false, '/');
   <p class="mylib-note">
     你正在看自己的私人库，这里的链接只有你能看到。
     <a href="./">回到站点库</a>
+  </p>
+  <?php endif; ?>
+  <?php /* 普通用户注册时从站点默认库克隆了链接和分组作为起点。
+           没有这条提示，他会以为自己改的是所有人共用的那份 ——
+           第一次使用最容易踩的认知坑。关掉一次写 user 级 setting。 */ ?>
+  <?php if ($__isAdmin && !$__isSuper && !setting('clone_hint_seen')): ?>
+  <p class="mylib-note clone-note" id="cloneNote">
+    这里的链接和分组是从站点默认库复制到你账号里的，你做的任何改动只对你自己可见，不会影响其他访客。
+    <button type="button" class="clone-note-x" id="cloneNoteClose">知道了</button>
   </p>
   <?php endif; ?>
   <?php if (!$ordered): ?>
@@ -790,6 +831,46 @@ hp_log_visit(false, '/');
   </form>
 </div>
 
+<!-- ============ 登录浮层（游客） ============
+     右上角「登录」不再跳 login.php，改为在这里输账号密码。
+     注册 / 完整登录页的入口留在卡片底部，渐进式验证码流程仍由 login.php 承载。
+     必须放在 is-admin 条件块之外 —— 游客才用得到它。 -->
+<div class="paste-scrim" id="loginScrim" hidden></div>
+<div class="paste-box login-box" id="loginBox" role="dialog" aria-modal="true" aria-labelledby="loginTitle" hidden>
+  <div class="paste-head">
+    <h2 id="loginTitle">登录</h2>
+    <button type="button" class="paste-close" id="loginClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <form class="paste-form" id="loginForm" novalidate>
+    <p class="paste-status">登录后即可管理你的分组和链接，换设备也同步。</p>
+    <label class="f-label" for="loginUser">账号</label>
+    <input class="f-input" id="loginUser" type="text" autocomplete="username" required>
+    <label class="f-label" for="loginPass">密码</label>
+    <input class="f-input" id="loginPass" type="password" autocomplete="current-password" required>
+    <div class="login-cap" id="loginCap" hidden>
+      <label class="f-label" for="loginCaptcha">验证码</label>
+      <div class="login-cap-row">
+        <input class="f-input" id="loginCaptcha" type="text" inputmode="latin" autocomplete="off" maxlength="8" required>
+        <img id="loginCapImg" src="" alt="验证码" width="108" height="38">
+        <button type="button" class="login-cap-new" id="loginCapNew" title="换一张" aria-label="换一张验证码">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+        </button>
+      </div>
+    </div>
+    <p class="f-error" id="loginErr" role="alert" hidden></p>
+    <div class="paste-actions">
+      <button type="button" class="btn-ghost" id="loginCancel">取消</button>
+      <button type="submit" class="btn-primary" id="loginSave">
+        <span class="btn-text">登录</span>
+        <span class="spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+    <p class="login-foot">还没有账号？<a href="login.php?mode=register">注册一个</a>　·　<a href="login.php">完整登录页</a></p>
+  </form>
+</div>
+
 <?php if ($__isAdmin): ?>
 <!-- ============ 就地编辑浮层 ============
      卡片上点铅笔走这里，不再跳后台。表单字段和后台那个编辑器
@@ -901,7 +982,66 @@ hp_log_visit(false, '/');
   </p>
 </div>
 
-<?php endif; /* 登录专属的那几个浮层到此为止：编辑框 / 快捷键面板 */ ?>
+<!-- ============ 修改密码浮层（登录用户） ============
+     admin.php 里那个表单走同一个 user_pass 接口，但普通用户进不去后台，
+     所以这里必须单独有一份，否则他注册后一辈子改不了自己的密码。 -->
+<div class="paste-scrim" id="passScrim" hidden></div>
+<div class="paste-box pass-box" id="passBox" role="dialog" aria-modal="true" aria-labelledby="passTitle" hidden>
+  <div class="paste-head">
+    <h2 id="passTitle">修改密码</h2>
+    <button type="button" class="paste-close" id="passClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <form class="paste-form" id="passForm" novalidate>
+    <p class="paste-status">改的是当前账号的登录密码，下次登录起生效。</p>
+    <label class="f-label" for="uOld">当前密码</label>
+    <input class="f-input" id="uOld" type="password" autocomplete="current-password" required>
+    <label class="f-label" for="uNew">新密码（至少 8 位）</label>
+    <input class="f-input" id="uNew" type="password" minlength="8" autocomplete="new-password" required>
+    <label class="f-label" for="uNew2">再输一次</label>
+    <input class="f-input" id="uNew2" type="password" minlength="8" autocomplete="new-password" required>
+    <p class="f-error" id="passErr" role="alert" hidden></p>
+    <div class="paste-actions">
+      <button type="button" class="btn-ghost" id="passCancel">取消</button>
+      <button type="submit" class="btn-primary" id="passSave">
+        <span class="btn-text">保存</span>
+        <span class="spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ 分组新建 / 改名浮层（登录用户） ============
+     侧栏「+」走新建，双击组名走改名；浮层里的删除会让组内链接
+     回到「未分组」（外键 ON DELETE SET NULL），不会连带删链接。 -->
+<div class="paste-scrim" id="grpScrim" hidden></div>
+<div class="paste-box grp-box" id="grpBox" role="dialog" aria-modal="true" aria-labelledby="grpTitle" hidden>
+  <div class="paste-head">
+    <h2 id="grpTitle">新建分组</h2>
+    <button type="button" class="paste-close" id="grpClose" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <form class="paste-form" id="grpForm" novalidate>
+    <label class="f-label" for="grpName">分组名称</label>
+    <input class="f-input" id="grpName" type="text" maxlength="24" autocomplete="off" required>
+    <p class="paste-status" id="grpHint" hidden>删除后，这个分组里的链接会回到「未分组」，不会被删掉。</p>
+    <p class="f-error" id="grpErr" role="alert" hidden></p>
+    <div class="paste-actions paste-actions--split">
+      <button type="button" class="btn-danger btn-del" id="grpDelete" hidden>删除分组</button>
+      <div class="paste-actions-right">
+        <button type="button" class="btn-ghost" id="grpCancel">取消</button>
+        <button type="submit" class="btn-primary" id="grpSave">
+          <span class="btn-text">保存</span>
+          <span class="spinner" hidden aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<?php endif; /* 登录专属的那几个浮层到此为止：编辑框 / 快捷键面板 / 改密码 / 分组 */ ?>
 
 <!-- ============ 右下角提示（可永久关闭） ============ -->
 <?php
@@ -929,9 +1069,9 @@ hp_log_visit(false, '/');
      游客没有服务端身份，但 guest.js 要负责把本地沙盒画出来、
      app.js 要挂编辑模式与提示条 —— 少一个，这类页面就是只读的。 -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=45" defer></script>
-<script src="assets/guest.js?v=52" defer></script>
-<script src="assets/app.js?v=45" defer></script>
+<script src="assets/ui.js?v=46" defer></script>
+<script src="assets/guest.js?v=53" defer></script>
+<script src="assets/app.js?v=46" defer></script>
 
 </body>
 </html>

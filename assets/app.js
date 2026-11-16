@@ -392,7 +392,7 @@
         });
         insertCard(data.link);
         closeBox();
-        toast('已添加「' + data.link.title + '」' + , 'ok');
+        toast('已添加「' + data.link.title + '」', 'ok');
       } catch (err) {
         // 出错不清空输入，只提示
         showError(err.message);
@@ -1710,6 +1710,10 @@
     /* Esc ：按层级关闭 —— 浮层 → 编辑模式 → 什么都不做 */
     if (e.key === 'Escape') {
       if (!keysBox?.hidden) { e.preventDefault(); closeKeys(); return; }
+      const passBoxNow = document.getElementById('passBox');
+      if (passBoxNow && !passBoxNow.hidden) { e.preventDefault(); document.getElementById('passCancel')?.click(); return; }
+      const grpBoxNow = document.getElementById('grpBox');
+      if (grpBoxNow && !grpBoxNow.hidden) { e.preventDefault(); document.getElementById('grpCancel')?.click(); return; }
       if (window.__vnavIsEditorOpen?.()) { e.preventDefault(); window.__vnavCloseEditor?.(false); return; }
       if (!box?.hidden) return; // 粘贴浮层自己处理
       if (editing && !isTyping()) { e.preventDefault(); setEditing(false); return; }
@@ -1751,4 +1755,202 @@
       tip.hidden = true;
     }
   }, { once: false, passive: true });
+
+  /* ==================================================================
+     修改密码浮层。
+     普通用户没有后台，这一颗是它唯一能管自己账号的地方；
+     admin.php 那个表单走同一个 user_pass 接口，行为保持一致。
+     ================================================================== */
+  (() => {
+    const toggle = document.getElementById('passToggle');
+    const pScrim = document.getElementById('passScrim');
+    const pBox   = document.getElementById('passBox');
+    const pForm  = document.getElementById('passForm');
+    if (!toggle || !pScrim || !pBox || !pForm) return;
+
+    const pErr   = document.getElementById('passErr');
+    const pSave  = document.getElementById('passSave');
+    const pText  = pSave?.querySelector('.btn-text');
+    const pSpin  = pSave?.querySelector('.spinner');
+    let pLast = null;
+    let pBusy = false;
+
+    const clearErr = () => { if (pErr) { pErr.textContent = ''; pErr.hidden = true; } };
+    const showErr  = msg => {
+      if (!pErr) { toast(msg, 'bad'); return; }
+      pErr.textContent = msg; pErr.hidden = false;
+    };
+    const openPass = () => {
+      pLast = document.activeElement;
+      pForm.reset(); clearErr();
+      pScrim.hidden = false; pBox.hidden = false;
+      document.getElementById('uOld')?.focus();
+    };
+    const closePass = () => {
+      pScrim.hidden = true; pBox.hidden = true;
+      pLast?.focus?.();
+    };
+
+    toggle.addEventListener('click', openPass);
+    document.getElementById('passClose')?.addEventListener('click', closePass);
+    document.getElementById('passCancel')?.addEventListener('click', closePass);
+    pScrim.addEventListener('click', closePass);
+
+    pForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (pBusy) return;
+      const old = document.getElementById('uOld').value;
+      const n1  = document.getElementById('uNew').value;
+      const n2  = document.getElementById('uNew2').value;
+      clearErr();
+      if (!old) return showErr('请填写当前密码');
+      if (n1.length < 8) return showErr('新密码至少 8 位');
+      if (n1 !== n2) return showErr('两次输入的新密码不一致');
+      if (old === n1) return showErr('新密码不能和当前密码相同');
+      pBusy = true;
+      if (pText) pText.textContent = '保存中';
+      if (pSpin) pSpin.hidden = false;
+      try {
+        await api({ action: 'user_pass', old, new: n1 });
+        toast('密码已更新，下次登录请用新密码', 'ok');
+        closePass();
+      } catch (err) {
+        showErr(err.message);
+      } finally {
+        pBusy = false;
+        if (pText) pText.textContent = '保存';
+        if (pSpin) pSpin.hidden = true;
+      }
+    });
+  })();
+
+  /* ==================================================================
+     分组管理（前台）：侧栏「+」新建 / 双击组名改名 / 浮层里删除。
+     接口 group_add / group_rename / group_delete 早就存在且带 user_id
+     归属校验，这里只补一直缺着的入口。保存成功后整页刷新 ——
+     分组一变，侧栏和主区分区都要重建，局部拼装反而容易漏。
+     ================================================================== */
+  (() => {
+    /* 桌面侧栏头一颗、窄屏折叠条旁一颗，两颗都开同一个浮层 */
+    const addBtns = ['grpAdd', 'grpAddM'].map(id => document.getElementById(id)).filter(Boolean);
+    const gScrim = document.getElementById('grpScrim');
+    const gBox   = document.getElementById('grpBox');
+    const gForm  = document.getElementById('grpForm');
+    if (!gScrim || !gBox || !gForm) return;
+
+    const gTitle = document.getElementById('grpTitle');
+    const gName  = document.getElementById('grpName');
+    const gErr   = document.getElementById('grpErr');
+    const gHint  = document.getElementById('grpHint');
+    const gDel   = document.getElementById('grpDelete');
+    const gSave  = document.getElementById('grpSave');
+    const gText  = gSave?.querySelector('.btn-text');
+    const gSpin  = gSave?.querySelector('.spinner');
+    let gMode = 'add';
+    let gId = 0;
+    let gLast = null;
+    let gBusy = false;
+    let gDelArmed = false;
+
+    const clearErr = () => { if (gErr) { gErr.textContent = ''; gErr.hidden = true; } };
+    const showErr = msg => {
+      if (!gErr) { toast(msg, 'bad'); return; }
+      gErr.textContent = msg; gErr.hidden = false;
+    };
+    const disarmDel = () => { gDelArmed = false; if (gDel) gDel.textContent = '删除分组'; };
+
+    function openGrp(mode, id, name) {
+      gMode = mode; gId = id || 0;
+      gLast = document.activeElement;
+      gForm.reset(); clearErr(); disarmDel();
+      if (gTitle) gTitle.textContent = mode === 'add' ? '新建分组' : '编辑分组';
+      if (gHint) gHint.hidden = mode !== 'edit';
+      if (gDel) gDel.hidden = mode !== 'edit';
+      if (gName) gName.value = name || '';
+      gScrim.hidden = false; gBox.hidden = false;
+      gName?.focus(); gName?.select?.();
+    }
+    function closeGrp() {
+      gScrim.hidden = true; gBox.hidden = true;
+      gLast?.focus?.();
+    }
+
+    addBtns.forEach(b => b.addEventListener('click', () => openGrp('add')));
+    $$('.gnav-item').forEach(item => {
+      item.addEventListener('dblclick', e => {
+        e.preventDefault();
+        const id = Number(item.dataset.group || 0);
+        const name = item.querySelector('.gnav-name')?.textContent?.trim() || '';
+        if (id > 0) openGrp('edit', id, name);
+      });
+    });
+    document.getElementById('grpClose')?.addEventListener('click', closeGrp);
+    document.getElementById('grpCancel')?.addEventListener('click', closeGrp);
+    gScrim.addEventListener('click', closeGrp);
+
+    /* 删除做二次确认，但不用原生 confirm —— 弹窗和浮层叠在一起很难看，
+       而且原生框在手机浏览器上会被系统样式接管。 */
+    gDel?.addEventListener('click', async () => {
+      if (gMode !== 'edit' || gId <= 0) return;
+      if (!gDelArmed) {
+        gDelArmed = true;
+        gDel.textContent = '再点一次确认删除';
+        return;
+      }
+      if (gBusy) return;
+      gBusy = true;
+      if (gText) gText.textContent = '处理中';
+      if (gSpin) gSpin.hidden = false;
+      try {
+        await api({ action: 'group_delete', id: gId });
+        toast('分组已删除，里面的链接回到未分组', 'ok');
+        location.reload();
+      } catch (err) {
+        showErr(err.message);
+        gBusy = false; disarmDel();
+        if (gText) gText.textContent = '保存';
+        if (gSpin) gSpin.hidden = true;
+      }
+    });
+
+    gForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (gBusy) return;
+      const name = (gName?.value || '').trim();
+      clearErr(); disarmDel();
+      if (!name) return showErr('请填写分组名');
+      gBusy = true;
+      if (gText) gText.textContent = '保存中';
+      if (gSpin) gSpin.hidden = false;
+      try {
+        if (gMode === 'add') await api({ action: 'group_add', name });
+        else await api({ action: 'group_rename', id: gId, name });
+        toast(gMode === 'add' ? '分组已创建' : '分组已改名', 'ok');
+        location.reload();
+      } catch (err) {
+        showErr(err.message);
+        gBusy = false;
+        if (gText) gText.textContent = '保存';
+        if (gSpin) gSpin.hidden = true;
+      }
+    });
+  })();
+
+  /* 「这些链接是你自己的副本」提示：点知道了写 user 级 setting。
+     写失败就保持提示可见，用户还能再点一次 —— 不要先藏起来再说。 */
+  (() => {
+    const note = document.getElementById('cloneNote');
+    const btn  = document.getElementById('cloneNoteClose');
+    if (!note || !btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await api({ action: 'dismiss_clone_hint' });
+        note.hidden = true;
+      } catch (err) {
+        btn.disabled = false;
+        toast(err.message || '保存失败，请重试', 'bad');
+      }
+    });
+  })();
 })();

@@ -84,6 +84,13 @@
       if (p.hidden) { closeMenus(m); openMenu(m); }
       else { closeMenus(); }
     });
+    /* 账户菜单额外支持悬停展开（用户要求「鼠标指向用户名时弹出菜单」）。
+       触屏没有 hover，click 那条仍保留，两边都能用。
+       openMenu 里已有 closeMenus(m)，所以移入账户菜单会顺手关掉其他菜单。 */
+    if (m.classList.contains('tb-menu--acct')) {
+      m.addEventListener('mouseenter', () => { if (panelOf(m)?.hidden) openMenu(m); });
+      m.addEventListener('mouseleave', () => { if (!m.contains(document.activeElement)) closeMenus(); });
+    }
   });
 
   // 点页面空白处关闭
@@ -167,6 +174,15 @@
       syncTheme();
       closeMenus();
       $('.tb-menu[data-menu="theme"] .tbm-btn')?.focus();
+      /* 皮肤偏好同步到服务端。theme 早就在个人偏好键名单里，
+         但此前只写 localStorage —— 换一台设备就回到默认。
+         游客态没有会话，接口会拒绝，静默失败即可（本地仍然生效）。 */
+      fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF': csrf() },
+        body: JSON.stringify({ action: 'set_theme', theme: t }),
+        credentials: 'same-origin',
+      }).catch(() => {});
       return;
     }
 
@@ -553,4 +569,122 @@
     const q = document.getElementById('q');
     if (q) { e.preventDefault(); q.focus(); }
   });
+
+  /* ================= 登录浮层（游客） =================
+     点「登录」弹卡片输账号密码，走 api.php 的 login 接口（免 CSRF、带限流）。
+     成功后 reload —— 顶栏身份区由服务端按 session 重新渲染。 */
+  (() => {
+    const toggle = document.getElementById('loginToggle');
+    const scrim  = document.getElementById('loginScrim');
+    const box    = document.getElementById('loginBox');
+    const form   = document.getElementById('loginForm');
+
+    // 普通用户从账户菜单进「修改密码」：转发到那颗按钮的 click
+    document.getElementById('acctPass')?.addEventListener('click', () => {
+      document.getElementById('passToggle')?.click();
+    });
+
+    if (!toggle || !scrim || !box || !form) return;
+
+    const errEl = document.getElementById('loginErr');
+    const save  = document.getElementById('loginSave');
+    const txt   = save?.querySelector('.btn-text');
+    const spin  = save?.querySelector('.spinner');
+    const capWrap = document.getElementById('loginCap');
+    const capImg  = document.getElementById('loginCapImg');
+    const capIn   = document.getElementById('loginCaptcha');
+    let capToken = '';
+    let lastFocus = null;
+    let busy = false;
+
+    const showErr = msg => {
+      if (!errEl) return;
+      errEl.textContent = msg || ''; errEl.hidden = !msg;
+    };
+    const hideCap = () => {
+      capWrap.hidden = true;
+      if (capIn) capIn.value = '';
+      capToken = '';
+    };
+    // 取一张新验证码：token 走 api.php，图片走 login.php?captcha=
+    const newCap = async () => {
+      try {
+        const res = await fetch('api.php?action=captcha_new', { credentials: 'same-origin' });
+        const d = await res.json();
+        if (d.ok && d.token) {
+          capToken = d.token;
+          if (capImg) capImg.src = 'login.php?captcha=' + encodeURIComponent(d.token) + '&t=' + Date.now();
+          capWrap.hidden = false;
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    };
+    const open = () => {
+      lastFocus = document.activeElement;
+      form.reset(); showErr(''); hideCap();
+      scrim.hidden = false; box.hidden = false;
+      document.getElementById('loginUser')?.focus();
+    };
+    const close = () => {
+      scrim.hidden = true; box.hidden = true;
+      lastFocus?.focus?.();
+    };
+
+    toggle.addEventListener('click', open);
+    document.getElementById('loginClose')?.addEventListener('click', close);
+    document.getElementById('loginCancel')?.addEventListener('click', close);
+    scrim.addEventListener('click', close);
+    document.getElementById('loginCapNew')?.addEventListener('click', () => { newCap(); });
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (busy) return;
+      const user = document.getElementById('loginUser').value.trim();
+      const pass = document.getElementById('loginPass').value;
+      showErr('');
+      if (!user) return showErr('请填写账号');
+      if (!pass) return showErr('请填写密码');
+      const cap = capWrap && !capWrap.hidden ? (capIn?.value || '') : '';
+
+      busy = true;
+      if (txt) txt.textContent = '登录中';
+      if (spin) spin.hidden = false;
+      try {
+        const res = await fetch('api.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ action: 'login', user, pass,
+                                 captcha_token: capToken, captcha: cap }),
+        });
+        const d = await res.json();
+        if (d.ok) { location.reload(); return; }
+        showErr(d.error || '登录失败');
+        // 服务端要求验证码：取一张新的填进来
+        if (d.need_captcha) {
+          if (d.captcha_token) {
+            capToken = d.captcha_token;
+            if (capImg) capImg.src = 'login.php?captcha=' + encodeURIComponent(d.captcha_token) + '&t=' + Date.now();
+            capWrap.hidden = false;
+          } else {
+            await newCap();
+          }
+          document.getElementById('loginPass').value = '';
+        }
+      } catch (err) {
+        showErr('网络异常，请重试');
+      } finally {
+        busy = false;
+        if (txt) txt.textContent = '登录';
+        if (spin) spin.hidden = true;
+      }
+    });
+
+    // Esc 关登录浮层（改密浮层的 Esc 由 app.js 处理，两者不冲突）
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || box.hidden) return;
+      close();
+    });
+  })();
 })();

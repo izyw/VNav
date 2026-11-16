@@ -1177,7 +1177,12 @@ html[data-theme='celadon'] .link-icon.has-img {
 }
 .link:hover .link-edit, .link:focus-within .link-edit { opacity: 1; }
 .link-edit:hover { background: var(--surface-solid); color: var(--acc); }
-@media (hover: none) { .link-edit { opacity: 1; } }
+/* 触屏没有 hover，铅笔只能常驻。全亮会让每张卡片都挂一枚彩色按钮，
+   几十条链接时像一片噪点 —— 降到半透明，进编辑模式再全亮。 */
+@media (hover: none) {
+  .link-edit { opacity: .5; }
+  body.is-editing .link-edit { opacity: 1; }
+}
 
 /* ---------- 隐藏链接的角标 ----------
    只有登录用户才会看到这个眼睛图标（游客的 HTML 里连卡片都没有）。

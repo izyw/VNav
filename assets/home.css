@@ -576,6 +576,12 @@ body.hp .gnav--side {
   padding-right: 6px;
 }
 body.hp .gnav--side::-webkit-scrollbar { display: none; }
+/* 登录用户的「新建分组」按钮。加在收起按钮左边后，
+   space-between 会把两颗按钮分到两端、标题跑到中间；
+   margin-left:auto 让它们俩一起靠右，标题仍在原位。 */
+body.hp .gnav-add { margin-left: auto; }
+/* 宽屏用侧栏头里那颗，窄屏这颗才出来 */
+body.hp .gnav-madd { display: none; }
 body.hp .gnav-title {
   margin: 0 0 8px;
   padding-left: 11px;
@@ -608,6 +614,13 @@ body.hp .gnav--side .gnav-track {
 @media (max-width: 1139px) {
   body.hp .gnav--side {
     position: sticky;
+    /* 折叠条 + 新建按钮并排一行；下拉面板是 absolute，不占 flex 空间。
+       基础样式把 .gnav--side 设成了 column（桌面竖排），这里必须改回 row。 */
+    display: flex;
+    /* 皮肤层在后面还会写 flex-direction:column（桌面竖排），
+       窄屏这条必须压住它，否则新建按钮会掉到折叠条下一行。 */
+    flex-direction: row !important;
+    align-items: center;
     /* top 由 JS 把顶栏实测高度写进 --hp-bar（窄屏顶栏是两行，写死 58 会让
        这一条钻到顶栏下面去）。 */
     top: var(--hp-bar);
@@ -662,9 +675,11 @@ body.hp .gnav--side .gnav-track {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
     min-height: 46px;
-    padding: 0 var(--pad-x);
+    padding: 0 0 0 var(--pad-x);
     border: 0;
     background: transparent;
     color: var(--text-1);
@@ -675,6 +690,23 @@ body.hp .gnav--side .gnav-track {
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
+  /* 窄屏的新建分组按钮。桌面侧栏头里已经有一颗，这里补上够不着的那半。 */
+  body.hp .gnav-madd {
+    display: grid;
+    place-items: center;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    margin-right: calc(var(--pad-x) - 8px);
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.hp .gnav-madd:active { background: color-mix(in srgb, var(--text-2) 12%, transparent); }
   body.hp .gnav-mcurrent {
     flex: 0 1 auto;
     min-width: 0;
@@ -957,7 +989,10 @@ body.hp .link-edit {
 body.hp .link:hover .link-edit,
 body.hp .link:focus-within .link-edit { opacity: 1; }
 body.hp .link-edit:hover { background: var(--hp-ghost); color: var(--acc); }
-@media (hover: none) { body.hp .link-edit { opacity: 1; } }
+@media (hover: none) {
+  body.hp .link-edit { opacity: .5; }
+  body.hp.is-editing .link-edit { opacity: 1; }
+}
 
 /* 隐藏链接角标：只有登录后才看得到，所以它本身就是「这条游客看不见」 */
 body.hp .link-priv {

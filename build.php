@@ -21,6 +21,30 @@ if ($ver === '') {
     exit(1);
 }
 
+/* JS 语法硬闸门。
+   V1.1.0 的 app.js:395 写成 `+ , 'ok'`，浏览器一加载就抛 SyntaxError，
+   整个前台脚本一行都不执行（编辑/批量/拖拽/设引擎全瘫），
+   本地源码、线上、GitHub 三处同时中招，肉眼 review 三次都漏掉。
+   出包前用 node --check 过一遍 assets/*.js，过不了直接停 —— 绝不产出坏包。 */
+$nodeProbe = [];
+$nodeCode  = 0;
+@exec('node --version 2>&1', $nodeProbe, $nodeCode);
+if ($nodeCode !== 0) {
+    fwrite(STDERR, "❌ 打包前置检查失败：找不到 node，无法校验 assets/*.js 语法\n");
+    exit(1);
+}
+foreach (glob($root . '/assets/*.js') as $jsFile) {
+    $jsOut  = [];
+    $jsCode = 0;
+    @exec('node --check ' . escapeshellarg(str_replace('/', '\\', $jsFile)) . ' 2>&1', $jsOut, $jsCode);
+    if ($jsCode !== 0) {
+        fwrite(STDERR, "❌ JS 语法错误，拒绝打包：" . basename($jsFile) . "\n  "
+            . implode("\n  ", $jsOut) . "\n");
+        exit(1);
+    }
+}
+echo "JS 语法检查：通过（assets/*.js）\n";
+
 $out = dirname($root);
 foreach ($argv as $a) {
     if (str_starts_with($a, '--out=')) {

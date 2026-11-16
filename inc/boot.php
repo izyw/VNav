@@ -456,7 +456,10 @@ function setting(string $key, string $default = ''): string
 function hp_user_setting_keys(): array
 {
     return ['layout', 'theme', 'accent', 'groupnav', 'show_search',
-            'search_engine', 'open_new_tab', 'show_desc', 'hint_dismissed'];
+            'search_engine', 'open_new_tab', 'show_desc', 'hint_dismissed',
+            /* 注册后看到的「这是你自己的副本」提示，关掉一次就不再出现。
+               必须按用户存：管理员没有这条提示，也不该替所有人关掉。 */
+            'clone_hint_seen'];
 }
 
 /**

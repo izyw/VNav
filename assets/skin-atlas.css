@@ -619,6 +619,47 @@ body.hp .tbm-btn--edit[aria-pressed='true'] {
 }
 body.hp .tbm-btn--edit[aria-pressed='true'] .tbm-ico { color: #fff; }
 
+/* ---------- 顶栏账户区：管理齿轮 / 改密码 / 用户名菜单 ----------
+   管理员的「改密码」保持独立按钮、左侧是管理齿轮（见模板顺序）；
+   普通账号的改密码按钮隐藏，改从用户名菜单进。退出统一收进菜单。 */
+body.hp .hp-hide { display: none !important; }
+body.hp .tbm-btn--gear .tbm-ico { color: var(--at-ink-3); }
+body.hp .tbm-btn--acct-name { max-width: 190px; }
+body.hp .tbm-btn--acct-name .tbm-login-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;
+}
+body.hp .acct-name-text { display: inline-flex; align-items: center; gap: 6px; }
+body.hp .acct-role {
+  font-size: 10px; line-height: 1; padding: 3px 6px; border-radius: 999px;
+  background: var(--at-accent-s); color: var(--at-accent); font-weight: 600;
+}
+body.hp .tbm-panel--acct { min-width: 180px; width: 200px; }
+/* 悬停桥：按钮与面板之间有 8px 间隙（place() 里 top = bottom+8），
+   鼠标从按钮移到面板会经过这段空隙，没有桥就会 mouseleave 关掉面板。 */
+body.hp .tb-menu--acct::after {
+  content: ''; position: absolute; top: 100%; right: 0; width: 100%; height: 10px;
+}
+body.hp .tb-menu--acct { position: relative; }
+
+/* ---------- 登录浮层：验证码行 ---------- */
+body.hp .login-cap-row { display: flex; align-items: center; gap: 10px; }
+body.hp .login-cap-row .f-input { flex: 1; min-width: 0; }
+body.hp .login-cap-row img {
+  flex: 0 0 auto; width: 108px; height: 38px; border-radius: 6px;
+  border: 1px solid var(--at-rule); background: var(--at-sunken); cursor: pointer;
+}
+body.hp .login-cap-new {
+  flex: 0 0 auto; width: 38px; height: 38px; display: grid; place-items: center;
+  border: 1px solid var(--at-rule); border-radius: 6px; background: transparent;
+  color: var(--at-ink-3); cursor: pointer; transition: background .18s, color .18s;
+}
+body.hp .login-cap-new:hover { background: var(--at-sunken); color: var(--at-ink); }
+body.hp .login-foot {
+  margin: 14px 0 0; text-align: center; font-size: 12px; color: var(--at-ink-3);
+}
+body.hp .login-foot a { color: var(--at-accent); text-decoration: none; }
+body.hp .login-foot a:hover { text-decoration: underline; }
+
 /* ==========================================================================
    5. 分组导航 —— 分段控件
    ========================================================================== */
@@ -962,18 +1003,30 @@ body.hp .shell { display: contents; }
 body.hp .stage {
   padding: clamp(18px, 2.6vw, 28px) var(--pad-x) 100px;
 }
+/* ============ 主区留白：侧栏左侧 = 卡片区右侧，严格对称 ============
+   用户量的「空白」是视口边缘到内容边缘，不是面板的 margin：
+     侧栏左侧空白 = 视口左 → gnav.x
+     卡片区右侧空白 = links 右边缘 → 视口右
+            = stage.margin-right + stage.padding-right(--pad-x)
+   所以 margin-right 必须从「侧栏左留白」里减掉 --pad-x，两者才相等。
+   上一版左右 margin 都写成 (100%-maxw)/2，结果右侧比左侧多出 40px
+   padding（1600 屏：左 130 / 右 170），看着仍不对称。
+   ⚠️ 同时钉死左右 margin：.stage 基座是 margin:0 auto，只改一边会把
+   另一边推成 auto，面板会莫名右移（踩过，见 2026-11-16 早先记录）。 */
 html[data-theme='atlas'] body.hp .stage,
 html[data-theme='auto'] body.hp .stage {
-  /* 面板左边界必须和侧栏用同一个算法（侧栏是 left: max(0, (100%-maxw)/2)），
-     两边才能咬合。
-     ⚠️ 只写 margin-right: 10px 是错的：.stage 基座是 margin: 0 auto，
-     单独改右值会把左值推成 auto —— 实测 1440 视口下面板多右移 24px，
-     内容被推出侧栏通道，整块看起来「跑到右边去了」。必须同时钉死左值。 */
   max-width: none;
   margin-left: max(0px, calc((100% - var(--hp-maxw)) / 2));
-  margin-right: 10px;
+  margin-right: max(0px, calc((100% - var(--hp-maxw)) / 2 - var(--pad-x)));
   border-radius: 16px 16px 0 0;
   background: var(--at-stage-bg);
+}
+/* atlas-dark 原本走 home.css 的 margin:0 auto 居中，没有面板底色；
+   这里只改 margin 让它同样对称，不加 background / 圆角，保持原有观感。 */
+html[data-theme='atlas-dark'] body.hp .stage {
+  max-width: none;
+  margin-left: max(0px, calc((100% - var(--hp-maxw)) / 2));
+  margin-right: max(0px, calc((100% - var(--hp-maxw)) / 2 - var(--pad-x)));
 }
 /* 侧栏模式下正文让出左通道。不能只靠 padding 简写：home.css 用
    html[data-gnav='side'] body.hp .stage 单独补了 padding-left，
@@ -2003,10 +2056,35 @@ body.hp .mylib-note a {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* 克隆提示的「知道了」。frame 皮肤下 --at-* 整套变量都不存在，
+   这里用 var(..., currentColor) 兜底，免得按钮变成无边框的黑块。 */
+body.hp .clone-note-x {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--at-accent, currentColor) 36%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--at-accent, currentColor);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+body.hp .clone-note-x:hover {
+  background: color-mix(in srgb, var(--at-accent, currentColor) 12%, transparent);
+}
 
 /* 侧栏收起成 68px 只剩图标，这些文字没有落脚处 */
 html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 /* 窄屏侧栏退化成横向滚动条，底部这行在横条里没有位置 */
 @media (max-width: 1139px) {
   body.hp .gnav-foot { display: none; }
+}
+
+/* grid 布局那边的「铅笔常驻」规则在触屏上也会命中，
+   这里放最后再压一次：触屏统一半透明，编辑模式恢复全亮。
+   用 html[data-layout] 拿到和那条规则相同的特异性，靠加载顺序取胜。 */
+@media (hover: none) {
+  html[data-layout] body.hp .link-edit { opacity: .5; }
+  html[data-layout] body.hp.is-editing .link-edit { opacity: 1; }
 }

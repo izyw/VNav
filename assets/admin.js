@@ -565,11 +565,11 @@
       const old = $('#pOld').value;
       const n1 = $('#pNew').value;
       const n2 = $('#pNew2').value;
-      if (n1.length < 6) return showErr(pErr, '新密码至少 6 位');
+      if (n1.length < 8) return showErr(pErr, '新密码至少 8 位');
       if (n1 !== n2) return showErr(pErr, '两次输入的新密码不一致');
       busy(btn, true, '更新中', '更新密码');
       try {
-        await api({ action: 'change_pass', old, new: n1 });
+        await api({ action: 'user_pass', old, new: n1 });
         toast('密码已更新');
         passForm.reset();
       } catch (err) { showErr(pErr, err.message); }

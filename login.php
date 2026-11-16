@@ -218,8 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=43">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=53">
+<link rel="stylesheet" href="assets/app.css?v=44">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=54">
 <link rel="stylesheet" href="assets/skin-frame.css?v=52">
 <link rel="stylesheet" href="assets/auth.css?v=39">
 <script>

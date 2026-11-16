@@ -296,7 +296,8 @@
      所以要自己判一次 savedAt，否则半年前的数据也会弹窗来问。 */
   var savedAt = Number(data.savedAt || 0);
   if (!savedAt || Date.now() - savedAt > 30 * 24 * 60 * 60 * 1000) {
-    try { localStorage.removeItem(KEY); } catch (e) {}
+    /* 过期只表示「不再主动弹窗问」，不代表可以替用户删掉。
+       数据留在本机，哪天想找还能找回来 —— 界面干净不能凌驾于用户数据。 */
     return;
   }
 
@@ -304,33 +305,82 @@
   var nGroup = (data.groups || []).length;
 
   setTimeout(function () {
-    var merge = window.confirm(
-      '检测到你在未登录时保存了 ' + nLink + ' 条链接、' + nGroup + ' 个分组。\n\n' +
-      '要导入到当前账号吗？\n' +
-      '  确定：导入（重复的网址自动跳过，原有数据不受影响）\n' +
-      '  取消：不导入，并清除本机这份数据'
-    );
+    /* 原生 confirm 换成页面内浮层：系统弹窗和这套界面完全是两种语言，
+       手机上还会被浏览器换成自己的样式。这里复用 .paste-scrim / .paste-box
+       的现成皮肤，动态建节点 —— 不必往 index.php 里塞只有登录态才用的 DOM。 */
+    var scrim = document.createElement('div');
+    scrim.className = 'paste-scrim';
+    scrim.id = 'mergeScrim';
+    var box = document.createElement('div');
+    box.className = 'paste-box merge-box';
+    box.id = 'mergeBox';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.innerHTML =
+      '<div class="paste-head"><h2 id="mergeTitle">导入本机数据</h2>' +
+      '<button type="button" class="paste-close" id="mergeX" aria-label="关闭">' +
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+      '</button></div>' +
+      '<div class="paste-form">' +
+      '<p class="paste-status">检测到你在未登录时保存了 ' + nLink + ' 条链接、' + nGroup + ' 个分组。</p>' +
+      '<p class="keys-foot">导入只追加，重复网址自动跳过，现有数据不受影响；暂不导入也不会删除本机这份，以后还能再导入。</p>' +
+      '<p class="f-error" id="mergeErr" role="alert" hidden></p>' +
+      '<div class="paste-actions">' +
+      '<button type="button" class="btn-ghost" id="mergeSkip">暂不导入</button>' +
+      '<button type="button" class="btn-primary" id="mergeGo"><span class="btn-text">导入到当前账号</span>' +
+      '<span class="spinner" hidden aria-hidden="true"></span></button>' +
+      '</div></div>';
+    document.body.appendChild(scrim);
+    document.body.appendChild(box);
+    scrim.hidden = false;
+    box.hidden = false;
 
-    if (!merge) {
-      try { localStorage.removeItem(KEY); } catch (e) {}
-      return;
+    var closed = false;
+    function closeMerge() {
+      if (closed) return;
+      closed = true;
+      /* 取消 / 关闭都不再删 localStorage —— 那是用户自己攒的数据。 */
+      if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      if (box.parentNode) box.parentNode.removeChild(box);
     }
+    document.getElementById('mergeX').addEventListener('click', closeMerge);
+    document.getElementById('mergeSkip').addEventListener('click', closeMerge);
+    scrim.addEventListener('click', closeMerge);
+    document.addEventListener('keydown', function onEsc(e) {
+      if (e.key !== 'Escape') return;
+      if (closed) { document.removeEventListener('keydown', onEsc); return; }
+      e.preventDefault(); closeMerge();
+      document.removeEventListener('keydown', onEsc);
+    });
 
-    var tok = (document.querySelector('meta[name="csrf"]') || {}).content || '';
-    fetch('api.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF': tok },
-      credentials: 'same-origin',
-      body: JSON.stringify({ action: 'merge_guest', payload: data })
-    }).then(function (r) { return r.json(); }).then(function (res) {
-      if (res && res.ok) {
-        try { localStorage.removeItem(KEY); } catch (e) {}
-        location.reload();
-      } else {
-        alert('合并失败：' + ((res && res.error) || '未知错误'));
-      }
-    }).catch(function () {
-      alert('合并失败，请检查网络后重试');
+    var go = document.getElementById('mergeGo');
+    var errEl = document.getElementById('mergeErr');
+    var btnText = go.querySelector('.btn-text');
+    var spin = go.querySelector('.spinner');
+    go.addEventListener('click', function () {
+      errEl.hidden = true;
+      go.disabled = true; btnText.textContent = '导入中'; spin.hidden = false;
+      var tok = (document.querySelector('meta[name="csrf"]') || {}).content || '';
+      fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF': tok },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'merge_guest', payload: data })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.ok) {
+          try { localStorage.removeItem(KEY); } catch (e) {}
+          location.reload();
+          return;
+        }
+        errEl.textContent = '合并失败：' + ((res && res.error) || '未知错误');
+        errEl.hidden = false;
+        go.disabled = false; btnText.textContent = '导入到当前账号'; spin.hidden = true;
+      }).catch(function () {
+        errEl.textContent = '合并失败，请检查网络后重试';
+        errEl.hidden = false;
+        go.disabled = false; btnText.textContent = '导入到当前账号'; spin.hidden = true;
+      });
     });
   }, 700);
 })();

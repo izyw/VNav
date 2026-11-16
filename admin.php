@@ -228,8 +228,8 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=43">
-<link rel="stylesheet" href="assets/skin-atlas.css?v=53">
+<link rel="stylesheet" href="assets/app.css?v=44">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=54">
 <link rel="stylesheet" href="assets/skin-frame.css?v=52">
 <link rel="stylesheet" href="assets/admin.css?v=45">
 </head>
@@ -1138,10 +1138,10 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <section class="adm-panel" style="max-width:520px">
           <label class="f-label" for="pOld">原密码</label>
           <input class="f-input" id="pOld" name="old" type="password" autocomplete="current-password" required>
-          <label class="f-label" for="pNew">新密码（至少 6 位）</label>
-          <input class="f-input" id="pNew" name="new" type="password" minlength="6" autocomplete="new-password" required>
+          <label class="f-label" for="pNew">新密码（至少 8 位）</label>
+          <input class="f-input" id="pNew" name="new" type="password" minlength="8" autocomplete="new-password" required>
           <label class="f-label" for="pNew2">再输一次</label>
-          <input class="f-input" id="pNew2" name="new2" type="password" minlength="6" autocomplete="new-password" required>
+          <input class="f-input" id="pNew2" name="new2" type="password" minlength="8" autocomplete="new-password" required>
           <p class="f-error" id="passErr" role="alert" hidden></p>
           <div class="panel-actions">
             <button type="submit" class="btn-primary" id="savePass">
@@ -1537,7 +1537,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
               ['GD（登录验证码）', $sysInfo['gd'], '没装 GD 时验证码出不来，登录防护会自动退化成「只靠密码」。'],
               ['cURL（抓图标与地理库）', $sysInfo['curl'], '没有 cURL 时图标抓取会失败，链接仍可正常添加。'],
               ['站点根目录可写', $sysInfo['writable']['root'], '升级要往这里写文件，不可写就只能手工覆盖。'],
-              ['inc/ 可写', $sysInfo['writable']['inc'], '改密码要重写 inc/config.php。'],
+              ['inc/ 可写', $sysInfo['writable']['inc'], '站点密钥等配置写在 inc/config.php。'],
               ['data/ 可写', $sysInfo['writable']['data'], '数据库和图标缓存都在这。'],
               ['data/icons/ 可写', $sysInfo['writable']['icons'], '图标缓存目录。'],
               ['数据库已是最新', $sysInfo['schema_ok'], '版本号落后时，访问任意页面会自动迁移一次。'],
@@ -1735,6 +1735,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=22" defer></script>
+<script src="assets/admin.js?v=23" defer></script>
 </body>
 </html>

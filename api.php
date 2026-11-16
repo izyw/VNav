@@ -105,6 +105,99 @@ if ($action === 'hit') {
     json_ok();
 }
 
+/* ---------- 首页弹窗登录（游客可用） ----------
+   登录页 login.php 保留给注册与「渐进式验证码」的完整流程；
+   这里给首页右上角那颗「登录」弹窗用，只做账号密码校验，
+   但复用同一套 login_attempts / login_locks 限流表，不降低防护强度。
+   验证码走 api.php?action=captcha_new 取 token、login.php?captcha= 出图。 */
+if ($action === 'login') {
+    require __DIR__ . '/inc/captcha.php';
+    session_boot(); // 登录成功要写 session；限流计数落库不依赖 session
+
+    if (is_logged_in()) json_ok(['already' => true]);
+
+    $u = trim((string)($body['user'] ?? ''));
+    $p = (string)($body['pass'] ?? '');
+    $capTok = (string)($body['captcha_token'] ?? '');
+    $capIn  = (string)($body['captcha'] ?? '');
+
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $lockIp  = 'ip:' . $ip;
+    $lockUsr = 'usr:' . hash('sha256', mb_strtolower($u !== '' ? $u : '-'));
+    $WINDOW = 900; $LIMIT = 5; $LOCKSEC = 900;
+    $pdo = db();
+
+    $lockLeft = static function (string $k) use ($pdo): int {
+        $st = $pdo->prepare('SELECT until FROM login_locks WHERE k = ?');
+        $st->execute([$k]);
+        return max(0, (int)($st->fetchColumn() ?: 0) - time());
+    };
+    $wait = max($lockLeft($lockIp), $lockLeft($lockUsr));
+    if ($wait > 0) {
+        json_err('尝试次数过多，请 ' . (int)ceil($wait / 60) . ' 分钟后再试', 429);
+    }
+
+    $st = $pdo->prepare('SELECT fails, last_at FROM login_attempts WHERE ip = ?');
+    $st->execute([$ip]);
+    $row = $st->fetch() ?: ['fails' => 0, 'last_at' => 0];
+    $fails = ((time() - (int)$row['last_at']) > $WINDOW) ? 0 : (int)$row['fails'];
+    $captchaOn = hp_captcha_available() && setting('login_captcha', '1') === '1';
+    $needCaptcha = $captchaOn && $fails >= 1;
+
+    // 验证码先验
+    if ($needCaptcha && !hp_captcha_check($capTok, $capIn)) {
+        json_out(['ok' => false, 'error' => '验证码不正确', 'need_captcha' => true,
+                  'captcha_token' => $capTok], 401);
+    }
+
+    // 账号密码校验
+    $st = $pdo->prepare('SELECT id, username, pass_hash, role FROM users WHERE username = ?');
+    $st->execute([$u]);
+    $acc = $st->fetch();
+    if ($acc && password_verify($p, (string)$acc['pass_hash'])) {
+        $uid = (int)$acc['id'];
+        $pdo->prepare('DELETE FROM login_attempts WHERE ip = ?')->execute([$ip]);
+        $pdo->prepare('DELETE FROM login_locks WHERE k IN (?, ?)')->execute([$lockIp, $lockUsr]);
+        $pdo->prepare('UPDATE users SET last_login = ? WHERE id = ?')->execute([now(), $uid]);
+        session_regenerate_id(true);
+        $_SESSION['uid'] = $uid;
+        $_SESSION['csrf'] = bin2hex(random_bytes(20));
+        $_SESSION['logged_at'] = time();
+        current_user_flush();
+        json_ok(['username' => (string)$acc['username'],
+                 'role'     => (string)($acc['role'] ?? 'user')]);
+    }
+
+    // 失败：计数 +1，必要时锁定
+    $fails = ((time() - (int)$row['last_at']) > $WINDOW) ? 1 : ($fails + 1);
+    $pdo->prepare(
+        'INSERT INTO login_attempts(ip, fails, last_at) VALUES(?, ?, ?)
+         ON CONFLICT(ip) DO UPDATE SET fails = excluded.fails, last_at = excluded.last_at'
+    )->execute([$ip, $fails, time()]);
+
+    if ($fails >= $LIMIT) {
+        $why = 'fails=' . $fails;
+        foreach ([$lockIp, $lockUsr] as $k) {
+            $pdo->prepare(
+                'INSERT INTO login_locks(k, until, reason, at) VALUES(?, ?, ?, ?)
+                 ON CONFLICT(k) DO UPDATE SET until = excluded.until, reason = excluded.reason, at = excluded.at'
+            )->execute([$k, time() + $LOCKSEC, $why, time()]);
+        }
+        json_out(['ok' => false, 'error' => '连续失败 ' . $LIMIT . ' 次，已锁定 15 分钟'], 429);
+    }
+
+    $err = '账号或密码不正确。';
+    $left = $LIMIT - $fails;
+    if ($left > 0 && $left <= 3) $err .= "（还可尝试 {$left} 次）";
+    $payload = ['ok' => false, 'error' => $err];
+    if ($captchaOn) {
+        [$nt] = hp_captcha_new();
+        $payload['need_captcha'] = true;
+        $payload['captcha_token'] = $nt;
+    }
+    json_out($payload, 401);
+}
+
 require_login();
 csrf_check();
 
@@ -714,6 +807,20 @@ try {
             setting_set('layout', $l);
             json_ok();
         }
+        /* 皮肤切换。ui.js 走这个，普通用户换设备也能保持自己的选择 ——
+           theme 早就在个人偏好键名单里，此前只写 localStorage 而已。 */
+        case 'set_theme': {
+            $t = (string)($body['theme'] ?? '');
+            if (!in_array($t, hp_skin_keys(), true)) json_err('未知皮肤');
+            setting_set('theme', $t);
+            json_ok();
+        }
+        /* 关掉「这些链接是你自己的副本」提示。写 user 级 setting，
+           下次登录/换设备都不再弹；管理员本来就看不到这条。 */
+        case 'dismiss_clone_hint': {
+            setting_set('clone_hint_seen', '1');
+            json_ok();
+        }
 
         /* 只切默认搜索引擎。主页顶栏的「设为默认」走这个 ——
            不必回后台就能改，少一次跳转。 */
@@ -814,6 +921,26 @@ try {
             if ($tpl === null || @file_put_contents(HP_ROOT . '/inc/config.php', $tpl) === false) {
                 json_err('配置不可写，请检查 inc/config.php 权限');
             }
+            json_ok();
+        }
+
+        /* ---------- 改自己的登录密码（所有登录用户，含 admin） ----------
+           change_pass 改的是 inc/config.php 里的遗留字段 admin_pass，
+           v6 起登录只认 users.pass_hash，所以它其实早就不改登录密码了。
+           这个接口直接改 users 表 —— 谁登录改谁的，管理员也一样。
+           不在 $ADMIN_ONLY 里：普通用户也要能改自己的密码。 */
+        case 'user_pass': {
+            $uid = current_user_id();
+            $old = (string)($body['old'] ?? '');
+            $new = (string)($body['new'] ?? '');
+            if (strlen($new) < 8) json_err('新密码至少 8 位');
+            $st = db()->prepare('SELECT pass_hash FROM users WHERE id = ?');
+            $st->execute([$uid]);
+            $hash = (string)$st->fetchColumn();
+            if ($hash === '' || !password_verify($old, $hash)) json_err('原密码不正确');
+            $st = db()->prepare('UPDATE users SET pass_hash = ? WHERE id = ?');
+            $st->execute([password_hash($new, PASSWORD_BCRYPT, ['cost' => 11]), $uid]);
+            if ($st->rowCount() < 1) json_err('保存失败，请重试', 500);
             json_ok();
         }
 
