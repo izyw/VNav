@@ -27,7 +27,7 @@ if (PHP_SAPI !== 'cli') {
 
 $root  = __DIR__;
 $owner = 'izyw';
-$repo  = 'vnav';
+$repo  = 'VNav';   // 仓库名区分大小写，GitHub 上就是 VNav
 $draft = false;
 $dryRun = false;
 $notesFile = '';
