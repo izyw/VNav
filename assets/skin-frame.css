@@ -870,6 +870,16 @@ html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 /* ==========================================================================
    编辑态侧栏管理：虚线边框 + 删除入口（与 Atlas 同款交互，frame 配色）
    ========================================================================== */
+/* 编辑提示条：工作台的 .stage 是框内独立滚动区，顶栏是同一张框里的第一行，
+   并不像 Atlas 那样 fixed 吸在 stage 上方。所以这里不能沿用 home.css 那条
+   `position: sticky; top: calc(var(--hp-bar) + 1px)` —— 那会让提示条在框内
+   相对滚动容器吸到顶栏高度处，正好压住第一行卡片。工作台改回普通文档流：
+   提示条占自己一行、把卡片往下推，不悬浮、不遮挡。 */
+html[data-theme^='frame'] body.hp.is-editing .stage::before {
+  position: static;
+  top: auto;
+  margin: 0 0 14px;
+}
 html[data-theme^='frame'] body.hp.is-editing .gnav--side .gnav-item {
   border: 1px dashed color-mix(in srgb, var(--fr-ink-2, #71717a) 45%, transparent);
   background-clip: padding-box;

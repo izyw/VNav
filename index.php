@@ -81,6 +81,17 @@ hp_compress_start(6, true);
 $layout   = hp_layout_safe(setting('layout', 'card'));
 // 皮肤白名单来自 inc/skins.php —— 单一真源，新增皮肤不必改这里
 $theme    = hp_skin_safe(setting('theme', 'atlas'));
+/* 本机皮肤偏好写在 cookie 里（切主题时由 ui.js 同步），服务端据此输出
+   对应的皮肤 CSS。只下载当前这一套：atlas 30KB / frame 13KB（gzip），
+   两套全下等于白费一半。白名单用同一套 hp_skin_safe，防注入。
+   没有 cookie 就用账号设置值 —— 此时和 localStorage 首次访问一致。 */
+if (isset($_COOKIE['vnav_skin'])) {
+    $__skinCookie = hp_skin_safe((string)$_COOKIE['vnav_skin']);
+    if ($__skinCookie !== '') {
+        $theme = $__skinCookie;
+    }
+}
+unset($__skinCookie);
 $accent   = setting('accent', 'amber');
 $accent   = in_array($accent, ['amber', 'coral', 'mint', 'sky', 'violet'], true) ? $accent : 'amber';
 $title    = setting('site_title', 'Vnav');
@@ -131,6 +142,10 @@ $groupnav = hp_groupnav_safe(setting('groupnav', 'tab'));
    admin 想检查自己那份私人库时，带 ?lib=mine 即可（后台切换器里有入口）。
    普通人带这个参数没用：hp_data_uid_for() 对游客和普通用户不认 lib。 */
 $dataUid = hp_data_uid_for(($_GET['lib'] ?? '') === 'mine' ? 'mine' : 'site');
+/* 单人模式只有一份站点库，手敲 ?lib=mine 也拉回默认库 */
+if (hp_single_mode()) {
+    $dataUid = hp_data_uid_for('site');
+}
 
 /* 当前看的是哪一份库。管理员日常看「站点默认」（公共那份），
    想放私人条目就切到自己的库 —— V1.1.0 起这个切换有了明面入口，
@@ -200,28 +215,61 @@ hp_log_visit(false, '/');
 <meta name="description" content="<?= h($title) ?>">
 <title><?= h($title) ?></title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
-<?php /* 字体预载只在真正会用到时才发：这两个 woff2 合计 71KB，
-         是首屏最大的两块资源。用 crossorigin 是字体请求的硬要求
-         （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
-<link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=51">
+<?php /* 不预载 bricolage/instrument 两个 woff2（省 71KB）：
+         五套皮肤全部把 --font-display/--font-body 覆盖成系统字体栈
+         （atlas 系 -apple-system、frame 系 Geist），实测 document.fonts.check
+         对 Bricolage 恒为 false —— 这两个字体从没被真正用上。
+         @font-face 定义保留（后台等非皮肤页仍可能引用），但只有实际
+         用到才会下载，preload 等于每次白下 71KB。 */ ?>
+<link rel="stylesheet" href="assets/app.css?v=53">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
 <link rel="stylesheet" href="assets/home.css?v=48">
-<?php /* 第六套皮肤 Atlas 单独一个文件，必须排在 home.css 之后：
-         它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
-         属性选择器」与「后加载」双重压过 home.css 的结构规则。
-         顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=62">
-<link rel="stylesheet" href="assets/skin-frame.css?v=57">
+<?php /* 皮肤 CSS 必须排在 home.css 之后：靠「特异性 +1 属性选择器」与
+         「后加载」双重压过 home.css 的结构规则，顺序反了只能改色改不动结构。
+
+         按需只输出当前这一系：atlas 系（atlas/atlas-dark/auto）用
+         skin-atlas.css，frame 系（frame/frame-dark）用 skin-frame.css。
+         两套全下等于每次白费一套（gzip 后 13~30KB）。
+         切到另一系时，ui.js 会动态补载对应 CSS（见下方 data-skin-css）。 */ ?>
+<?php $__skinCss = str_starts_with($theme, 'frame') ? 'frame' : 'atlas'; ?>
+<link rel="stylesheet" href="assets/skin-<?= $__skinCss ?>.css?v=<?= $__skinCss === 'frame' ? '58' : '62' ?>" data-skin-css="<?= $__skinCss ?>">
+<script>
+/* 记录当前已加载的皮肤系，供切换时判断是否要补载另一套。
+   放在 body 之前，ui.js 执行时已可用。 */
+window.__VNAV_SKIN_CSS = <?= json_encode($__skinCss) ?>;
+window.__VNAV_SKIN_HREF = {
+  atlas: 'assets/skin-atlas.css?v=62',
+  frame: 'assets/skin-frame.css?v=58'
+};
+</script>
+<?php /* 登录态要判断 localStorage 里那份「67 条链接、9 个分组」究竟是不是
+   站点默认数据的副本：旧版把它的 baseline 误标成 false，每次登录都误报
+   「你在未登录时保存了…」。把默认库的网址/标题/分组名注入前端按内容比对，
+   一致就静默清掉；游客用不到，输出空数组不增加首屏体积。
+   必须定义在 if ($__isAdmin) 之外：下面的内联 script 在 endif 之后。
+   数据直接查 user_id=0 的线上默认库（不 require inc/seed.php —— 旧版
+   网站没有那个文件，require 会让登录页 500）。 */
+$__defLinks = array();
+$__defGroups = array();
+if ($__isAdmin) {
+    try {
+        $__pdo = db();
+        $__defLinks = $__pdo->query(
+            "SELECT url, title FROM links WHERE user_id = 0 ORDER BY sort, id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $__defGroups = $__pdo->query(
+            "SELECT name FROM groups WHERE user_id = 0 ORDER BY sort, id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $__defLinks = array(); $__defGroups = array();
+    }
+}
+?>
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
-<?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
-         保证「看到哪份就改哪份」—— 否则 ?lib=mine 的页面上编辑，
-         实际会写进网站默认库。 */ ?>
 <meta name="adm-lib" content="<?= $dataUid === 0 ? 'site' : 'mine' ?>">
 <?php endif; ?>
 <script>
@@ -232,9 +280,18 @@ hp_log_visit(false, '/');
   var el = document.documentElement;
   window.__VNAV = {
     guest: <?= is_logged_in() ? 'false' : 'true' ?>,
+    /* 单人模式才提供「隐藏链接」。多人模式前台不显示隐藏角标与开关。 */
+    singleMode: <?= hp_single_mode() ? 'true' : 'false' ?>,
     /* 右下角提示是否已被永久关闭。以前只写进服务端、前端从不读，
        等于换了设备或清了缓存提示又冒出来；现在两边一起认。 */
     tipOff: <?= setting('hint_dismissed', '0') === '1' ? 'true' : 'false' ?>
+  };
+  /* guest.js 用它认出「localStorage 里那份只是默认库副本」，避免每次登录
+     误报 67 条 / 9 个分组。游客态数组为空，不花首屏体积。 */
+  window.__VNAV_DEFAULT = {
+    urls: <?= json_encode(array_column($__defLinks, 'url'), JSON_UNESCAPED_SLASHES) ?>,
+    titles: <?= json_encode(array_column($__defLinks, 'title'), JSON_UNESCAPED_UNICODE) ?>,
+    groups: <?= json_encode(array_column($__defGroups, 'name'), JSON_UNESCAPED_UNICODE) ?>
   };
   try {
     /* 改名迁移：存储键从 vlinks.* 换成 vnav.*。
@@ -252,7 +309,26 @@ hp_log_visit(false, '/');
 
     var keys = <?= json_encode(hp_skin_keys(), JSON_UNESCAPED_UNICODE) ?>;
     var t = localStorage.getItem('vnav.theme');
-    if (t && keys.indexOf(t) !== -1) el.dataset.theme = t;
+    if (t && keys.indexOf(t) !== -1) {
+      el.dataset.theme = t;
+      /* 兜底：cookie 被清但 localStorage 还在时，服务端按默认输出了
+         另一系 CSS。这里发现不一致就同步补载（首帧前插入，不等 JS 事件）。 */
+      var wantSkin = t.indexOf('frame') === 0 ? 'frame' : 'atlas';
+      if (window.__VNAV_SKIN_CSS && wantSkin !== window.__VNAV_SKIN_CSS) {
+        var href = (window.__VNAV_SKIN_HREF || {})[wantSkin];
+        if (href) {
+          /* 与 ui.js 一致：目标系 link 已存在也要 appendChild 挪到末尾，
+             否则切回的那套留在前面会被另一套 CSS 覆盖（卡片挤列/右移）。 */
+          var lk = document.querySelector('link[data-skin-css="' + wantSkin + '"]');
+          if (!lk) {
+            lk = document.createElement('link');
+            lk.rel = 'stylesheet'; lk.href = href; lk.dataset.skinCss = wantSkin;
+          }
+          document.head.appendChild(lk);
+          window.__VNAV_SKIN_CSS = wantSkin;
+        }
+      }
+    }
 
     var lkeys = <?= json_encode(hp_layout_keys(), JSON_UNESCAPED_UNICODE) ?>;
     var l = localStorage.getItem('vnav.layout');
@@ -265,7 +341,7 @@ hp_log_visit(false, '/');
 })();
 </script>
 </head>
-<body class="hp <?= $__isAdmin ? 'is-admin' : 'is-guest' ?><?= $onMine ? ' is-mylib' : '' ?>">
+<body class="hp <?= $__isAdmin ? 'is-admin' : 'is-guest' ?><?= $onMine ? ' is-mylib' : '' ?><?= (hp_single_mode() && !is_logged_in()) ? ' single-readonly' : '' ?>">
 
 <div class="aurora" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
@@ -402,9 +478,10 @@ hp_log_visit(false, '/');
       </div>
     </div>
 
-    <?php /* 编辑模式开关。对**所有访问者**开放：
-             登录用户改的是自己账号里的数据，游客改的是本机沙盒 ——
-             两者在 UI 上走同一条路径，区别只在保存位置。 */ ?>
+    <?php /* 编辑模式开关。多人模式对所有访问者开放（登录改云端、游客改本机沙盒）；
+             单人模式只有站长能管理，未登录访客只读 —— 按钮不渲染，键盘入口也在
+             app.js 里按 singleMode + 登录态拦掉。 */ ?>
+    <?php if (!hp_single_mode() || is_logged_in()): ?>
     <?php /* 放这里而不是后台：
                用户要求「在主页上直接改」，这一颗就是那个入口。
                Ctrl+E 同效。
@@ -421,6 +498,7 @@ hp_log_visit(false, '/');
         </span>
         <span class="sr-only" id="editToggleLabel">编辑模式</span>
       </button>
+      <?php endif; /* 单人模式未登录不显示编辑开关 */ ?>
       <?php if ($__isSuper): /* 管理员：改密码按钮左侧的「管理齿轮」。
                后台只有 admin 能进。普通账号在它该在的位置看到的是自己的用户名。 */ ?>
       <a class="tbm-btn tbm-btn--login tbm-btn--quiet tbm-btn--gear" href="admin.php" title="管理后台" aria-label="管理后台">
@@ -491,12 +569,12 @@ hp_log_visit(false, '/');
         <p class="gnav-title">分组</p>
         <?php /* 登录用户可以在自己那份库里建分组。接口 group_add 早就开着，
                  但前台一直没有入口 —— 功能做了却够不着，这里补上。
-                 双击任意组名可以改名，浮层里还有删除（链接会回到未分组）。 */ ?>
-        <?php if ($__isAdmin): ?>
+                 双击任意组名可以改名，浮层里还有删除（链接会回到未分组）。
+                 游客也输出：guest.js 把建组/删组/改名都拦在本地沙盒里，
+                 改动只落 localStorage —— 编辑能力不该因登录状态而缺一块。 */ ?>
         <button class="gnav-fold gnav-add" id="grpAdd" type="button" title="新建分组" aria-label="新建分组">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/>          </svg>
         </button>
-        <?php endif; ?>
         <button class="gnav-fold" type="button" data-nav-fold aria-expanded="true"
                 aria-controls="gnav" aria-label="收起侧栏" title="收起侧栏">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5L8 12l5.5 5.5"/><path d="M18.5 6.5L13 12l5.5 5.5" opacity=".38"/></svg>
@@ -522,12 +600,11 @@ hp_log_visit(false, '/');
         </svg>
       </button>
       <?php /* 窄屏下 .gnav-head 整块被隐藏，桌面那颗「+」看不见。
-               分组入口不能只在宽屏有 —— 这里给折叠条配一颗同款按钮。 */ ?>
-      <?php if ($__isAdmin): ?>
+               分组入口不能只在宽屏有 —— 这里给折叠条配一颗同款按钮。
+               游客同样输出（改动落本地沙盒，见 guest.js）。 */ ?>
       <button class="gnav-madd" id="grpAddM" type="button" title="新建分组" aria-label="新建分组">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <?php endif; ?>
       <div class="gnav-track" id="gnav-track">
         <?php foreach ($ordered as $gi => $g):
           $nm = $g['name'] !== '' ? $g['name'] : '全部';
@@ -549,8 +626,9 @@ hp_log_visit(false, '/');
             <?php /* 编辑态下的删除入口。放在 <a> 里用 <span role=button> 而不是
                      <button>：a 里嵌 button 是非法 HTML，且会破坏这一行的
                       整行点击跳转/拖拽。span 点击时 stopPropagation 即可。
-                     id=0 是「未分组/全部」，不是真分组，不给删。 */ ?>
-            <?php if ($__isAdmin && (int)$g['id'] > 0): ?>
+                     id=0 是「未分组/全部」，不是真分组，不给删。
+                     游客也输出：删除走本地沙盒，见 guest.js。 */ ?>
+            <?php if ((int)$g['id'] > 0): ?>
             <span class="gnav-del" role="button" tabindex="0"
                   data-del-group="<?= (int)$g['id'] ?>"
                   title="删除分组「<?= h($nm) ?>」" aria-label="删除分组：<?= h($nm) ?>">
@@ -678,14 +756,12 @@ hp_log_visit(false, '/');
                   && is_file(HP_ROOT . '/' . $l['icon']);
             ?>
               <li class="link-item" style="--i:<?= $i ?>;--hue:<?= $hue ?>" data-id="<?= (int)$l['id'] ?>"
-                  <?php if ($__isAdmin): ?>
                   data-title="<?= h($l['title']) ?>"
                   data-url="<?= h($l['url']) ?>"
                   data-descr="<?= h($l['descr']) ?>"
                   data-group="<?= (int)($l['group_id'] ?? 0) ?>"
                   data-hidden="<?= $isHidden ? '1' : '0' ?>"
-                  data-icon="<?= h($l['icon']) ?>"
-                  <?php endif; ?>>
+                  data-icon="<?= h($l['icon']) ?>">
                 <?php /* 勾选框：只在编辑模式显示。放在 <a> 外面，
                          否则点它会把链接点开（和当年放把手是同一个理由）。
 
@@ -721,8 +797,8 @@ hp_log_visit(false, '/');
                       <span class="link-sub"><?= h($l['descr'] !== '' ? $l['descr'] : $host) ?></span>
                     <?php endif; ?>
                   </span>
-                  <?php if ($isHidden): ?>
-                    <?php /* 只有登录后才可能看到这个角标，所以它本身就是「私密」提示 */ ?>
+                  <?php if ($isHidden && hp_single_mode()): ?>
+                    <?php /* 只有单人模式才有隐藏链接；且只有登录后才可能看到这个角标 */ ?>
                     <span class="link-priv" title="隐藏链接，仅登录可见" aria-label="隐藏链接">
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
                     </span>
@@ -754,9 +830,8 @@ hp_log_visit(false, '/');
        为什么不做成吸顶的横条：吸顶会占掉主区一条，而且和分组标题抢位置；
        底部浮层不参与布局，卡片一多也不会挡到正在看的内容
        （Gmail / Notion 的批量条都是这个形态）。
-       只在登录态输出 —— 游客的写操作本来就不联网，给一条按了没反应的
-       操作条只会让人以为站坏了。 */ ?>
-<?php if ($__isAdmin): ?>
+       游客也输出：删除/移动走本地沙盒（guest.js），会即时生效；
+       「拉取图标/信息」对游客无意义，但那两个按钮本来也只是可选动作。 */ ?>
 <div class="bulkbar" id="bulkBar" hidden role="region" aria-label="批量操作">
   <label class="bulkbar-all">
     <input type="checkbox" id="bulkAll">
@@ -792,7 +867,6 @@ hp_log_visit(false, '/');
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 </div>
-<?php endif; ?>
 
 <?php /* 粘贴添加浮层：游客也输出。
          未登录时改动只落到 localStorage（assets/guest.js 的沙盒），
@@ -833,7 +907,13 @@ hp_log_visit(false, '/');
     <?php /* 隐藏开关：滑块。默认关（公开），因为绝大多数链接是给
              自己看的公开收藏，把「隐藏」做成默认会让人莫名其妙
              看不到自己刚加的链接。 */ ?>
-    <?php /* 粘贴浮层的「隐藏链接」开关也一起撤了，理由同编辑器里那处 */ ?>
+    <?php if (hp_single_mode()): /* 单人模式新增时可直接设为隐藏 */ ?>
+    <label class="edit-hidden" for="pHidden">
+      <input type="checkbox" id="pHidden" name="hidden">
+      <span>隐藏链接</span>
+      <small>开启后仅你登录可见，访客看不到</small>
+    </label>
+    <?php endif; ?>
 
     <p class="f-error" id="pasteError" role="alert" hidden></p>
 
@@ -883,11 +963,18 @@ hp_log_visit(false, '/');
         <span class="spinner" hidden aria-hidden="true"></span>
       </button>
     </div>
+    <?php if (!hp_single_mode()): ?>
     <p class="login-foot">还没有账号？<a href="login.php?mode=register">注册一个</a></p>
+    <?php endif; ?>
   </form>
 </div>
 
-<?php if ($__isAdmin): ?>
+<?php /* 编辑浮层 / 快捷键面板 / 分组浮层对所有人输出。
+       游客的写操作被 guest.js 拦在本地沙盒（只落 localStorage，不上传），
+       开放这些浮层不等于开放服务端写权限 —— 和上面「粘贴添加浮层」
+       同一个道理。之前把它们关在 is-admin 里，游客进了编辑模式却
+       点卡片没反应、建不了分组（实测 bug），就是这里漏放。
+       唯一例外是「修改密码」：游客没有账号，仍留在 is-admin 里。 */ ?>
 <!-- ============ 就地编辑浮层 ============
      卡片上点铅笔走这里，不再跳后台。表单字段和后台那个编辑器
      保持一致，但少了「分组下拉以外的所有跳转」。 -->
@@ -937,11 +1024,13 @@ hp_log_visit(false, '/');
       <?php endforeach; ?>
     </select>
 
-    <?php /* 这里原本有一个「隐藏链接」开关。V1.1.0 删掉了：
-             它对普通用户完全无效（他的链接本来就在自己名下，别人看不到，
-             而登录后前台又不过滤，等于连自己都藏不住）；对管理员则是
-             「我的库」入口缺失时的补丁。入口补上之后，这个开关只剩下
-             误导 —— 写着「关闭时所有访客可见」，而访客从来不会看到他的库。 */ ?>
+    <?php if (hp_single_mode()): /* 单人模式才有隐藏链接；多人模式保持下线 */ ?>
+    <label class="edit-hidden" for="eHidden">
+      <input type="checkbox" id="eHidden" name="hidden">
+      <span>隐藏链接</span>
+      <small>开启后仅你登录可见，访客看不到</small>
+    </label>
+    <?php endif; ?>
 
     <p class="f-error" id="editError" role="alert" hidden></p>
 
@@ -1010,9 +1099,11 @@ hp_log_visit(false, '/');
   </p>
 </div>
 
-<!-- ============ 修改密码浮层（登录用户） ============
+<!-- ============ 修改密码浮层（仅登录用户） ============
      admin.php 里那个表单走同一个 user_pass 接口，但普通用户进不去后台，
-     所以这里必须单独有一份，否则他注册后一辈子改不了自己的密码。 -->
+     所以这里必须单独有一份，否则他注册后一辈子改不了自己的密码。
+     游客没有账号密码，这一段保持 is-admin 专属。 -->
+<?php if ($__isAdmin): ?>
 <div class="paste-scrim" id="passScrim" hidden></div>
 <div class="paste-box pass-box" id="passBox" role="dialog" aria-modal="true" aria-labelledby="passTitle" hidden>
   <div class="paste-head">
@@ -1039,10 +1130,12 @@ hp_log_visit(false, '/');
     </div>
   </form>
 </div>
+<?php endif; /* 改密码浮层到此为止 */ ?>
 
-<!-- ============ 分组新建 / 改名浮层（登录用户） ============
+<!-- ============ 分组新建 / 改名浮层 ============
      侧栏「+」走新建，双击组名走改名；浮层里的删除会让组内链接
-     回到「未分组」（外键 ON DELETE SET NULL），不会连带删链接。 -->
+     回到「未分组」（外键 ON DELETE SET NULL），不会连带删链接。
+     游客也输出：这些动作走 guest.js 本地沙盒，只落 localStorage。 -->
 <div class="paste-scrim" id="grpScrim" hidden></div>
 <div class="paste-box grp-box" id="grpBox" role="dialog" aria-modal="true" aria-labelledby="grpTitle" hidden>
   <div class="paste-head">
@@ -1068,8 +1161,6 @@ hp_log_visit(false, '/');
     </div>
   </form>
 </div>
-
-<?php endif; /* 登录专属的那几个浮层到此为止：编辑框 / 快捷键面板 / 改密码 / 分组 */ ?>
 
 <!-- ============ 右下角提示（可永久关闭） ============ -->
 <?php
@@ -1097,9 +1188,12 @@ hp_log_visit(false, '/');
      游客没有服务端身份，但 guest.js 要负责把本地沙盒画出来、
      app.js 要挂编辑模式与提示条 —— 少一个，这类页面就是只读的。 -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=48" defer></script>
-<script src="assets/guest.js?v=53" defer></script>
-<script src="assets/app.js?v=49" defer></script>
+<!-- 顺序：guest.js 先按本地数据重建侧栏/主区，ui.js 和 app.js 再绑事件。
+     反过来的话 ui.js 缓存的 .gnav-item 引用会在重建后失效，
+     分组高亮和点击滚动全部失灵（实测坑）。三个都 defer，按文档顺序执行。 -->
+<script src="assets/guest.js?v=57" defer></script>
+<script src="assets/ui.js?v=50" defer></script>
+<script src="assets/app.js?v=52" defer></script>
 
 </body>
 </html>

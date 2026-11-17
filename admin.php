@@ -24,8 +24,15 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
+$__singleMode = hp_single_mode();
+
 $tab = $_GET['tab'] ?? 'links';
-$tab = in_array($tab, ['links', 'groups', 'look', 'stats', 'security', 'upgrade', 'changelog', 'help'], true) ? $tab : 'links';
+$__tabsAllowed = ['links', 'groups', 'look', 'stats', 'users', 'security', 'upgrade', 'mode', 'changelog', 'help'];
+// 单人模式没有账号体系可读：手敲 ?tab=users 也拦回链接页
+if ($__singleMode) {
+    $__tabsAllowed = array_values(array_diff($__tabsAllowed, ['users']));
+}
+$tab = in_array($tab, $__tabsAllowed, true) ? $tab : 'links';
 
 /* 后台能编辑两份库：
      site  → user_id = 0，「网站默认」，访客看到的就是这一份
@@ -37,6 +44,10 @@ $tab = in_array($tab, ['links', 'groups', 'look', 'stats', 'security', 'upgrade'
    （admin 看到别人的私人书签，改却改不动 —— 写接口都带 user_id 条件）。 */
 $seqLib = (string)($_GET['lib'] ?? 'site');
 if ($seqLib !== 'mine') {
+    $seqLib = 'site';
+}
+// 单人模式只有一份站点库，手敲 lib=mine 也强制回 site
+if ($__singleMode) {
     $seqLib = 'site';
 }
 $AU = hp_data_uid_for($seqLib);
@@ -173,6 +184,39 @@ if ($tab === 'stats') {
     $stats['geo'] = hp_geo_status();
 }
 
+/* ================= 用户管理页数据 =================
+   每个普通用户一行。除账号本身，还要给出「这个用户在数据库里占了多少」：
+   - links 私有库条数（自定义增加的链接，不含站点默认的 user_id=0）
+   - 行数 = links + groups + settings 三张表里属于该 uid 的行数总和
+   - 字节 = 用 length() 对各 TEXT 列求和，加上固定列宽粗估。SQLite 没有
+     per-row 精确字节函数，这是给人看的量级参考，不是计费数字。
+   全用相关子查询，一条 SQL 出结果，用户量到千级也只有几毫秒。 */
+$userRows = [];
+$meUid = 0;
+if ($tab === 'users') {
+    $meUid = current_user_id();
+    $userRows = db()->query(<<<'SQL'
+SELECT u.id, u.username, u.role, u.created_at, u.last_login,
+       (SELECT COUNT(*) FROM links    l WHERE l.user_id = u.id) AS link_cnt,
+       (SELECT COUNT(*) FROM groups   g WHERE g.user_id = u.id) AS group_cnt,
+       (SELECT COUNT(*) FROM settings s WHERE s.user_id = u.id) AS set_cnt,
+       (
+         SELECT COALESCE(SUM(
+                  length(l.title) + length(l.url) + length(l.icon)
+                + length(l.icon_kind) + length(l.descr)), 0)
+           FROM links l WHERE l.user_id = u.id
+       ) + (
+         SELECT COALESCE(SUM(length(g.name) + length(g.icon)), 0)
+           FROM groups g WHERE g.user_id = u.id
+       ) + (
+         SELECT COALESCE(SUM(length(s.k) + length(s.v)), 0)
+           FROM settings s WHERE s.user_id = u.id
+       ) AS data_bytes
+  FROM users u
+ ORDER BY (u.role = 'admin') ASC, u.id ASC
+SQL)->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // 访问控制页需要的规则表
 $aclRules  = [];
 $geoStatus = null;
@@ -231,7 +275,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="stylesheet" href="assets/app.css?v=45">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=54">
-<link rel="stylesheet" href="assets/admin.css?v=47">
+<link rel="stylesheet" href="assets/admin.css?v=50">
 </head>
 <body class="adm-body">
 
@@ -256,11 +300,14 @@ if ($tab === 'upgrade' || $tab === 'security') {
           'groups'    => ['分组管理', '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'],
           'look'      => ['外观偏好', '<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="9.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>'],
           'stats'     => ['统计分析', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
+          'users'     => ['用户管理', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'],
           'security'  => ['安全控制', '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'],
           'upgrade'   => ['系统升级', '<path d="M12 20V8"/><path d="M7 13l5-5 5 5"/><path d="M4 20h16"/>'],
           'changelog' => ['更新日志', '<path d="M6 3h9l4 4v14H6z"/><path d="M9 9h6M9 13h6M9 17h4"/>'],
+          'mode'      => ['模式切换', '<path d="M8 3 4 7l4 4"/><path d="M4 7h10a6 6 0 0 1 6 6"/><path d="M16 21l4-4-4-4"/><path d="M20 17H10a6 6 0 0 1-6-6"/>'],
           'help'      => ['使用说明', '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.6 2.4c-.7.35-1.1.9-1.1 1.8"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'],
       ];
+      if ($__singleMode) unset($tabs['users']);
       foreach ($tabs as $k => [$label, $svg]): ?>
         <a class="adm-tab<?= $tab === $k ? ' is-on' : '' ?>" href="?tab=<?= $k ?><?= $libQS ?>">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?= $svg ?></svg>
@@ -277,6 +324,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
              侧栏高度是 100vh，里面已经装了品牌 + 8 个导航项 + 底部统计，
              再加一块上百像素的说明文字，在 768 高的笔记本屏上会把
              下面几个导航项直接顶出可视区。现在整条只有 34px。 */ ?>
+    <?php if (!$__singleMode): /* 单人模式只有一份站点库，不显示「网站默认 / 我的库」切换 */ ?>
     <div class="adm-lib" role="group" aria-label="当前编辑的数据源">
       <a class="adm-lib-opt<?= $seqLib === 'site' ? ' is-on' : '' ?>"
          href="?tab=<?= h($tab) ?>&lib=site"
@@ -287,6 +335,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
          title="只有你自己看得到，访客用的是「网站默认」"
          <?= $seqLib === 'mine' ? 'aria-current="true"' : '' ?>>我的库</a>
     </div>
+    <?php endif; ?>
     <?php if ($seqLib === 'mine'): ?>
       <?php /* 私人库在前台默认不显示，给一个直达入口，否则改完没处验证。
                只在 mine 下出现，平时不占高度。 */ ?>
@@ -302,7 +351,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <span class="adm-stat-n"><?= (int)$totalHits ?></span>
         <span class="adm-stat-l">次点击</span>
       </div>
-      <?php if ($totalHidden > 0): ?>
+      <?php if ($__singleMode && $totalHidden > 0): ?>
         <div class="adm-stat">
           <span class="adm-stat-n"><?= $totalHidden ?></span>
           <span class="adm-stat-l">个隐藏</span>
@@ -405,6 +454,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
               <input class="f-input" id="fDescr" name="descr" type="text" maxlength="120" autocomplete="off">
             </div>
           </div>
+          <?php if ($__singleMode): /* 多人模式不需要隐藏链接功能 */ ?>
           <div class="switch-row switch-row--tight">
             <div>
               <p class="sw-label">隐藏链接</p>
@@ -416,6 +466,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
               <span class="sr-only">隐藏链接（仅登录后可见）</span>
             </label>
           </div>
+          <?php endif; ?>
           <p class="f-error" id="linkErr" role="alert" hidden></p>
           <div class="panel-actions">
             <button type="button" class="btn-ghost" id="cancelEdit">取消</button>
@@ -497,8 +548,10 @@ if ($tab === 'upgrade' || $tab === 'security') {
             <?php endforeach; ?>
           </select>
           <button type="button" class="adm-mini" data-bulk="move">移动</button>
+          <?php if ($__singleMode): /* 多人模式不提供隐藏功能 */ ?>
           <button type="button" class="adm-mini" data-bulk="hide">隐藏</button>
           <button type="button" class="adm-mini" data-bulk="show">取消隐藏</button>
+          <?php endif; ?>
           <button type="button" class="adm-mini is-danger" data-bulk="delete">删除</button>
         </div>
         <div class="adm-list" id="admList">
@@ -543,6 +596,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
                   </div>
                   <?php /* 隐藏开关直接放在行上：这些链接对外不可见，
                            最容易忘记的就是「哪几条藏了」，所以状态必须常驻可见。 */ ?>
+                  <?php if ($__singleMode): /* 多人模式不显示隐藏开关 */ ?>
                   <label class="adm-priv" title="隐藏链接（仅登录后可见）">
                     <input type="checkbox" data-act="hide" <?= $isHidden ? 'checked' : '' ?>>
                     <span class="adm-priv-track" aria-hidden="true">
@@ -550,6 +604,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
                     </span>
                     <span class="sr-only">隐藏「<?= h($l['title']) ?>」</span>
                   </label>
+                  <?php endif; ?>
                   <span class="adm-row-hits" title="点击次数"><?= (int)$l['hits'] ?></span>
                   <div class="adm-row-act">
                     <button type="button" class="icon-btn" data-act="up" aria-label="上移">
@@ -1130,6 +1185,121 @@ if ($tab === 'upgrade' || $tab === 'security') {
         </p>
       </section>
 
+    <?php elseif ($tab === 'users'): ?>
+      <header class="adm-head">
+        <div>
+          <h1 class="adm-title">用户管理</h1>
+          <p class="adm-sub">所有注册账号（含其他管理员）。可重置密码、删除账号，并查看每位用户的数据占用。不能删除当前登录的账号或最后一位管理员。</p>
+        </div>
+        <span class="adm-badge"><?= count(array_filter($userRows, fn($u) => $u['role'] !== 'admin')) ?> 位普通用户</span>
+      </header>
+
+      <section class="adm-panel">
+        <?php if (!$userRows): ?>
+          <p class="adm-sub">还没有任何注册用户。</p>
+        <?php else: ?>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>用户</th>
+                <th>角色</th>
+                <th>注册时间</th>
+                <th>最后使用</th>
+                <th>自建链接</th>
+                <th>占用行数</th>
+                <th>数据大小</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($userRows as $u):
+                $isAdminUser = $u['role'] === 'admin';
+                $rows = (int)$u['link_cnt'] + (int)$u['group_cnt'] + (int)$u['set_cnt'];
+                $bytes = (int)$u['data_bytes'];
+                $size = $bytes >= 1048576 ? round($bytes / 1048576, 2) . ' MB'
+                      : ($bytes >= 1024 ? round($bytes / 1024, 1) . ' KB' : $bytes . ' B');
+              ?>
+              <tr>
+                <td data-label="用户"><strong><?= h($u['username']) ?></strong></td>
+                <td data-label="角色">
+                  <span class="u-role<?= $isAdminUser ? ' is-admin' : '' ?>"><?= $isAdminUser ? '管理员' : '普通用户' ?></span>
+                </td>
+                <td class="tbl-time" data-label="注册时间"><?= h($u['created_at'] !== '' ? $u['created_at'] : '—') ?></td>
+                <td class="tbl-time" data-label="最后使用"><?= h($u['last_login'] !== '' ? $u['last_login'] : '从未登录') ?></td>
+                <td data-label="自建链接"><?= (int)$u['link_cnt'] ?> 条</td>
+                <td data-label="占用行数"><?= $rows ?> 行</td>
+                <td data-label="数据大小"><?= h($size) ?></td>
+                <td data-label="操作">
+                  <?php if ($isAdminUser && (int)$u['id'] !== $meUid): ?>
+                    <span class="dim" title="管理员密码请在「安全控制」页修改">—</span>
+                  <?php elseif ((int)$u['id'] !== $meUid): ?>
+                    <button class="btn-mini u-reset-btn" type="button"
+                            data-uid="<?= (int)$u['id'] ?>" data-name="<?= h($u['username']) ?>">重置密码</button>
+                  <?php else: ?>
+                    <span class="dim">当前账号</span>
+                  <?php endif; ?>
+                  <?php if ((int)$u['id'] !== $meUid): ?>
+                    <button class="btn-mini btn-danger u-del-btn" type="button"
+                            data-uid="<?= (int)$u['id'] ?>" data-name="<?= h($u['username']) ?>"
+                            data-role="<?= $isAdminUser ? 'admin' : 'user' ?>">删除</button>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <p class="panel-hint" style="margin-top:12px">
+          「最后使用」取最近一次登录时间；游客身份的改动只存浏览器本地，不占用服务器空间。
+          数据大小为文本字段的字节量级估算，供参考。
+        </p>
+        <?php endif; ?>
+      </section>
+
+      <!-- 重置密码浮层 -->
+      <div class="paste-scrim" id="uPassScrim" hidden></div>
+      <div class="paste-box" id="uPassBox" hidden role="dialog" aria-modal="true" aria-labelledby="uPassTitle" style="max-width:420px">
+        <h2 class="panel-title" id="uPassTitle">重置密码</h2>
+        <p class="panel-hint" id="uPassWho"></p>
+        <form id="uPassForm" class="adm-form" novalidate>
+          <label class="f-label" for="uPassNew">新密码（至少 8 位）</label>
+          <input class="f-input" type="password" id="uPassNew" autocomplete="new-password" required>
+          <label class="f-label" for="uPassNew2">确认新密码</label>
+          <input class="f-input" type="password" id="uPassNew2" autocomplete="new-password" required>
+          <p class="f-error" id="uPassErr" role="alert" hidden></p>
+          <div class="panel-actions">
+            <button class="btn-primary" type="submit" id="uPassSave">
+              <span class="btn-text">确认重置</span>
+              <span class="spinner" hidden aria-hidden="true"></span>
+            </button>
+            <button class="btn-ghost" type="button" id="uPassCancel">取消</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 删除账号浮层：必须手输用户名才能提交，防误点 -->
+      <div class="paste-scrim" id="uDelScrim" hidden></div>
+      <div class="paste-box" id="uDelBox" hidden role="dialog" aria-modal="true" aria-labelledby="uDelTitle" style="max-width:440px">
+        <h2 class="panel-title" id="uDelTitle">删除账号</h2>
+        <p class="panel-hint" id="uDelWho"></p>
+        <form id="uDelForm" class="adm-form" novalidate>
+          <p class="panel-hint" style="color:var(--danger,#d63b45)">
+            该账号的链接、分组、个人设置会一并删除，此操作不可恢复。
+          </p>
+          <label class="f-label" for="uDelName">请输入用户名 <strong id="uDelNameTip"></strong> 以确认</label>
+          <input class="f-input" type="text" id="uDelName" autocomplete="off" spellcheck="false" required>
+          <p class="f-error" id="uDelErr" role="alert" hidden></p>
+          <div class="panel-actions">
+            <button class="btn-primary is-danger" type="submit" id="uDelSave">
+              <span class="btn-text">确认删除</span>
+              <span class="spinner" hidden aria-hidden="true"></span>
+            </button>
+            <button class="btn-ghost" type="button" id="uDelCancel">取消</button>
+          </div>
+        </form>
+      </div>
+
     <?php elseif ($tab === 'security'): ?>
       <header class="adm-head">
         <div>
@@ -1418,11 +1588,16 @@ if ($tab === 'upgrade' || $tab === 'security') {
             <span class="btn-text">补抓缺失图标</span>
             <span class="spinner" hidden aria-hidden="true"></span>
           </button>
+          <button class="btn-ghost" type="button" id="iconWebp">
+            <span class="btn-text">转为 WebP</span>
+            <span class="spinner" hidden aria-hidden="true"></span>
+          </button>
           <button class="btn-ghost" type="button" id="iconGc">清理无主文件</button>
           <button class="btn-danger" type="button" id="iconPurge">清空缓存</button>
         </div>
 
         <ul class="adm-tips">
+          <li>「转为 WebP」把位图图标压成高清 WebP（体积约降 80%，首屏更省流量）。原文件留 <code>.bak</code> 备份，可随时改回扩展名回滚；可反复点，不会重复转换。</li>
           <li>「补抓缺失图标」一次最多处理 12 条，可反复点——慢是因为要逐个访问对方站点，不是本站的问题。</li>
           <li>「清理无主文件」只删没有任何链接在用的图；删完会把对应链接的图标重置为自动识别，不会留下破图空框。</li>
           <li>清空缓存<strong>不会</strong>删掉链接本身，下次打开主页会自动重新抓取，只是第一次会慢一点。</li>
@@ -1595,6 +1770,60 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <?php endforeach; ?>
       </div>
 
+    <?php elseif ($tab === 'mode'): ?>
+      <header class="adm-head">
+        <div>
+          <h1 class="adm-title">模式切换</h1>
+          <p class="adm-sub">决定这个网站是给你一个人用，还是给多人各用各的。切换即时生效，已有数据不会丢。</p>
+        </div>
+      </header>
+
+      <form id="modeForm" class="adm-form" novalidate>
+        <div class="mode-cards" role="radiogroup" aria-label="站点运行模式">
+          <label class="mode-card<?= !$__singleMode ? ' is-on' : '' ?>" data-mode="multi">
+            <input type="radio" name="site_mode" value="multi" <?= !$__singleMode ? 'checked' : '' ?>>
+            <span class="mode-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17.5" cy="9" r="2.4"/><path d="M16 14.5a5 5 0 0 1 5 5"/></svg>
+            </span>
+            <span class="mode-body">
+              <span class="mode-name">多人模式</span>
+              <span class="mode-desc">允许注册账号，每个人登录后看到自己配置的链接、分组、皮肤与布局。这是默认模式。</span>
+              <span class="mode-points">
+                <span>开放注册与多账号</span>
+                <span>各账号数据互相隔离</span>
+                <span>不提供「隐藏链接」</span>
+              </span>
+            </span>
+          </label>
+
+          <label class="mode-card<?= $__singleMode ? ' is-on' : '' ?>" data-mode="single">
+            <input type="radio" name="site_mode" value="single" <?= $__singleMode ? 'checked' : '' ?>>
+            <span class="mode-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+            </span>
+            <span class="mode-body">
+              <span class="mode-name">单人模式</span>
+              <span class="mode-desc">一个人部署、一个人管理。任何电脑都能访问，所有链接不登录也可见；只有站长能登录，不开放注册。</span>
+              <span class="mode-points">
+                <span>仅站长可登录，禁止注册</span>
+                <span>链接对所有访客可见</span>
+                <span>可用「隐藏链接」藏起个别条目</span>
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <p class="f-hint mode-hint">切换只改变上面的规则，不删除任何账号或链接。已有普通账号的数据会被保留，切回多人模式即可恢复使用。</p>
+
+        <div class="paste-actions">
+          <button type="submit" class="btn-primary" id="modeSave">
+            <span class="btn-text">保存模式</span>
+            <span class="spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="f-error" id="modeErr" role="alert" hidden></p>
+      </form>
+
     <?php elseif ($tab === 'help'): ?>
       <header class="adm-head">
         <div>
@@ -1739,6 +1968,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=23" defer></script>
+<script src="assets/admin.js?v=27" defer></script>
 </body>
 </html>

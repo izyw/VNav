@@ -1780,6 +1780,13 @@ body.is-editing .link:hover { transform: none; }
 }
 /* 正被拎起来的那张停抖，把它自己的 scale + 深阴影还回去 */
 body.is-editing .link-item.is-dragging .link { animation: none; }
+/* 鼠标按下 / 手指触摸的瞬间停抖：抖动幅度有 ±3px，0.24s 一轮，
+   元素一直在动会让 pointerdown 与紧随的 click 落到不同位置，
+   表现为「点卡片改内容点了没反应」（实测 bug）。按下即冻结，点完恢复，
+   视觉上察觉不到，点击却稳了。:active 在鼠标松开后才解除，正好覆盖整次点击。 */
+body.is-editing .link-item:hover .link,
+body.is-editing .link-item:active .link,
+body.is-editing .link-item:focus-within .link { animation-play-state: paused; }
 
 /* 编辑态关掉卡片入场动画。拖拽时 DOM 会被真挪动，那一下会让 .link-item
    的 itemIn / atRise 重新播一遍；CSS animation 的优先级高于内联样式，
@@ -1802,6 +1809,11 @@ body.is-editing .link-item { animation: none !important; }
 }
 /* 被拎起来的那项停抖，让内联 transform 接管视觉跟随 */
 body.is-editing .gnav-item.is-nav-dragging { animation: none; }
+/* 同理：指针悬停/按下/聚焦时停抖，保证点删除按钮、双击改名能命中。
+   侧栏项窄、抖动幅度相对更大，不停抖很容易点偏。 */
+body.is-editing .gnav--side .gnav-item:hover,
+body.is-editing .gnav--side .gnav-item:active,
+body.is-editing .gnav--side .gnav-item:focus-within { animation-play-state: paused; }
 
 /* 编辑态：所有卡片边框改虚线。
    实线是「成品」的语言，虚线是「草图」的语言 —— 整页退成虚线之后，
@@ -2525,3 +2537,40 @@ html[data-theme='cyber'] {
 @supports not selector(::-webkit-scrollbar) {
   html { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
 }
+
+/* 编辑/粘贴浮层的「隐藏链接」开关（仅单人模式输出）。
+   用一整行可点区域，避免只有一个小复选框难以命中。 */
+.edit-hidden {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 4px 0 2px;
+  padding: 11px 12px;
+  border: 1px solid var(--line, rgba(0,0,0,.1));
+  border-radius: var(--r-sm, 9px);
+  background: color-mix(in srgb, var(--surface, #fff) 60%, transparent);
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.edit-hidden input[type="checkbox"] {
+  width: 16px; height: 16px;
+  margin: 0;
+  accent-color: var(--acc, #3b6fe0);
+  cursor: pointer;
+}
+.edit-hidden > span { font-weight: 600; }
+.edit-hidden small {
+  flex: 1 1 100%;
+  padding-left: 26px;
+  color: var(--text-3, #888);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 单人模式未登录访客：整站只读，不显示任何编辑入口（视觉上也不误导） */
+body.single-readonly .link-edit,
+body.single-readonly .pick-box,
+body.single-readonly .link-priv,
+body.single-readonly .bulkbar,
+body.single-readonly .edit-hint { display: none !important; }

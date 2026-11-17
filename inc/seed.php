@@ -97,18 +97,18 @@ function hp_seed_links(): array
   2 => 
   array (
     'g' => '常用',
-    'title' => 'bilibili',
-    'url' => 'https://www.bilibili.com',
-    'descr' => '哔哩哔哩（bilibili.com)是国内知名的视频弹幕网站，这里有及时的动漫新番，活跃的ACG氛围，有创意的Up主。大家可以在这里找到许多欢乐。',
+    'title' => 'GitHub',
+    'url' => 'https://github.com',
+    'descr' => 'Join the world\'s most widely adopted, AI-powered developer platform where millions of developers, businesses, and the la',
     'icon' => '',
     'sort' => 3,
   ),
   3 => 
   array (
     'g' => '常用',
-    'title' => 'GitHub',
-    'url' => 'https://github.com',
-    'descr' => 'Join the world\'s most widely adopted, AI-powered developer platform where millions of developers, businesses, and the la',
+    'title' => 'bilibili',
+    'url' => 'https://www.bilibili.com',
+    'descr' => '哔哩哔哩（bilibili.com)是国内知名的视频弹幕网站，这里有及时的动漫新番，活跃的ACG氛围，有创意的Up主。大家可以在这里找到许多欢乐。',
     'icon' => '',
     'sort' => 4,
   ),

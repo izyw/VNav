@@ -328,6 +328,21 @@ final class MetaFetcher
             return '';
         }
 
+        // 位图统一转 WebP：显示端最大 44px（grid×1.06≈47），2x 屏需 ~94px，
+        // 存 96px 足够。原来存 128px PNG/ICO，57 张占首屏 426KB（63%），
+        // 转 96px WebP(q80) 后同批约 27KB/20 张，视觉无损、体积降约 80%。
+        // SVG 保持原样（矢量、体积极小），ICO 若 GD 解不出则原样保留。
+        $bitmap = in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'ico'], true);
+        if ($bitmap) {
+            $webp = self::shrinkWebp($bin, 96);
+            if ($webp !== null) {
+                $bin = $webp;
+                $ext = 'webp';
+            } elseif ($ext === 'ico') {
+                // GD 读不了的 ICO（少见）保持原样，扩展名不变
+            }
+        }
+
         $dir = HP_ROOT . '/data/icons';
         if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
             return '';
@@ -335,46 +350,120 @@ final class MetaFetcher
         $name = preg_replace('~[^a-z0-9.\-]~i', '_', $host) . '-' . substr(md5($iconUrl), 0, 8) . '.' . $ext;
         $path = $dir . '/' . $name;
 
-        // 降采样：站点图标常见 1024×1024，而页面上最多显示 52px。
-        // 原样存盘会让首屏白白解码几十万像素，也拖慢首屏。
-        // 位图统一缩到 128px（2x 够用），SVG/ICO 原样保留。
-        if (in_array($ext, ['png', 'jpg', 'webp'], true)) {
-            $bin = $this->shrink($bin, 128) ?: $bin;
-        }
-
         if (@file_put_contents($path, $bin) === false) {
             return '';
         }
         return 'data/icons/' . $name;
     }
 
-    /** 用 GD 把位图缩到最长边 <= $max，失败返回 null（调用方回退原图） */
-    private function shrink(string $bin, int $max): ?string
+    /** 用 GD 把位图居中裁成正方形、缩到 $px、编码成 WebP；失败返回 null（调用方回退原图） */
+    public static function shrinkWebp(string $bin, int $px): ?string
     {
-        if (!function_exists('imagecreatefromstring')) {
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagewebp')) {
             return null;
         }
         $im = @imagecreatefromstring($bin);
+        if (!$im && str_starts_with($bin, "\x00\x00\x01\x00")) {
+            // GD 读不了多尺寸 ICO（其内部是 256px 的 BMP/DIB），自己解出最大帧
+            $im = self::icoToImage($bin);
+        }
         if (!$im) {
             return null;
         }
         $w = imagesx($im);
         $h = imagesy($im);
-        if ($w <= $max && $h <= $max) {
-            $im2 = $im;
-        } else {
-            $scale = $max / max($w, $h);
-            $nw = max(1, (int)round($w * $scale));
-            $nh = max(1, (int)round($h * $scale));
-            $im2 = @imagescale($im, $nw, $nh, IMG_BICUBIC);
-            if (!$im2) {
-                return null;
-            }
+        $side = min($w, $h);
+        $sx = (int)(($w - $side) / 2);
+        $sy = (int)(($h - $side) / 2);
+        $canvas = imagecreatetruecolor($px, $px);
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        $ok = imagecopyresampled($canvas, $im, 0, 0, $sx, $sy, $px, $px, $side, $side);
+        imagedestroy($im);
+        if (!$ok) {
+            imagedestroy($canvas);
+            return null;
         }
         ob_start();
-        imagepng($im2, null, 6);
+        imagewebp($canvas, null, 80);
         $out = (string)ob_get_clean();
+        imagedestroy($canvas);
         return $out !== '' ? $out : null;
+    }
+
+    /**
+     * 从 ICO 容器解出最大的一帧为 GD 图像（GD 自身读不了 ICO 的 DIB 帧）。
+     * ICO 结构：6 字节头 + N×16 字节目录项，每项给出尺寸/偏移/字节数；
+     * 帧数据若是 BMP（前 4 字节 0x28=BITMAPINFOHEADER）则按 32bpp BGRA 解码。
+     * PNG 帧（sig 89PNG）则直接交给 imagecreatefromstring。
+     */
+    public static function icoToImage(string $bin): ?\GdImage
+    {
+        $len = strlen($bin);
+        if ($len < 22) {
+            return null;
+        }
+        $count = unpack('v', substr($bin, 4, 2))[1];
+        $best = null;
+        for ($i = 0; $i < $count; $i++) {
+            $o = 6 + $i * 16;
+            if ($o + 16 > $len) {
+                break;
+            }
+            $w = unpack('C', substr($bin, $o + 4, 1))[1] ?: 256;
+            $h = unpack('C', substr($bin, $o + 5, 1))[1] ?: 256;
+            $size = unpack('V', substr($bin, $o + 8, 4))[1];
+            $off = unpack('V', substr($bin, $o + 12, 4))[1];
+            if ($off <= 0 || $off + $size > $len || $size < 40) {
+                continue;
+            }
+            // 取面积最大的一帧
+            if ($best === null || $w * $h > $best['area']) {
+                $best = ['w' => $w, 'h' => $h, 'area' => $w * $h, 'off' => $off, 'size' => $size];
+            }
+        }
+        if ($best === null) {
+            return null;
+        }
+        $frame = substr($bin, $best['off'], $best['size']);
+        // PNG 压缩的 ICO 帧
+        if (str_starts_with($frame, "\x89PNG")) {
+            $im = @imagecreatefromstring($frame);
+            return $im instanceof \GdImage ? $im : null;
+        }
+        // BMP/DIB 帧
+        if (ord(substr($frame, 0, 1)) !== 0x28) {
+            return null;
+        }
+        $w = unpack('V', substr($frame, 4, 4))[1];
+        $hHalf = unpack('V', substr($frame, 8, 4))[1];   // ICO 里高度是 2×实际
+        $h = (int)($hHalf / 2);
+        $bpp = unpack('v', substr($frame, 14, 2))[1];
+        if ($bpp !== 32 || $w < 1 || $w > 512 || $h < 1 || $h > 512) {
+            return null;
+        }
+        $img = imagecreatetruecolor($w, $h);
+        imagealphablending($img, false);
+        imagesavealpha($img, true);
+        // 位图行倒序存储；每行 4 字节对齐。32bpp = BGRA。
+        $rowBytes = $w * 4;
+        $stride = (int)(ceil($rowBytes / 4) * 4);
+        for ($y = 0; $y < $h; $y++) {
+            $src = 40 + ($h - 1 - $y) * $stride;   // DIB 头 40 字节 + 倒序行
+            if ($src + $rowBytes > strlen($frame)) {
+                imagedestroy($img);
+                return null;
+            }
+            for ($x = 0; $x < $w; $x++) {
+                $p = $src + $x * 4;
+                $b = ord($frame[$p]);
+                $g = ord($frame[$p + 1]);
+                $r = ord($frame[$p + 2]);
+                $a = ord($frame[$p + 3]);
+                imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, $r, $g, $b, 127 - (int)($a / 2)));
+            }
+        }
+        return $img;
     }
 
     /** 拒绝回环、内网、链路本地等地址 */
@@ -758,6 +847,16 @@ final class MetaFetcher
             return '';
         }
 
+        // 与第一处 cacheIcon 保持一致：位图统一转 96px WebP，SVG 原样
+        $bitmap = in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'ico'], true);
+        if ($bitmap) {
+            $webp = self::shrinkWebp($bin, 96);
+            if ($webp !== null) {
+                $bin = $webp;
+                $ext = 'webp';
+            }
+        }
+
         $dir = HP_ROOT . '/data/icons';
         if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
             return '';
@@ -765,9 +864,6 @@ final class MetaFetcher
         $name = preg_replace('~[^a-z0-9.\-]~i', '_', $host) . '-' . substr(md5($iconUrl), 0, 8) . '.' . $ext;
         $path = $dir . '/' . $name;
 
-        if (in_array($ext, ['png', 'jpg', 'webp'], true)) {
-            $bin = $this->shrink($bin, 128) ?: $bin;
-        }
         if (@file_put_contents($path, $bin) === false) {
             return '';
         }

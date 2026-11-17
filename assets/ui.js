@@ -169,8 +169,41 @@
     const tb = e.target.closest('[data-theme-set]');
     if (tb) {
       const t = tb.dataset.themeSet;
+      /* 主页只预载当前那一系皮肤 CSS（atlas / frame）。切到另一系时先补载，
+         加载完成再改 data-theme，避免先套用错误的样式闪一下。
+         后台等非主页没有这套变量，直接切换即可。 */
+      const wantSkin = t.indexOf('frame') === 0 ? 'frame' : 'atlas';
+      if (window.__VNAV_SKIN_CSS && wantSkin !== window.__VNAV_SKIN_CSS) {
+        const href = (window.__VNAV_SKIN_HREF || {})[wantSkin];
+        if (href) {
+          /* 目标系 CSS 已存在也要重新 appendChild 把它挪到 head 末尾。
+             两套皮肤 CSS 都加载后，同名规则「后加载者胜」——若只因为
+             link 已存在就跳过，切回的那套会留在前面被另一套覆盖：
+             实测首屏 frame → atlas → frame，卡片从 4 列挤成 3 列整体右移。
+             appendChild 对已存在的节点是「移动」不是「复制」，不重复下载。 */
+          let link = document.querySelector('link[data-skin-css="' + wantSkin + '"]');
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            link.dataset.skinCss = wantSkin;
+            link.onload = function () { window.__VNAV_SKIN_CSS = wantSkin; };
+          }
+          document.head.appendChild(link);
+          window.__VNAV_SKIN_CSS = wantSkin;
+        }
+      }
       root.dataset.theme = t;
       try { localStorage.setItem(THEME_KEY, t); } catch (err) {}
+      /* 同步给服务端一份：主页的皮肤 CSS 是按主题按需输出的
+         （atlas / frame 各自独立文件，只下载当前这一套省 13~30KB）。
+         cookie 让下次首屏就能输出正确的 CSS，不留闪烁。
+         1 年、SameSite=Lax、path=/，和会话 cookie 无关。 */
+      try {
+        document.cookie = 'vnav_skin=' + encodeURIComponent(t)
+          + '; path=/; max-age=31536000; SameSite=Lax'
+          + (location.protocol === 'https:' ? '; Secure' : '');
+      } catch (err) {}
       syncTheme();
       closeMenus();
       $('.tb-menu[data-menu="theme"] .tbm-btn')?.focus();

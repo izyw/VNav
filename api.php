@@ -163,6 +163,11 @@ if ($action === 'login') {
     $st->execute([$u]);
     $acc = $st->fetch();
     if ($acc && password_verify($p, (string)$acc['pass_hash'])) {
+        /* 单人模式：只有站长（admin）能登录。普通账号即使密码正确也拒绝，
+           不删数据、不计入失败次数（否则会误触发锁定），明确告知原因。 */
+        if (hp_single_mode() && (string)($acc['role'] ?? 'user') !== 'admin') {
+            json_out(['ok' => false, 'error' => '当前为单人模式，只有站长可以登录'], 403);
+        }
         $uid = (int)$acc['id'];
         $pdo->prepare('DELETE FROM login_attempts WHERE ip = ?')->execute([$ip]);
         $pdo->prepare('DELETE FROM login_locks WHERE k IN (?, ?)')->execute([$lockIp, $lockUsr]);
@@ -234,8 +239,9 @@ $U = hp_data_uid_for($__lib);
 $ADMIN_ONLY = [
     'acl_set', 'acl_clear', 'stats_clear', 'stats_prune',
     'geo_import', 'geo_clear', 'geo_backfill',
-    'change_pass', 'set_captcha', 'unlock_all',
-    'icon_sync', 'icon_refill', 'icon_gc', 'icon_purge',
+    'change_pass', 'user_reset_pass', 'user_delete', 'set_captcha', 'unlock_all',
+    'set_site_mode',
+    'icon_sync', 'icon_refill', 'icon_gc', 'icon_purge', 'icon_webp',
     'upgrade_apply', 'upgrade_rollback', 'upgrade_drop_snapshot', 'upgrade_inspect',
     'meta_refresh', 'meta_refresh_stats',
 ];
@@ -810,6 +816,16 @@ try {
             }
             json_ok(['saved' => $saved]);
         }
+        /* 站点模式：single（单人）/ multi（多人）。只允许 admin（在 $ADMIN_ONLY）。
+           只写一个 setting，不动任何账号数据——切回 multi 时原有账号原样恢复。
+           单人模式下禁止普通账号登录由登录层按 role 拦截，不靠删数据。 */
+        case 'set_site_mode': {
+            $mode = (string)($body['mode'] ?? '');
+            if ($mode !== 'single' && $mode !== 'multi') json_err('未知的运行模式');
+            setting_set('site_mode', $mode);
+            settings_flush();
+            json_ok(['mode' => $mode]);
+        }
         case 'set_layout': {
             $l = (string)($body['layout'] ?? '');
             if (!in_array($l, hp_layout_keys(), true)) json_err('未知形态');
@@ -953,6 +969,66 @@ try {
             json_ok();
         }
 
+        /* ---------- 管理员重置某个用户的密码 ----------
+           和 user_pass 的区别：那个要本人输入旧密码、改自己的；这个是
+           管理员在「用户管理」里直接给普通用户设新密码，不需要旧密码。
+           只允许改 role=user，不能重置管理员（保护站点所有者）。
+           在 $ADMIN_ONLY 里，且有 CSRF —— 绕过按钮直接打接口也要过闸门。 */
+        case 'user_reset_pass': {
+            $uid = (int)($body['id'] ?? 0);
+            $new = (string)($body['new'] ?? '');
+            if ($uid <= 0) json_err('用户不存在');
+            if (strlen($new) < 8) json_err('新密码至少 8 位');
+            $st = db()->prepare('SELECT id, role FROM users WHERE id = ?');
+            $st->execute([$uid]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$u) json_err('用户不存在');
+            if ($u['role'] === 'admin') json_err('不能重置管理员密码，请在「安全控制」里修改');
+            $st = db()->prepare('UPDATE users SET pass_hash = ? WHERE id = ?');
+            $st->execute([password_hash($new, PASSWORD_BCRYPT, ['cost' => 11]), $uid]);
+            if ($st->rowCount() < 1) json_err('保存失败，请重试', 500);
+            json_ok(['id' => $uid]);
+        }
+
+        /* ---------- 管理员删除账号（含其他管理员） ----------
+           三道护栏，缺一不可：
+             1) 不能删自己 —— 删完当前会话立刻失效，等于把自己锁在门外；
+             2) 不能删最后一个管理员 —— 否则站点再无人能进后台，无法恢复；
+             3) 目标必须存在。
+           删除是事务：账号 + 该 uid 的链接/分组/设置一起走，避免出现
+           「账号没了但数据还在」的孤儿行，或反过来。统计明细（visits/
+           clicks）不带 user_id，属于站点级历史，故意保留。 */
+        case 'user_delete': {
+            $uid = (int)($body['id'] ?? 0);
+            if ($uid <= 0) json_err('用户不存在');
+            $me = current_user_id();
+            if ($uid === $me) json_err('不能删除当前登录的账号');
+
+            $st = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
+            $st->execute([$uid]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$u) json_err('用户不存在，可能已被删除');
+
+            if (($u['role'] ?? '') === 'admin') {
+                $nAdmin = (int)db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
+                if ($nAdmin <= 1) json_err('至少保留一位管理员，否则无人能再进后台');
+            }
+
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                foreach (['links', 'groups', 'settings'] as $tbl) {
+                    $pdo->prepare("DELETE FROM $tbl WHERE user_id = ?")->execute([$uid]);
+                }
+                $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$uid]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                json_err('删除失败，请重试', 500);
+            }
+            json_ok(['id' => $uid, 'username' => (string)$u['username']]);
+        }
+
         /* ---------- 登录防护 ---------- */
         case 'set_captcha': {
             $on = ($body['on'] ?? true) === true || (string)($body['on'] ?? '') === '1';
@@ -980,6 +1056,12 @@ try {
             @set_time_limit(120);
             $limit = max(1, min(30, (int)($body['limit'] ?? 12)));
             $r = hp_icon_refill($limit);
+            json_ok(['result' => $r, 'stats' => hp_icon_stats()]);
+        }
+        case 'icon_webp': {
+            require_once __DIR__ . '/inc/icons.php';
+            @set_time_limit(120);
+            $r = hp_icon_to_webp();
             json_ok(['result' => $r, 'stats' => hp_icon_stats()]);
         }
         case 'icon_gc': {

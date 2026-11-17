@@ -47,6 +47,7 @@ Options -Indexes
     ExpiresByType font/woff2 "access plus 1 year"
     ExpiresByType image/png  "access plus 30 days"
     ExpiresByType image/x-icon "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
     ExpiresByType image/svg+xml "access plus 30 days"
     ExpiresByType text/css   "access plus 1 year"
     ExpiresByType application/javascript "access plus 1 year"
@@ -54,7 +55,7 @@ Options -Indexes
 
 <IfModule mod_headers.c>
     # 只有带 ?v= 的才是不可变资源；不带的话交给上面的 Expires
-    <FilesMatch "\.(css|js|woff2|png|ico|svg)$">
+    <FilesMatch "\.(css|js|woff2|png|ico|svg|webp)$">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
     # html 与 php 绝不缓存，否则改了代码看不到效果

@@ -125,8 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
         $err = '验证码不正确。';
     } elseif ($mode === 'register') {
         /* ---------- 注册 ---------- */
-        if (setting('allow_register', '1') !== '1') {
-            $err = '本站已关闭注册，请联系管理员。';
+        if (hp_single_mode() || setting('allow_register', '1') !== '1') {
+            $err = '本站运行于单人模式，不开放注册。';
         } elseif (!hp_username_valid($u)) {
             $err = '用户名 3~24 位，只能使用字母、数字、下划线或中文。';
         } elseif (mb_strlen($p) < 8) {
@@ -153,10 +153,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
         $st->execute([$u]);
         $acc = $st->fetch();
         if ($acc && password_verify($p, (string)$acc['pass_hash'])) {
-            $newUserId = (int)$acc['id'];
-            // 管理员进后台，普通账号回首页 —— 后台对他们本来就是 403
-            $dest = ($acc['role'] ?? 'user') === 'admin' ? 'admin.php' : './';
-            $ok = true;
+            /* 单人模式：只有站长（admin）能登录。普通账号密码正确也拒绝，
+               不计失败次数，避免误锁。数据保留，切回多人模式即可恢复。 */
+            if (hp_single_mode() && (string)($acc['role'] ?? 'user') !== 'admin') {
+                $err = '当前为单人模式，只有站长可以登录。';
+            } else {
+                $newUserId = (int)$acc['id'];
+                // 管理员进后台，普通账号回首页 —— 后台对他们本来就是 403
+                $dest = ($acc['role'] ?? 'user') === 'admin' ? 'admin.php' : './';
+                $ok = true;
+            }
         } else {
             $err = '账号或密码不正确。';
         }
@@ -302,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
     <p class="auth-switch">
       <?php if ($mode === 'register'): ?>
         已经有账号了？<a href="login.php">去登录</a>
-      <?php elseif (setting('allow_register', '1') === '1'): ?>
+      <?php elseif (!hp_single_mode() && setting('allow_register', '1') === '1'): ?>
         还没有账号？<a href="login.php?mode=register">注册一个</a>
       <?php endif; ?>
     </p>

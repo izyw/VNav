@@ -341,6 +341,9 @@
 
     document.addEventListener('keydown', e => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return;
+      // 单人模式只读：未登录访客不能用 Ctrl+V 打开粘贴浮层添链接（那是站长专属）
+      const cfg = window.__VNAV || {};
+      if (cfg.singleMode && cfg.guest) return;
       if (!box.hidden) return;
       if (isTyping()) return;
       // 拦掉默认行为只在确认要处理时做（输入框里已由 isTyping 提前退出）
@@ -389,6 +392,7 @@
           title,
           group_id: Number(fGroup.value || 0),
           icon: iconEl.classList.contains('has-img') ? iconEl.querySelector('img')?.getAttribute('src') : '',
+          ...(() => { const h = document.getElementById('pHidden'); return h ? { hidden: h.checked ? 1 : 0 } : {}; })(),
         });
         insertCard(data.link);
         closeBox();
@@ -408,6 +412,8 @@
     const host = (() => { try { return new URL(link.url).hostname.replace(/^www\./, ''); } catch { return link.host || ''; } })();
     const showDesc = document.querySelector('.link-sub') !== null;
     const hasIcon = !!link.icon;
+    // 只有单人模式才有隐藏链接；多人模式即便数据带 hidden=1 也不渲染角标
+    const showPriv = !!(window.__VNAV && window.__VNAV.singleMode) && !!link.hidden;
 
     return `
       <a class="link" href="${esc(link.url)}" ${newTab ? 'target="_blank" rel="noopener noreferrer"' : ''} data-href="${esc(link.url)}">
@@ -419,7 +425,7 @@
           <span class="link-title">${esc(link.title)}</span>
           ${showDesc ? `<span class="link-sub">${esc(link.descr || host)}</span>` : ''}
         </span>
-        ${link.hidden ? `<span class="link-priv" title="隐藏链接，仅登录可见" aria-label="隐藏链接">
+        ${showPriv ? `<span class="link-priv" title="隐藏链接，仅登录可见" aria-label="隐藏链接">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
         </span>` : ''}
         <span class="link-edit" data-edit="${link.id}" role="button" tabindex="0" aria-label="编辑 ${esc(link.title)}">
@@ -525,6 +531,18 @@
     }
 
     function openEditor(li) {
+      /* 游客态：data-* 可能散落在 <a> 上（guest.js 的 itemHtml 版本），
+         这里兜底从 <a>.dataset 和 DOM 文本取，避免刷新后编辑器是空的。 */
+      if (li && !li.dataset.url) {
+        const a = li.querySelector?.('a.link');
+        if (a) {
+          li.dataset.url = a.dataset.href || a.getAttribute('href') || '';
+          li.dataset.title = li.querySelector('.link-title')?.textContent || '';
+          li.dataset.descr = li.querySelector('.link-sub')?.textContent || '';
+          li.dataset.group = li.closest('ul.links')?.dataset.group || '0';
+          li.dataset.icon = a.querySelector('.link-icon img')?.getAttribute('src') || '';
+        }
+      }
       const id = li.dataset.id;
       if (!id) return;
       editLastFocus = document.activeElement;
@@ -535,6 +553,8 @@
       eDescr.value = li.dataset.descr || '';
       eGroup.value = li.dataset.group || '0';
       editIcon = li.dataset.icon || '';
+      const eHidden = document.getElementById('eHidden');
+      if (eHidden) eHidden.checked = li.dataset.hidden === '1';
       resetFetchBtn();
 
       try { eHost.textContent = new URL(eUrl.value).hostname.replace(/^www\./, ''); }
@@ -650,6 +670,7 @@
         group_id: newGroup,
         descr,
         icon,
+        ...(() => { const h = document.getElementById('eHidden'); return h ? { hidden: h.checked ? 1 : 0 } : {}; })(),
       };
 
       editBusy = true;
@@ -707,12 +728,18 @@
       }
     }
 
+    // 单人模式未登录访客只读：铅笔编辑入口一律不放行
+    const readOnlyGuest = () => {
+      const cfg = window.__VNAV || {};
+      return !!(cfg.singleMode && cfg.guest);
+    };
     // 卡片上的铅笔 → 打开就地编辑（不再跳后台）
     stage?.addEventListener('click', e => {
       const ed = e.target.closest('[data-edit]');
       if (!ed) return;
       e.preventDefault();
       e.stopPropagation();
+      if (readOnlyGuest()) return;
       const li = ed.closest('.link-item');
       if (li) openEditor(li);
     });
@@ -722,6 +749,7 @@
       if (!ed) return;
       e.preventDefault();
       e.stopPropagation();
+      if (readOnlyGuest()) return;
       const li = ed.closest('.link-item');
       if (li) openEditor(li);
     });
@@ -1157,7 +1185,12 @@
      标志位容易在异常路径上忘了复位，时间戳最多多吞 300ms 的点击。 */
   stage?.addEventListener('click', e => {
     if (!editing) return;
-    if (Date.now() < __suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
+    /* 只吞拖动结束紧随的那一发 click，消费即清零 —— 否则 150ms 内
+       用户连点两张卡，第二张也被吞，看起来就是「点了没反应」。 */
+    if (Date.now() < __suppressClickUntil) {
+      __suppressClickUntil = 0;
+      e.preventDefault(); e.stopPropagation(); return;
+    }
     const li = e.target.closest('.link-item');
     if (!li) return;
     if (e.target.closest('[data-edit]')) return; // 铅笔走自己的逻辑，别开两次
@@ -1344,8 +1377,12 @@
          并抛 pointercancel，拖动当场夭折（实测踩过，鼠标端不暴露）。 */
       selectItem(li, true);
       document.body.classList.add('is-dragging');
-      // 一旦真的拖起来，就标记成"待吞点击"状态
-      __suppressClickUntil = Date.now() + 400;
+      /* 一旦真的拖起来，标记「待吞点击」。
+         时间窗只给 150ms：它只需覆盖 pointerup 之后浏览器紧接着派发的
+         那一发 click（实测间隔 <50ms）。原来给 400ms，手一慢用户紧接着
+         想点卡片改内容就被吞掉 —— 表现为「点了没反应」（实测 bug）。
+         配合下面 click handler 里「消费即清零」，既吞得准又不误伤。 */
+      __suppressClickUntil = Date.now() + 150;
       takeSnapshot();
     };
 
@@ -1536,8 +1573,9 @@
         return;
       }
 
-      // 拖动结束，把紧随而来的 click 吞掉（否则一松手就弹编辑器）
-      __suppressClickUntil = Date.now() + 400;
+      // 拖动结束，把紧随而来的那一发 click 吞掉（否则一松手就弹编辑器）。
+      // 150ms 只覆盖浏览器紧接派发的那一下；具体时长注释见起拖处。
+      __suppressClickUntil = Date.now() + 150;
 
       li.classList.remove('is-dragging');
       /* 从指针位置平滑落进 DOM 槽位：清掉 transform，卡片回到网格里的
@@ -1954,6 +1992,11 @@
     const gSave  = document.getElementById('grpSave');
     const gText  = gSave?.querySelector('.btn-text');
     const gSpin  = gSave?.querySelector('.spinner');
+    /* 游客新建的分组 id 是负数（guest.js 的本地临时 id），不是 0。
+       服务端组 id 恒为正。统一用这个判定：0 = 未分组，不算真分组；
+       游客态放行负数，否则游客建完组既不能改名也不能删（实测 bug）。 */
+    const guestMode = !!(window.VnavGuest && window.VnavGuest.isGuest);
+    const validGid = id => guestMode ? Number(id) !== 0 : Number(id) > 0;
     let gMode = 'add';
     let gId = 0;
     let gLast = null;
@@ -2013,7 +2056,7 @@
       e.preventDefault();
       e.stopPropagation();
       const id = Number(btn.dataset.delGroup || 0);
-      if (!(id > 0) || gBusy) return;
+      if (!validGid(id) || gBusy) return;
 
       if (delArmed !== btn) {
         disarmSideDel();
@@ -2056,7 +2099,7 @@
         e.preventDefault();
         const id = Number(item.dataset.group || 0);
         const name = item.querySelector('.gnav-name')?.textContent?.trim() || '';
-        if (id > 0) openGrp('edit', id, name);
+        if (validGid(id)) openGrp('edit', id, name);
       });
     });
     document.getElementById('grpClose')?.addEventListener('click', closeGrp);
@@ -2066,7 +2109,7 @@
     /* 删除做二次确认，但不用原生 confirm —— 弹窗和浮层叠在一起很难看，
        而且原生框在手机浏览器上会被系统样式接管。 */
     gDel?.addEventListener('click', async () => {
-      if (gMode !== 'edit' || gId <= 0) return;
+      if (gMode !== 'edit' || !validGid(gId)) return;
       if (!gDelArmed) {
         gDelArmed = true;
         gDel.textContent = '再点一次确认删除';
@@ -2176,9 +2219,19 @@
     };
 
     /* capture 阶段拦在 track 上，先于 document 的冒泡监听生效。
-       拖动结束紧跟的 click 若放行，<a> 就会跳到旧锚点，看着像排序没生效。 */
+       拖动结束紧跟的 click 若放行，<a> 就会跳到旧锚点，看着像排序没生效。
+       两个关键点（实测 bug：编辑模式增删分组点了没反应）：
+         ① 窗口只给 150ms，覆盖 pointerup 后紧接那一发 click 即可；
+            原来 500ms 太长，用户拖完马上点「删除」就落在窗口里被吞。
+         ② 只吞 .gnav-item 自身的 click —— 删除按钮 .gnav-del、以及
+            其它落在 track 内的按钮，绝不能拦，否则它们的冒泡处理器
+            （document 上的两段式删除）收不到事件，功能看起来就废了。 */
     track.addEventListener('click', e => {
-      if (Date.now() < suppressUntil) { e.preventDefault(); e.stopPropagation(); }
+      if (Date.now() >= suppressUntil) return;
+      const onItem = e.target.closest('.gnav-item');
+      if (!onItem || e.target.closest('button, .gnav-del, input, a.gnav-add')) return;
+      suppressUntil = 0;   // 消费即清零，不吞后续点击
+      e.preventDefault(); e.stopPropagation();
     }, true);
 
     let blocked = false;
@@ -2225,7 +2278,7 @@
       started = true;
       el.classList.add('is-nav-dragging');
       document.body.classList.add('is-drag-nav');
-      suppressUntil = Date.now() + 500;
+      suppressUntil = Date.now() + 150;
       takeSnap();
       navigator.vibrate?.(12); // 不支持的设备静默跳过
     };

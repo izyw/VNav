@@ -188,7 +188,9 @@
           group_id: Number(fGroup.value || 0),
           descr: fDescr.value.trim(),
           icon: '',
-          hidden: fHidden?.checked ? 1 : 0,
+          // 多人模式没有隐藏开关（fHidden 不存在）：不带这个字段，
+          // 服务端 array_key_exists 判断会保留历史条目的 hidden 原值，不会误公开
+          ...(fHidden ? { hidden: fHidden.checked ? 1 : 0 } : {}),
         });
         toast(id ? '已保存' : '已添加');
         location.reload(); // 图标可能被后端抓取，重载最稳
@@ -768,6 +770,13 @@
       })
     );
 
+    $('#iconWebp').addEventListener('click', e =>
+      runIcon(e.currentTarget, 'icon_webp', {}, r => {
+        const x = r.result || {};
+        return `转换完成：${x.converted || 0} 张已转 WebP，省 ${(((x.bytesBefore || 0) - (x.bytesAfter || 0)) / 1024).toFixed(1)} KB${x.failed ? '，' + x.failed + ' 张跳过' : ''}`;
+      })
+    );
+
     $('#iconGc').addEventListener('click', async e => {
       if (!confirm('删除所有没有被任何链接引用的图标文件？此操作不可撤销。')) return;
       runIcon(e.currentTarget, 'icon_gc', {}, r => {
@@ -1187,4 +1196,165 @@
       }
     });
   })();
+
+  /* ================= 用户管理：重置普通用户密码 ================= */
+  (() => {
+    const scrim = $('#uPassScrim');
+    const box   = $('#uPassBox');
+    const form  = $('#uPassForm');
+    if (!scrim || !box || !form) return; // 不在用户管理页
+    const whoEl = $('#uPassWho');
+    const errEl = $('#uPassErr');
+    const newEl = $('#uPassNew');
+    const new2  = $('#uPassNew2');
+    const save  = $('#uPassSave');
+    let targetUid = 0;
+
+    function open(uid, name) {
+      targetUid = uid;
+      whoEl.textContent = '为「' + name + '」设置新密码，原密码立即失效。';
+      form.reset();
+      clearErr(errEl);
+      scrim.hidden = false;
+      box.hidden = false;
+      requestAnimationFrame(() => newEl.focus());
+    }
+    function close() {
+      scrim.hidden = true;
+      box.hidden = true;
+      targetUid = 0;
+    }
+
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.u-reset-btn');
+      if (btn) open(Number(btn.dataset.uid || 0), btn.dataset.name || '该用户');
+    });
+    $('#uPassCancel')?.addEventListener('click', close);
+    scrim.addEventListener('click', close);
+    document.addEventListener('keydown', e => {
+      if (!box.hidden && e.key === 'Escape') close();
+    });
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      clearErr(errEl);
+      const n1 = newEl.value, n2 = new2.value;
+      if (n1.length < 8) return showErr(errEl, '新密码至少 8 位');
+      if (n1 !== n2) return showErr(errEl, '两次输入的密码不一致');
+      if (!targetUid) return showErr(errEl, '用户不存在，请重新打开');
+      busy(save, true, '重置中…', '确认重置');
+      try {
+        await api({ action: 'user_reset_pass', id: targetUid, new: n1 });
+        close();
+        toast('密码已重置');
+      } catch (err) {
+        showErr(errEl, err.message);
+        busy(save, false);
+      }
+    });
+  })();
+
+  /* ================= 用户管理：删除账号（含其他管理员） ================= */
+  (() => {
+    const scrim = $('#uDelScrim');
+    const box   = $('#uDelBox');
+    const form  = $('#uDelForm');
+    if (!scrim || !box || !form) return; // 不在用户管理页
+    const whoEl = $('#uDelWho');
+    const nameTip = $('#uDelNameTip');
+    const nameEl = $('#uDelName');
+    const errEl = $('#uDelErr');
+    const save  = $('#uDelSave');
+    let targetUid = 0;
+    let targetName = '';
+
+    function open(uid, name, role) {
+      targetUid = uid;
+      targetName = name;
+      whoEl.textContent = '即将删除「' + name + '」（' +
+        (role === 'admin' ? '管理员' : '普通用户') + '）。';
+      nameTip.textContent = name;
+      nameEl.value = '';
+      clearErr(errEl);
+      scrim.hidden = false;
+      box.hidden = false;
+      requestAnimationFrame(() => nameEl.focus());
+    }
+    function close() {
+      scrim.hidden = true;
+      box.hidden = true;
+      targetUid = 0;
+      targetName = '';
+    }
+
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.u-del-btn');
+      if (btn) open(Number(btn.dataset.uid || 0), btn.dataset.name || '该用户', btn.dataset.role || 'user');
+    });
+    $('#uDelCancel')?.addEventListener('click', close);
+    scrim.addEventListener('click', close);
+    document.addEventListener('keydown', e => {
+      if (!box.hidden && e.key === 'Escape') close();
+    });
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      clearErr(errEl);
+      if (!targetUid) return showErr(errEl, '用户不存在，请重新打开');
+      if (nameEl.value.trim() !== targetName) return showErr(errEl, '用户名不一致，请重新输入');
+      busy(save, true, '删除中…', '确认删除');
+      try {
+        await api({ action: 'user_delete', id: targetUid });
+        close();
+        toast('账号已删除');
+        setTimeout(() => location.reload(), 300);
+      } catch (err) {
+        showErr(errEl, err.message);
+        busy(save, false);
+      }
+    });
+  });
+
+  /* ================= 模式切换 ================= */
+  const modeForm = $('#modeForm');
+  if (modeForm) {
+    const cards = $$('.mode-card', modeForm);
+    const pick = (mode) => {
+      cards.forEach(c => {
+        const on = c.dataset.mode === mode;
+        c.classList.toggle('is-on', on);
+        const input = c.querySelector('input');
+        if (input) input.checked = on;
+      });
+    };
+    cards.forEach(c => {
+      c.addEventListener('click', (e) => {
+        // label 默认会触发 input 的 click，这里统一接管，避免重复
+        e.preventDefault();
+        pick(c.dataset.mode);
+      });
+      const input = c.querySelector('input');
+      input?.addEventListener('change', () => pick(c.dataset.mode));
+    });
+
+    modeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const chosen = cards.find(c => c.classList.contains('is-on'));
+      if (!chosen) return;
+      const mode = chosen.dataset.mode;
+      const save = $('#modeSave');
+      const errEl = $('#modeErr');
+      clearErr(errEl);
+      busy(save, true, '保存中', '保存模式');
+      try {
+        await api({ action: 'set_site_mode', mode });
+        toast(mode === 'single' ? '已切换到单人模式' : '已切换到多人模式');
+        // 模式改变会影响全局渲染（导航、入口、编辑权限），整页重载最稳妥
+        setTimeout(() => location.reload(), 400);
+      } catch (err) {
+        showErr(errEl, err.message);
+        busy(save, false, '', '保存模式');
+      }
+    });
+  }
 })();

@@ -324,3 +324,101 @@ function hp_icon_collect_garbage(): array
     }
     return ['deleted' => $n, 'bytes' => $bytes];
 }
+
+/**
+ * 把位图图标（png/ico/jpg）就地转成 WebP，压缩首屏传输。
+ *
+ * 背景：站点图标显示尺寸最大 44px（grid 布局 × 1.06 hover ≈ 47px），
+ * 2x 屏需要 ~94px。原抓取逻辑存 128px 的 png/ico，单张动辄 10~60KB，
+ * 57 张就是 426KB —— 占首屏传输 63%。统一转 96px WebP(q80) 后约 27KB/20 张，
+ * 视觉无损而体积降约 80%。
+ *
+ * 安全设计：
+ *   - 原文件改名 .bak 保留，随时可回滚（不直接删除）
+ *   - 新文件先写 .webp.tmp 再 rename，避免中途失败留下半个文件
+ *   - SVG 不动（已是矢量、体积极小）
+ *   - 已是 .webp 的跳过，可重复执行（幂等）
+ *   - links.icon / icon_cache.path / icon_cache.mime 一起更新，不留断链
+ *
+ * @return array{converted:int,skipped:int,failed:int,bytesBefore:int,bytesAfter:int}
+ */
+function hp_icon_to_webp(): array
+{
+    $dir = hp_icon_dir();
+    $out = ['converted' => 0, 'skipped' => 0, 'failed' => 0, 'bytesBefore' => 0, 'bytesAfter' => 0];
+    if (!is_dir($dir) || !is_writable($dir) || !function_exists('imagewebp')) {
+        return $out;
+    }
+    // 复用抓取端的编码逻辑（含 ICO/DIB 解码），保证存量转换与新抓取结果一致
+    require_once __DIR__ . '/MetaFetcher.php';
+
+    $renames = [];   // 旧相对路径 => 新相对路径，最后统一改库
+    $PX = 96;
+
+    foreach (glob($dir . '/*') ?: [] as $f) {
+        if (!is_file($f)) {
+            continue;
+        }
+        $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['png', 'ico', 'jpg', 'jpeg'], true)) {
+            $out['skipped']++;
+            continue;
+        }
+
+        $before = (int)filesize($f);
+        $webp = \MetaFetcher::shrinkWebp((string)file_get_contents($f), $PX);
+        if ($webp === null) {
+            $out['failed']++;
+            continue;
+        }
+
+        $newPath = preg_replace('~\.' . preg_quote($ext, '~') . '$~i', '.webp', $f);
+        $tmp = $newPath . '.tmp';
+        if (@file_put_contents($tmp, $webp) === false || (int)filesize($tmp) === 0) {
+            @unlink($tmp);
+            $out['failed']++;
+            continue;
+        }
+
+        $after = (int)filesize($tmp);
+        // 转出来反而更大就放弃（极小图标偶尔如此）
+        if ($after >= $before) {
+            @unlink($tmp);
+            $out['skipped']++;
+            continue;
+        }
+
+        // 目标已存在（比如之前跑过一半）：先把它挪成 .bak 再落新的
+        if (is_file($newPath)) {
+            @rename($newPath, $newPath . '.bak2');
+        }
+        if (!@rename($tmp, $newPath)) {
+            @unlink($tmp);
+            $out['failed']++;
+            continue;
+        }
+        // 原文件保留为 .bak，不删除 —— 回滚只要改回扩展名
+        @rename($f, $f . '.bak');
+
+        $out['converted']++;
+        $out['bytesBefore'] += $before;
+        $out['bytesAfter'] += $after;
+        $renames['data/icons/' . basename($f)] = 'data/icons/' . basename($newPath);
+    }
+
+    // 统一更新数据库路径（幂等：只更新还没改的）
+    if ($renames) {
+        try {
+            foreach ($renames as $old => $new) {
+                $st = db()->prepare("UPDATE links SET icon = ? WHERE icon = ?");
+                $st->execute([$new, $old]);
+                $st2 = db()->prepare("UPDATE icon_cache SET path = ?, mime = 'image/webp', bytes = ? WHERE path = ?");
+                $st2->execute([$new, (int)(@filesize(HP_ROOT . '/' . $new) ?: 0), $old]);
+            }
+        } catch (Throwable $e) {
+            // 记账失败不影响已转换的文件；下次 icon_sync 会补记
+        }
+    }
+
+    return $out;
+}

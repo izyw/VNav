@@ -412,7 +412,15 @@ function current_user_flush(): void
 
 function is_logged_in(): bool
 {
-    return current_user_id() > 0;
+    /* 前半句保留「游客零数据库读」：没有 session cookie 时 current_user_id()
+       直接返回 0，不会 session_start、不查库。
+       后半句是删除账号功能的必要护栏：旧逻辑只看 session 里有 uid 就算
+       登录，账号被管理员删掉后，对方手里的会话仍可通过 require_login()，
+       而 current_user() 查不到人 → hp_data_uid_for() 把 uid 降级成 0
+       （站点默认库），等于被删账号还能改访客看到的内容。这里回表确认账号
+       仍在，删号后旧会话当场失效。current_user() 同请求内有缓存，不额外
+       增加查询次数。 */
+    return current_user_id() > 0 && current_user() !== null;
 }
 
 /** 只有 admin 角色才算管理员。普通账号一律不是。 */
@@ -556,4 +564,20 @@ function setting_set(string $key, string $value, ?int $uid = null): bool
     $st->execute([$uid, $key, $value]);
     settings_flush();
     return true;
+}
+
+/* ---------- 站点运行模式 ----------
+   单人模式 single：一个人部署、所有人只读、只有站长能登录、隐藏链接回归。
+   多人模式 multi（缺省）：允许注册、每个账号一份数据、隐藏链接功能下线。
+   缺省值取 multi —— 老站点读不到这个键时行为完全不变，
+   只有站长在后台主动切到 single 才改变站点形态，升级不会误伤。 */
+function hp_site_mode(): string
+{
+    $m = setting('site_mode', 'multi');
+    return $m === 'single' ? 'single' : 'multi';
+}
+
+function hp_single_mode(): bool
+{
+    return hp_site_mode() === 'single';
 }
