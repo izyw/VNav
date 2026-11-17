@@ -205,7 +205,7 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=45">
+<link rel="stylesheet" href="assets/app.css?v=49">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
@@ -624,7 +624,11 @@ hp_log_visit(false, '/');
       <p class="empty-sub"><?= $__isAdmin ? '按 Ctrl+V 粘贴任意网址，或者进「管理」页添加。' : '登录后即可添加你的常用站点。' ?></p>
       <?php /* 普通账号进不了后台，所以这里不能指 admin.php（会 403）。
                登录后回到首页，用顶栏的编辑按钮或 Ctrl+V 添加。 */ ?>
-      <a class="btn-primary" href="<?= $__isAdmin ? './' : 'login.php' ?>"><?= $__isAdmin ? '去添加' : '登录开始' ?></a>
+      <?php if ($__isAdmin): ?>
+        <a class="btn-primary" href="./">去添加</a>
+      <?php else: /* 游客走顶栏那套快捷登录浮层，不再跳完整登录页 */ ?>
+        <button type="button" class="btn-primary" id="emptyLoginBtn">登录开始</button>
+      <?php endif; ?>
     </div>
   <?php else: ?>
 
@@ -844,8 +848,8 @@ hp_log_visit(false, '/');
 </div>
 
 <!-- ============ 登录浮层（游客） ============
-     右上角「登录」不再跳 login.php，改为在这里输账号密码。
-     注册 / 完整登录页的入口留在卡片底部，渐进式验证码流程仍由 login.php 承载。
+     右上角「登录」和空态「登录开始」都走这里，不再跳完整登录页。
+     注册入口留在卡片底部；渐进式验证码图片仍由 login.php 承载。
      必须放在 is-admin 条件块之外 —— 游客才用得到它。 -->
 <div class="paste-scrim" id="loginScrim" hidden></div>
 <div class="paste-box login-box" id="loginBox" role="dialog" aria-modal="true" aria-labelledby="loginTitle" hidden>
@@ -879,7 +883,7 @@ hp_log_visit(false, '/');
         <span class="spinner" hidden aria-hidden="true"></span>
       </button>
     </div>
-    <p class="login-foot">还没有账号？<a href="login.php?mode=register">注册一个</a>　·　<a href="login.php">完整登录页</a></p>
+    <p class="login-foot">还没有账号？<a href="login.php?mode=register">注册一个</a></p>
   </form>
 </div>
 
@@ -1093,9 +1097,9 @@ hp_log_visit(false, '/');
      游客没有服务端身份，但 guest.js 要负责把本地沙盒画出来、
      app.js 要挂编辑模式与提示条 —— 少一个，这类页面就是只读的。 -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/ui.js?v=47" defer></script>
+<script src="assets/ui.js?v=48" defer></script>
 <script src="assets/guest.js?v=53" defer></script>
-<script src="assets/app.js?v=48" defer></script>
+<script src="assets/app.js?v=49" defer></script>
 
 </body>
 </html>

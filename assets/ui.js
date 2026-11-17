@@ -644,6 +644,8 @@
     };
 
     toggle.addEventListener('click', open);
+    /* 空态的「登录开始」也走这个浮层 —— 不再跳完整登录页 */
+    document.getElementById('emptyLoginBtn')?.addEventListener('click', () => toggle.click());
     document.getElementById('loginClose')?.addEventListener('click', close);
     document.getElementById('loginCancel')?.addEventListener('click', close);
     scrim.addEventListener('click', close);

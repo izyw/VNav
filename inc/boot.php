@@ -288,15 +288,33 @@ function session_boot(): void
     global $CONFIG;
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    /* 登录态保留 30 天。cookie 过期时间和服务端 GC 必须一起改：
+       只改前者，会话文件会在默认 24 分钟后被清掉，浏览器还拿着没过期的
+       cookie，却已经掉登录 —— 比原来的会话 cookie 更让人困惑。 */
+    $ttl = 30 * 86400;
+    ini_set('session.gc_maxlifetime', (string)$ttl);
     session_name(HP_SESSION_NAME);
     session_set_cookie_params([
-        'lifetime' => 0,
+        'lifetime' => $ttl,
         'path'     => '/',
         'httponly' => true,
         'secure'   => $secure,
         'samesite' => 'Lax',
     ]);
     session_start();
+
+    /* 老会话也续期：session_start() 不一定重发 cookie，主动写一次带
+       30 天过期时间的同名 cookie，已在登录态的人不用重新登录就吃到新策略。
+       只在真登录时写，游客不会凭空多一个 Set-Cookie 响应头。 */
+    if (!empty($_SESSION['uid']) && !headers_sent()) {
+        setcookie(HP_SESSION_NAME, session_id(), [
+            'expires'  => time() + $ttl,
+            'path'     => '/',
+            'httponly' => true,
+            'secure'   => $secure,
+            'samesite' => 'Lax',
+        ]);
+    }
 }
 
 /* ---------- 账号与角色 ----------

@@ -1750,6 +1750,51 @@ body.is-editing .link { cursor: grab; }
    给个视觉提示：鼠标悬停时不再有「可点击」的上浮感 */
 body.is-editing .link:hover { transform: none; }
 
+/* 编辑态卡片抖动：像 iOS 主屏长按那样，所有卡片轻轻浮起来持续微抖。
+   抖动挂在 .link 而不是外层 .link-item —— 拖动排序的 FLIP 补偿动画
+   （app.js 的 flipAround）打在 .link-item 上，两层分开才不会抢同一个
+   transform：外层负责「滑过去」，内层负责「抖」。
+   尊重 prefers-reduced-motion：系统要求减少动态效果时不抖。 */
+@keyframes vnavJiggle {
+  0%, 100% { transform: translate(-1px, -3px) rotate(-.7deg); }
+  50%      { transform: translate(1px, -3px) rotate(.7deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /*  specificity 要比皮肤的 body.hp .link 高一级，否则浮起阴影被皮肤盖掉；
+     但低过 home.css 的选中态规则，选中卡片的光晕仍然赢。 */
+  body.is-editing .links .link {
+    animation: vnavJiggle .24s ease-in-out infinite;
+    box-shadow: 0 9px 20px -14px rgba(0, 0, 0, .45);
+  }
+  /* 相邻卡片错开相位，整屏才像各自浮动，而不是排队做操 */
+  body.is-editing .link-item:nth-child(3n+2) .link { animation-delay: -.08s; }
+  body.is-editing .link-item:nth-child(3n+3) .link { animation-delay: -.16s; }
+}
+/* 正被拎起来的那张停抖，把它自己的 scale + 深阴影还回去 */
+body.is-editing .link-item.is-dragging .link { animation: none; }
+
+/* 编辑态关掉卡片入场动画。拖拽时 DOM 会被真挪动，那一下会让 .link-item
+   的 itemIn / atRise 重新播一遍；CSS animation 的优先级高于内联样式，
+   会把「钉住卡片跟指针走」的 transform 吃掉 —— 实测表现为跨位后卡片
+   突然跟不上手。编辑态本来就是稳定状态，不该再播入场动画。 */
+body.is-editing .link-item { animation: none !important; }
+
+/* 侧栏分组跟着一起抖。侧栏项在 atlas / frame 里各有自己的虚线框阴影，
+   这里只动 transform —— 别碰 box-shadow，那条 inset 虚线是编辑态的承诺。 */
+@keyframes vnavNavJiggle {
+  0%, 100% { transform: translate(-.5px, -2px) rotate(-.45deg); }
+  50%      { transform: translate(.5px, -2px) rotate(.45deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  body.is-editing .gnav--side .gnav-item {
+    animation: vnavNavJiggle .28s ease-in-out infinite;
+  }
+  body.is-editing .gnav--side .gnav-item:nth-child(3n+2) { animation-delay: -.09s; }
+  body.is-editing .gnav--side .gnav-item:nth-child(3n+3) { animation-delay: -.18s; }
+}
+/* 被拎起来的那项停抖，让内联 transform 接管视觉跟随 */
+body.is-editing .gnav-item.is-nav-dragging { animation: none; }
+
 /* 编辑态：所有卡片边框改虚线。
    实线是「成品」的语言，虚线是「草图」的语言 —— 整页退成虚线之后，
    一眼就知道这些卡片现在都是可以被拎起来、被勾选的，而不是可点开的。

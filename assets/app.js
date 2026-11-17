@@ -1210,6 +1210,12 @@
 
     const startX = e.clientX;
     const startY = e.clientY;
+    /* 起拖时指针抓住卡片的位置。拖动期间 DOM 只负责「让位 + 落点」，
+       卡片本体用 transform 钉在指针下 —— 这就是 iOS 拖图标不跳的手感。 */
+    const liRect = li.getBoundingClientRect();
+    const grabDX = startX - liRect.left;
+    const grabDY = startY - liRect.top;
+    let followTX = 0, followTY = 0;   // 当前施加在 li 上的视觉位移
     let started = false;   // 是否已经越过阈值、真正进入拖动
     let moved = false;
 
@@ -1330,6 +1336,8 @@
     const beginDrag = () => {
       started = true;
       dragEl = li;
+      // 上一次松手若还留着落地过渡，先清掉，否则起拖头几帧会「黏」
+      li.style.transition = '';
       li.classList.add('is-dragging');
       /* noScroll=true：拖起来的瞬间绝不能滚页面。
          selectItem 默认会 scrollIntoView，触摸端这会立刻把手势判给滚屏
@@ -1339,6 +1347,21 @@
       // 一旦真的拖起来，就标记成"待吞点击"状态
       __suppressClickUntil = Date.now() + 400;
       takeSnapshot();
+    };
+
+    /* 被拖卡片视觉上始终贴着指针：DOM 里它已经被挪到目标槽位（让位 +
+       落点都由那次挪动完成），这里用 transform 把它拉回手指底下。
+       iOS 主屏拖图标就是这个观感 —— 指头底下的图标不跳，其它图标空出位置，
+       松手才落进去。li 的 rect 含已施加的 transform，先减掉上次位移
+       才是它此刻的真实槽位，不然补偿会逐帧累积、卡片越飘越远。 */
+    const followPointer = (x, y) => {
+      if (!started) return;
+      const r = li.getBoundingClientRect();
+      const slotLeft = r.left - followTX;
+      const slotTop  = r.top  - followTY;
+      followTX = (x - grabDX) - slotLeft;
+      followTY = (y - grabDY) - slotTop;
+      li.style.transform = `translate(${followTX}px, ${followTY}px)`;
     };
 
     /** 按指针位置把 li 挪到正确的空档里去（可以跨组） */
@@ -1427,7 +1450,10 @@
       const before = window.scrollY;
       window.scrollBy(0, step);
       // 滚动了就重新算一次落点，否则卡片不会跟着新的可见区域走
-      if (window.scrollY !== before) placeCard(lastX, lastY);
+      if (window.scrollY !== before) {
+        placeCard(lastX, lastY);
+        followPointer(lastX, lastY);  // 页面滚了，槽位跟着变，重钉一次
+      }
       autoScrollRaf = requestAnimationFrame(tickAutoScroll);
     };
 
@@ -1489,6 +1515,7 @@
       // 防止拖动时选中文字
       if (ev.cancelable) ev.preventDefault();
       placeCard(ev.clientX, ev.clientY);
+      followPointer(ev.clientX, ev.clientY);
       kickAutoScroll(ev.clientX, ev.clientY);
     };
 
@@ -1513,6 +1540,14 @@
       __suppressClickUntil = Date.now() + 400;
 
       li.classList.remove('is-dragging');
+      /* 从指针位置平滑落进 DOM 槽位：清掉 transform，卡片回到网格里的
+         真实位置。短过渡让松手不像瞬移；结束立刻撤掉，免得干扰后续 FLIP。 */
+      if (followTX || followTY) {
+        li.style.transition = 'transform .18s cubic-bezier(.22,.61,.36,1)';
+        li.style.transform = '';
+        followTX = followTY = 0;
+        setTimeout(() => { li.style.transition = ''; }, 200);
+      }
 
       /* 落在侧栏的分组名上：整张卡归到那一组，追加到该组末尾。
          这里只改 DOM —— 保存交给下面那套「逐组比对」，
@@ -1559,6 +1594,9 @@
       document.removeEventListener('pointercancel', onCancel);
       document.body.classList.remove('is-dragging');
       li.classList.remove('is-dragging');
+      li.style.transition = '';
+      li.style.transform = '';
+      followTX = followTY = 0;
       setNavHover(null);
       seizeGesture(false);
       // 取消：逐组按记下的顺序还原，别把半拉子的排列留在页面上。
@@ -2094,6 +2132,7 @@
     let el = null;            // 正在拖的那一项
     let started = false;
     let startX = 0, startY = 0;
+    let grabDY = 0, followTY = 0;   // 视觉跟随：指针在项内的偏移 / 当前位移
     let holdTimer = 0;
     let suppressUntil = 0;    // 吞掉松手那一发 click，避免跳锚点
     let snap = [];            // 落点用起手/重排后的矩形快照，不实时读
@@ -2172,6 +2211,16 @@
       takeSnap(); // DOM 真挪过了，重拍一次，后续落点才准
     };
 
+    /* 和主区卡片同一套：DOM 只管让位与落点，项本体用 transform 钉在
+       指针下。抖动动画在 .is-nav-dragging 上被关掉，内联 transform 才接管。 */
+    const followNav = y => {
+      if (!started || !el) return;
+      const r = el.getBoundingClientRect();
+      const slotTop = r.top - followTY;
+      followTY = (y - grabDY) - slotTop;
+      el.style.transform = `translateY(${followTY}px)`;
+    };
+
     const begin = () => {
       started = true;
       el.classList.add('is-nav-dragging');
@@ -2190,6 +2239,13 @@
       document.body.classList.remove('is-drag-nav');
       el?.classList.remove('is-nav-dragging');
       el?.removeAttribute('draggable');
+      /* 落地：清掉 transform，项回到列表里的真实位置 */
+      if (el?.style.transform) {
+        el.style.transition = 'transform .18s cubic-bezier(.22,.61,.36,1)';
+        el.style.transform = '';
+        followTY = 0;
+        setTimeout(() => { if (el) el.style.transition = ''; }, 200);
+      }
     };
 
     const onMove = ev => {
@@ -2205,6 +2261,7 @@
       }
       if (ev.cancelable) ev.preventDefault();
       place(ev.clientX, ev.clientY);
+      followNav(ev.clientY);
     };
 
     const onUp = async () => {
@@ -2249,6 +2306,10 @@
       el = item;
       started = false;
       startX = e.clientX; startY = e.clientY;
+      /* 一维表只跟 Y：记下指针抓在项内的位置，拖动时把项钉在指针下 */
+      grabDY = startY - item.getBoundingClientRect().top;
+      followTY = 0;
+      item.style.transition = '';
       beforeIds = idleIds();
       snap = [];
 
