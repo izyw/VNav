@@ -75,7 +75,6 @@ $stL->execute([$AU]);
 $links = $stL->fetchAll();
 
 $totalLinks = count($links);
-$totalHits  = array_sum(array_map(fn($r) => (int)$r['hits'], $links));
 $totalHidden = count(array_filter($links, fn($r) => (int)($r['hidden'] ?? 0) === 1));
 
 // 后台访问也记一笔（is_admin=1），前台统计默认把它排除，但「谁进过后台」有据可查
@@ -303,8 +302,8 @@ if ($tab === 'upgrade' || $tab === 'security') {
           'users'     => ['用户管理', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'],
           'security'  => ['安全控制', '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'],
           'upgrade'   => ['系统升级', '<path d="M12 20V8"/><path d="M7 13l5-5 5 5"/><path d="M4 20h16"/>'],
-          'changelog' => ['更新日志', '<path d="M6 3h9l4 4v14H6z"/><path d="M9 9h6M9 13h6M9 17h4"/>'],
           'mode'      => ['模式切换', '<path d="M8 3 4 7l4 4"/><path d="M4 7h10a6 6 0 0 1 6 6"/><path d="M16 21l4-4-4-4"/><path d="M20 17H10a6 6 0 0 1-6-6"/>'],
+          'changelog' => ['更新日志', '<path d="M6 3h9l4 4v14H6z"/><path d="M9 9h6M9 13h6M9 17h4"/>'],
           'help'      => ['使用说明', '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.6 2.4c-.7.35-1.1.9-1.1 1.8"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'],
       ];
       if ($__singleMode) unset($tabs['users']);
@@ -346,10 +345,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
       <div class="adm-stat">
         <span class="adm-stat-n"><?= $totalLinks ?></span>
         <span class="adm-stat-l">个链接</span>
-      </div>
-      <div class="adm-stat">
-        <span class="adm-stat-n"><?= (int)$totalHits ?></span>
-        <span class="adm-stat-l">次点击</span>
       </div>
       <?php if ($__singleMode && $totalHidden > 0): ?>
         <div class="adm-stat">
@@ -1588,17 +1583,12 @@ if ($tab === 'upgrade' || $tab === 'security') {
             <span class="btn-text">补抓缺失图标</span>
             <span class="spinner" hidden aria-hidden="true"></span>
           </button>
-          <button class="btn-ghost" type="button" id="iconWebp">
-            <span class="btn-text">转为 WebP</span>
-            <span class="spinner" hidden aria-hidden="true"></span>
-          </button>
           <button class="btn-ghost" type="button" id="iconGc">清理无主文件</button>
           <button class="btn-danger" type="button" id="iconPurge">清空缓存</button>
         </div>
 
         <ul class="adm-tips">
-          <li>「转为 WebP」把位图图标压成高清 WebP（体积约降 80%，首屏更省流量）。原文件留 <code>.bak</code> 备份，可随时改回扩展名回滚；可反复点，不会重复转换。</li>
-          <li>「补抓缺失图标」一次最多处理 12 条，可反复点——慢是因为要逐个访问对方站点，不是本站的问题。</li>
+          <li>「补抓缺失图标」一次最多处理 12 条，可反复点——慢是因为要逐个访问对方站点，不是本站的问题。抓取到的位图会自动压成 WebP（体积约降 80%），优化前留下的旧 png/ico 也会顺带一并转换，无需单独操作。</li>
           <li>「清理无主文件」只删没有任何链接在用的图；删完会把对应链接的图标重置为自动识别，不会留下破图空框。</li>
           <li>清空缓存<strong>不会</strong>删掉链接本身，下次打开主页会自动重新抓取，只是第一次会慢一点。</li>
         </ul>
@@ -1968,6 +1958,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=27" defer></script>
+<script src="assets/admin.js?v=28" defer></script>
 </body>
 </html>

@@ -35,6 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
     $user  = trim($_POST['user'] ?? 'admin');
     $pass  = (string)($_POST['pass'] ?? '');
     $title = trim($_POST['site_title'] ?? 'Vnav');
+    // 单人 / 多人模式：安装时就得选，默认多人（与老版本行为一致）。
+    $mode  = (string)($_POST['site_mode'] ?? 'multi');
+    if ($mode !== 'single' && $mode !== 'multi') {
+        $mode = 'multi';
+    }
 
     if ($user === '' || strlen($pass) < 8) {
         $err = '账号不能为空，密码至少 8 位。';
@@ -75,6 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
                 $st = $pdo->prepare('UPDATE settings SET v = ? WHERE k = ?');
                 $st->execute([$title, 'site_title']);
             }
+            // 模式选择覆盖 hp_seed_settings 写入的默认值。
+            // 用 INSERT OR REPLACE 而非只 UPDATE：老库升级路径可能没有这一行。
+            $pdo->prepare('INSERT INTO settings(user_id, k, v) VALUES(0, ?, ?)
+                           ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v')
+                ->execute(['site_mode', $mode]);
 
             $tpl = file_get_contents(__DIR__ . '/inc/config.sample.php');
             $tpl = str_replace(
@@ -107,7 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
                 date('Y-m-d H:i:s'),
             ]);
 
-            $msg = '安装完成！请立刻删除 install.php，然后进入主页。'
+            $msg = '安装完成！当前为<strong>' . ($mode === 'single' ? '单人模式' : '多人模式')
+                 . '</strong>（可在后台「模式切换」里随时改）。请立刻删除 install.php，然后进入主页。'
                  . ($seedMsg !== '' ? ' ' . $seedMsg : '');
         } catch (Throwable $e) {
             $err = '安装失败：' . $e->getMessage();
@@ -143,6 +154,15 @@ button:hover{filter:brightness(1.06)}
 .bad{background:#3a1420;color:#ff9db0;border:1px solid #6b2334}
 code{background:#0e0b14;padding:2px 6px;border-radius:5px;font-size:13px}
 a{color:var(--accent)}
+.mode-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.mode-opt{position:relative;display:block;padding:12px 12px 12px 14px;border:1px solid var(--line);
+  border-radius:12px;cursor:pointer;background:#171320;transition:border-color .15s,background .15s}
+.mode-opt:hover{border-color:#6b5c8f}
+.mode-opt input{position:absolute;opacity:0;width:1px;min-height:1px}
+.mode-opt:has(input:checked){border-color:var(--accent);background:#241d12}
+.mode-opt b{display:block;font-size:14px;color:var(--text);margin-bottom:3px}
+.mode-opt small{display:block;font-size:11.5px;line-height:1.45;color:var(--dim)}
+.mode-opt input:focus-visible~b{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -162,6 +182,19 @@ a{color:var(--accent)}
   <?php else: ?>
     <?php if ($err): ?><div class="bad"><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
     <form method="post">
+      <label>使用模式</label>
+      <div class="mode-opts" role="radiogroup" aria-label="使用模式">
+        <label class="mode-opt">
+          <input type="radio" name="site_mode" value="multi" checked>
+          <b>多人模式</b>
+          <small>开放注册，每人一个账号，链接各自独立</small>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="site_mode" value="single">
+          <b>单人模式</b>
+          <small>自己用：不开放注册、链接免登录可见</small>
+        </label>
+      </div>
       <label for="site_title">主页标题</label>
       <input id="site_title" name="site_title" value="Vnav">
       <label for="user">管理员账号</label>

@@ -1056,6 +1056,11 @@ try {
             @set_time_limit(120);
             $limit = max(1, min(30, (int)($body['limit'] ?? 12)));
             $r = hp_icon_refill($limit);
+            /* 压缩内置到抓取流程：抓取端（MetaFetcher）本来就会把新图标存成
+               96px WebP，这里再跑一次存量转换，把优化前留下的旧 png/ico 一起
+               收掉。这样页面上不再需要单独的「转为 WebP」按钮。
+               转换幂等、SVG 与已是 WebP 的直接跳过，跑一次开销很小。 */
+            $r['webp'] = hp_icon_to_webp();
             json_ok(['result' => $r, 'stats' => hp_icon_stats()]);
         }
         case 'icon_webp': {

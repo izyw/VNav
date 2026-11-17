@@ -259,6 +259,9 @@ function hp_seed_settings(PDO $pdo): void
         // 装完看到的就是品牌名，不必再进后台改一次。
         'site_title'    => 'Vnav',
         'site_subtitle' => '把每天要去的地方，放在一个地方',
+        // 单人 / 多人模式。默认 multi（保持老的开放注册行为）；
+        // 安装向导会让用户显式选一次，这里的值只作为「没走向导/老库升级」的兜底。
+        'site_mode'     => 'multi',     // multi | single
         'layout'        => 'card',      // card | menu | compact | grid
         'theme'         => 'atlas',     // 见 inc/skins.php
         'accent'        => 'amber',

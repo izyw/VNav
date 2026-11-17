@@ -766,14 +766,13 @@
     $('#iconRefill').addEventListener('click', e =>
       runIcon(e.currentTarget, 'icon_refill', { limit: 12 }, r => {
         const x = r.result || {};
-        return `抓取完成：成功 ${x.ok || 0}，失败 ${x.bad || 0}${x.left ? '，还剩 ' + x.left + ' 条' : ''}`;
-      })
-    );
-
-    $('#iconWebp').addEventListener('click', e =>
-      runIcon(e.currentTarget, 'icon_webp', {}, r => {
-        const x = r.result || {};
-        return `转换完成：${x.converted || 0} 张已转 WebP，省 ${(((x.bytesBefore || 0) - (x.bytesAfter || 0)) / 1024).toFixed(1)} KB${x.failed ? '，' + x.failed + ' 张跳过' : ''}`;
+        let msg = `抓取完成：成功 ${x.ok || 0}，失败 ${x.bad || 0}${x.left ? '，还剩 ' + x.left + ' 条' : ''}`;
+        // 压缩已内置到抓取流程，把这一步的结果一并告诉用户
+        const w = x.webp;
+        if (w && w.converted) {
+          msg += `；顺带压缩 ${w.converted} 张旧图标，省 ${(((w.bytesBefore || 0) - (w.bytesAfter || 0)) / 1024).toFixed(1)} KB`;
+        }
+        return msg;
       })
     );
 
