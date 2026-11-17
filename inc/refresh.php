@@ -20,6 +20,7 @@
  * OFFSET 会因此错位跳过几条，id 游标不会。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /**
  * 分批刷新元信息。

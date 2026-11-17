@@ -16,6 +16,7 @@
  * 用旧版本覆盖新版本，那个场景下版本号是倒退的，拦下来反而碍事。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /* 读当前版本用 boot.php 里的 hp_version()，这里不再重复定义。
    曾经这里也写了一份，而所有入口都是「先 require boot.php、再 require
@@ -179,6 +180,25 @@ function hp_upgrade_apply(string $zipPath, string $prefix = ''): array
             continue;
         }
         $dst = $snap . '/' . str_replace('/', '__', $rel);
+
+        /* 数据库必须走 VACUUM INTO，不能用 copy()：
+           WAL 模式下 copy() 只拷主文件，还在 home.db-wal 里没有 checkpoint
+           的事务会丢 —— 回滚出来的库比升级前更旧，且这种"旧"没有任何报错，
+           用户只会觉得"回滚把最近的改动吃了"。
+           VACUUM INTO 生成的是事务一致的完整快照（含 WAL 里已提交的内容）。 */
+        if (str_ends_with($src, '.db')) {
+            try {
+                $bpdo = new PDO('sqlite:' . $src);
+                $bpdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $bpdo->exec('VACUUM INTO ' . $bpdo->quote($dst));
+                $bpdo = null;
+                continue;
+            } catch (Throwable $e) {
+                // 退化为 copy：至少留一份，不能让升级因为备份方式失败而中断
+                error_log('[vnav] VACUUM INTO 失败，退化为 copy：' . $e->getMessage());
+            }
+        }
+
         if (!@copy($src, $dst)) {
             throw new RuntimeException('备份失败：' . $rel . '（检查 data/ 与 inc/ 是否可写）');
         }

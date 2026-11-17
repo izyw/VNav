@@ -10,6 +10,7 @@
  * 绕过入口直接请求 api.php 一样能改。所以每个写接口都要自己判归属。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /** 用户名规则：3~24 位，字母 / 数字 / 下划线 / 中文 */
 function hp_username_valid(string $u): bool

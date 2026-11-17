@@ -17,6 +17,7 @@
  *   也不会因为 session 被清掉而让用户看到「验证码已失效」。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /** 验证码存活秒数。够慢手输完，又不至于挂着不用。 */
 const HP_CAPTCHA_TTL = 300;

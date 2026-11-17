@@ -25,6 +25,7 @@
  *   5. 每 2 万行提交一次事务。逐行提交在 SQLite 上慢两个数量级。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 const HP_GEO_SOURCE  = 'https://download.db-ip.com/free/';
 const HP_GEO_LICENSE = 'DB-IP Lite (CC BY 4.0)';

@@ -34,10 +34,14 @@ if (is_logged_in()) {
 if (isset($_GET['captcha'])) {
     $tok = preg_replace('~[^a-f0-9]~', '', (string)$_GET['captcha']) ?? '';
     if ($tok !== '') {
-        $st = db()->prepare('SELECT code FROM captcha WHERE token = ?');
+        $st = db()->prepare('SELECT code, at FROM captcha WHERE token = ?');
         $st->execute([$tok]);
-        $code = (string)($st->fetchColumn() ?: '');
-        if ($code !== '') {
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        $code = (string)($row['code'] ?? '');
+        /* 渲染端也要看 TTL。只看「行在不在」的话，用户在登录页停留超过
+           5 分钟会看到一张完全正常的图，输对了却报「验证码不正确」——
+           而 check 无论对错都会删 token，那张图从此永久失效。 */
+        if ($code !== '' && (time() - (int)($row['at'] ?? 0)) <= HP_CAPTCHA_TTL) {
             hp_captcha_render($code);
         }
     }
@@ -96,9 +100,15 @@ $captchaOn = hp_captcha_available() && setting('login_captcha', '1') === '1';
 $needCaptcha = $captchaOn && $fails >= 1;
 
 // 准备一张验证码给页面用（只在需要时生成，避免无谓写库）
+/* 首屏才发码；POST 路径由失败分支（下方 :209-212）负责重发。
+   原先顶栏与失败分支各 mint 一张，前者随即被覆盖 —— 纯浪费。
+   发放也套限流（与 api.php 的 captcha_new 同一个桶）：否则 6 个 GET
+   就能把 captcha 表刷满。命中限流就不发，交给下游两态处理。 */
 $capToken = '';
-if ($needCaptcha && $wait === 0) {
-    [$capToken] = hp_captcha_new();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $needCaptcha && $wait === 0) {
+    if (hp_rate_allow('cap:' . $ip, 6, 10)) {
+        [$capToken] = hp_captcha_new();
+    }
 }
 
 /* 注册与登录共用一个表单，靠 mode 区分。
@@ -111,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
     $ok = false;
     $dest = './';
     $newUserId = 0;
+    $pendingReject = false;
 
     /* 验证码先验，注册也走这一套 —— 否则注册就是一个不需要任何门槛的
        写入口，被脚本刷一遍就是几千个空账号。 */
@@ -135,6 +146,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
             $err = '两次输入的密码不一致。';
         } elseif (hp_username_taken($u)) {
             $err = '这个用户名已经被占用了。';
+        } elseif (!hp_rate_allow('reg:' . $ip, 5, 3600)) {
+            /* 注册是唯一不需要登录的写入口，而且每成功一次就多一行 users
+               加一整套默认数据副本 —— 脚本刷一遍就是几千个空账号。
+               放在「用户名被占用」之后：只有真的要建号才消耗配额，
+               正常用户输错用户名重试几次不会被挡。 */
+            $err = '注册过于频繁，请稍后再试。';
         } else {
             try {
                 $pdo->prepare('INSERT INTO users(username, pass_hash, role, created_at) VALUES(?, ?, ?, ?)')
@@ -149,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
         }
     } else {
         /* ---------- 登录 ---------- */
-        $st = $pdo->prepare('SELECT id, username, pass_hash, role FROM users WHERE username = ?');
+        $st = $pdo->prepare('SELECT id, username, pass_hash, role, auth_epoch FROM users WHERE username = ?');
         $st->execute([$u]);
         $acc = $st->fetch();
         if ($acc && password_verify($p, (string)$acc['pass_hash'])) {
@@ -177,38 +194,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
         $_SESSION['uid']  = $newUserId;
         $_SESSION['csrf'] = bin2hex(random_bytes(20));
         $_SESSION['logged_at'] = time();
+        // 会话版本：改密 / 重置 / 切模式会把它 +1，旧会话随即失效
+        $_SESSION['auth_epoch'] = (int)($acc['auth_epoch'] ?? 0);
         current_user_flush();
         header('Location: ' . $dest);
         exit;
     }
 
-    // 失败：计数 +1（窗口过期就重置成 1）
-    $fails = ((time() - (int)$row['last_at']) > $LOCK_WINDOW) ? 1 : ($fails + 1);
-    $pdo->prepare(
-        'INSERT INTO login_attempts(ip, fails, last_at) VALUES(?, ?, ?)
-         ON CONFLICT(ip) DO UPDATE SET fails = excluded.fails, last_at = excluded.last_at'
-    )->execute([$ip, $fails, time()]);
-
-    if ($fails >= $LOCK_LIMIT) {
-        // 两个维度一起锁：换 IP 也还得面对账号那把锁
-        $lockSet($lockIp, $LOCK_TIME, 'fails=' . $fails);
-        $lockSet($lockUsr, $LOCK_TIME, 'fails=' . $fails);
-        $err = '连续失败 ' . $LOCK_LIMIT . ' 次，已锁定 15 分钟。';
-        $needCaptcha = false;
-        $capToken = '';
-    } else {
-        $left = $LOCK_LIMIT - $fails;
-        // 注册/登录各自的错误文案已经设好了，这里只在没设时补默认
-        if ($err === '') {
-            $err = '账号或密码不正确。';
-        }
-        if ($left > 0 && $left <= 3) {
-            $err .= "（还可尝试 {$left} 次）";
-        }
-        // 下一次请求必然是「已错过 1 次」的状态，所以这里就要备好新码
-        $needCaptcha = $captchaOn;
-        if ($needCaptcha) {
+    /* 验证码没过（无论"没提交"还是"提交了假 token"）：
+       这是「验证码这一关没过」，不是「口令错了」。
+       不能计数、更不能写 usr: 锁 —— 否则攻击者用同一个 POST 连发 5 次
+       （user=admin&pass=x&captcha=y）就能把站长跨 IP 锁死 15 分钟，
+       而且他不需要打开登录页、不需要取 token、不需要有效 token。
+       账号维度只允许由「口令校验失败」推动。 */
+    if ($needCaptcha && !$capOk) {
+        $err = ($_POST['captcha_token'] ?? '') === ''
+            ? '验证码获取失败，请稍后刷新重试。'
+            : '验证码不正确。';
+        $pendingReject = true;
+        /* 重发一张新码：hp_captcha_check() 无论对错都会删掉旧的，
+           不重发的话页面渲染的是一张已经失效的图（点了也没用）。
+           受 cap: 限流约束，命中就不发（页面显示"稍后重试"）。 */
+        if (hp_rate_allow('cap:' . $ip, 6, 10)) {
             [$capToken] = hp_captcha_new();
+        }
+    }
+
+    if (!$pendingReject) {
+        // 失败：计数 +1（窗口过期就重置成 1）
+        $fails = ((time() - (int)$row['last_at']) > $LOCK_WINDOW) ? 1 : ($fails + 1);
+        $pdo->prepare(
+            'INSERT INTO login_attempts(ip, fails, last_at) VALUES(?, ?, ?)
+             ON CONFLICT(ip) DO UPDATE SET fails = excluded.fails, last_at = excluded.last_at'
+        )->execute([$ip, $fails, time()]);
+
+        /* 这张表没有时间型 GC（只在登录成功时删自己那一行），
+           从未成功登录过的 IP 会永久留行。概率性清理，与 rate_limits 同一个思路。 */
+        if (random_int(1, 50) === 1) {
+            $pdo->prepare('DELETE FROM login_attempts WHERE last_at < ?')->execute([time() - 86400]);
+            $pdo->prepare('DELETE FROM login_locks WHERE until < ?')->execute([time()]);
+        }
+
+        if ($fails >= $LOCK_LIMIT) {
+            // 两个维度一起锁：换 IP 也还得面对账号那把锁
+            $lockSet($lockIp, $LOCK_TIME, 'fails=' . $fails);
+            $lockSet($lockUsr, $LOCK_TIME, 'fails=' . $fails);
+            $err = '连续失败 ' . $LOCK_LIMIT . ' 次，已锁定 15 分钟。';
+            $needCaptcha = false;
+            $capToken = '';
+        } else {
+            $left = $LOCK_LIMIT - $fails;
+            // 注册/登录各自的错误文案已经设好了，这里只在没设时补默认
+            if ($err === '') {
+                $err = '账号或密码不正确。';
+            }
+            if ($left > 0 && $left <= 3) {
+                $err .= "（还可尝试 {$left} 次）";
+            }
+            // 下一次请求必然是「已错过 1 次」的状态，所以这里就要备好新码
+            $needCaptcha = $captchaOn;
+            if ($needCaptcha) {
+                [$capToken] = hp_captcha_new();
+            }
         }
     }
 }

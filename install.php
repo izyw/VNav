@@ -77,8 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$locked) {
             }
 
             if ($title !== '') {
-                $st = $pdo->prepare('UPDATE settings SET v = ? WHERE k = ?');
-                $st->execute([$title, 'site_title']);
+                /* 必须是 upsert：全新安装时 settings 表刚建好、还是空的，
+                   用 UPDATE 会命中 0 行 —— 站长填的标题被静默丢弃，
+                   装完永远显示默认值。（site_mode 那行早就是 upsert 了。） */
+                $pdo->prepare('INSERT INTO settings(user_id, k, v) VALUES(0, ?, ?)
+                               ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v')
+                    ->execute(['site_title', $title]);
             }
             // 模式选择覆盖 hp_seed_settings 写入的默认值。
             // 用 INSERT OR REPLACE 而非只 UPDATE：老库升级路径可能没有这一行。

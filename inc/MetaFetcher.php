@@ -4,6 +4,7 @@
  * 只允许 http/https，拒绝内网/回环地址（防 SSRF）。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 final class MetaFetcher
 {
@@ -13,6 +14,14 @@ final class MetaFetcher
     public function __construct(int $timeout = 6)
     {
         $this->timeout = max(2, min(20, $timeout));
+
+        /* glibc 的解析器读这个环境变量。默认对失败域名重试 4 次、每次 5 秒，
+           单条抓取能卡 20 秒以上 —— 实测境外域名解析要 3~11 秒。
+           压到 2 秒 ×1 次。Windows 的 DNS 客户端不认它（本机只是开发环境），
+           已经设过就不覆盖，别抢别人配置。 */
+        if (getenv('RES_OPTIONS') === false) {
+            @putenv('RES_OPTIONS=timeout:2 attempts:1');
+        }
     }
 
     /**
@@ -23,9 +32,13 @@ final class MetaFetcher
      * 「整个站都够不着」在结果里长得一模一样。前端要靠它决定
      * 要不要改用本机网络取到的图标。
      *
+     * @param  bool $withIcon 是否顺手把图标下载并落地。传 false 表示
+     *                        调用方已经有更好的图标（本机网络拿到的、
+     *                        或链接本来就存着），省掉这一次请求。
+     *                        注意只跳下载，HTML 该抓还是抓 —— 标题只有这里能给。
      * @return array{title:string, desc:string, icon:string, icon_kind:string, fetched:bool}
      */
-    public function fetch(string $url): array
+    public function fetch(string $url, bool $withIcon = true): array
     {
         $out = ['title' => '', 'desc' => '', 'icon' => '', 'icon_kind' => 'auto', 'fetched' => false];
 
@@ -45,12 +58,35 @@ final class MetaFetcher
         $out['title'] = $this->scrub($out['title']);
         $out['desc']  = $this->scrub($out['desc']);
 
+        if (!$withIcon) {
+            // 调用方已经有图标了：这里留空，由它自己填
+            $out['icon'] = '';
+            $out['icon_kind'] = 'auto';
+            return $out;
+        }
+
+        /* 页面都没读到，就别再试着下图标了。
+           那种站（被墙、超时）连 /favicon.ico 一样够不着，
+           这一趟只会再白等一个超时（实测 6 秒）。
+           抓不到就认，交给前端的本机图标兜底。 */
+        if (!$out['fetched']) {
+            $out['icon'] = '';
+            $out['icon_kind'] = 'auto';
+            return $out;
+        }
+
         // 图标下载并落地到本地，避免每次访问都去源站拉图
         $iconUrl = $out['icon'] !== '' ? $out['icon'] : $this->guessFavicon($finalUrl ?: $url);
-        $saved   = $iconUrl !== '' ? $this->cacheIcon($iconUrl, $host) : '';
+        $remoteUrl = null;
+        $saved   = $iconUrl !== '' ? $this->cacheIcon($iconUrl, $host, $remoteUrl) : '';
         if ($saved !== '') {
             $out['icon'] = $saved;
             $out['icon_kind'] = 'file';
+        } elseif ($remoteUrl !== null) {
+            /* SVG：本站不落盘（同源可执行风险），交给浏览器直接引用源站。
+               加载上下文都是 <img>，不执行脚本；本站 URL 里也就不存在那份文件。 */
+            $out['icon'] = $remoteUrl;
+            $out['icon_kind'] = 'remote';
         } else {
             $out['icon'] = '';
             $out['icon_kind'] = 'auto'; // 前端用字母头像兜底
@@ -277,6 +313,13 @@ final class MetaFetcher
             CURLOPT_USERAGENT       => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
             CURLOPT_ENCODING        => '',
             CURLOPT_SSL_VERIFYPEER  => true,
+            /* 响应体上限：一只恶意页面回 500 MB 就能把 PHP 内存打爆
+               （memory_limit 报 Fatal，整批刷新全挂）。2 MB 对 HTML
+               与图标都绰绰有余，超了在下载中途直接中断。 */
+            CURLOPT_NOPROGRESS       => false,
+            CURLOPT_PROGRESSFUNCTION => static function ($res, $dlTotal, $dlNow) {
+                return $dlNow > 2 * 1024 * 1024 ? 1 : 0;
+            },
             CURLOPT_SSL_VERIFYHOST  => 2,
             CURLOPT_BUFFERSIZE      => 16384,
         ], 3, $this->maxBytes);
@@ -292,7 +335,7 @@ final class MetaFetcher
     }
 
     /** 下载图标、校验类型、转成 png/ico 落盘，返回相对路径 */
-    public function cacheIcon(string $iconUrl, string $host): string
+    public function cacheIcon(string $iconUrl, string $host, ?string &$remoteUrl = null): string
     {
         // 重定向逐跳校验，且校验响应类型 —— cacheIcon 原本没有「须含 <html>」
         // 那道软限制，若不查重定向，内网图片会被落到 data/icons/ 对外可访问。
@@ -302,7 +345,7 @@ final class MetaFetcher
             CURLOPT_CONNECTTIMEOUT => 4,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
             CURLOPT_SSL_VERIFYPEER => true,
-        ], 2);
+        ], 2, 2 * 1024 * 1024);  // 图标最多 2 MB，超了直接中断下载（否则一个超大文件能把 PHP 内存吃光）
         $bin  = $r['body'];
         $code = $r['code'];
         $mime = $r['mime'];
@@ -332,6 +375,18 @@ final class MetaFetcher
             };
         }
         if ($ext === '') {
+            return '';
+        }
+
+        /* SVG 不落盘：它是同源可执行文档（内联 <script> 在 /data/icons/ 下
+           打开就会在本站源执行），而本站所有加载上下文都是 <img>（不执行脚本），
+           真正的风险是有人直接打开那个文件 URL —— 文件名可由 iconUrl 精确算出。
+           所以把原地址交回给调用方走 remote（浏览器直接引用源站图，本站不持有
+           可执行文件）；hp_remote_icon_ok 已在上一跳校验过 https + 公网域名。 */
+        if ($ext === 'svg') {
+            if ($remoteUrl !== null && hp_remote_icon_ok($iconUrl)) {
+                $remoteUrl = $iconUrl;
+            }
             return '';
         }
 
@@ -473,6 +528,124 @@ final class MetaFetcher
         return $img;
     }
 
+    /* ----------------------------------------------------------------------
+       域名解析缓存
+
+       为什么必须要有：PHP 没有 DNS 超时。gethostbynamel() 走系统解析器，
+       境内解析境外域名实测 3~11 秒，解析不出来的还会按 resolver 的重试
+       策略继续等。而一次抓取至少要解析两次 —— 入口校验一次、钉 IP 一次，
+       每跳重定向还要再来一轮。慢站点被拖到几十秒，大半是这个原因。
+
+       两层缓存：
+         · 进程内 —— 同一请求里反复调用只解析一次
+         · 文件   —— 跨请求，成功 24 小时、失败 10 分钟
+       失败也要缓存：不记下来，每次重试都要重新卡一遍。
+
+       缓存文件放 data/ 下，和数据库、图标同级，不对外可访问，
+       也不进交付包（build.php 整目录排除）。
+       ---------------------------------------------------------------------- */
+
+    /** @var array<string, array<int, string>> */
+    private static array $dnsMem = [];
+    /** @var array<string, array{ips:array<int,string>, at:int}>|null */
+    private static ?array $dnsDisk = null;
+
+    private static function dnsCacheFile(): string
+    {
+        return HP_ROOT . '/data/dns-cache.json';
+    }
+
+    private static function dnsDisk(): array
+    {
+        if (self::$dnsDisk !== null) {
+            return self::$dnsDisk;
+        }
+        self::$dnsDisk = [];
+        $f = self::dnsCacheFile();
+        if (is_file($f)) {
+            $raw = @file_get_contents($f);
+            $j = $raw !== false ? json_decode($raw, true) : null;
+            if (is_array($j)) {
+                self::$dnsDisk = $j;
+            }
+        }
+        return self::$dnsDisk;
+    }
+
+    private static function dnsRemember(string $host, array $ips): void
+    {
+        $all = self::dnsDisk();
+        $all[$host] = ['ips' => array_values($ips), 'at' => time()];
+
+        // 域名会越攒越多，超过 500 条就按时间丢掉最旧的四分之一
+        if (count($all) > 500) {
+            uasort($all, static fn($a, $b) => ((int)($a['at'] ?? 0)) <=> ((int)($b['at'] ?? 0)));
+            $all = array_slice($all, (int)(count($all) * 0.25), null, true);
+        }
+        self::$dnsDisk = $all;
+
+        $f = self::dnsCacheFile();
+        $dir = dirname($f);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+            return;
+        }
+        $json = json_encode($all, JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return;
+        }
+        /* 先写临时文件再 rename：多个 php-fpm 进程同时写时，
+           直接覆盖会让另一个进程读到半个 JSON。 */
+        $tmp = $f . '.' . getmypid() . '.tmp';
+        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
+            return;
+        }
+        if (!@rename($tmp, $f)) {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * 解析域名到 IP 列表（带缓存）。
+     * 解析失败返回空数组 —— 要不要放行由调用方决定。
+     *
+     * @return array<int, string>
+     */
+    private static function resolveIps(string $host): array
+    {
+        $host = strtolower($host);
+        if (isset(self::$dnsMem[$host])) {
+            return self::$dnsMem[$host];
+        }
+
+        $disk = self::dnsDisk();
+        if (isset($disk[$host]['ips']) && is_array($disk[$host]['ips'])) {
+            $age = time() - (int)($disk[$host]['at'] ?? 0);
+            // 成功缓存一天，失败只留十分钟：DNS 抖动过一阵就该重试
+            $ttl = $disk[$host]['ips'] ? 86400 : 600;
+            if ($age >= 0 && $age < $ttl) {
+                return self::$dnsMem[$host] = array_values(array_filter($disk[$host]['ips'], 'is_string'));
+            }
+        }
+
+        $ips = @gethostbynamel($host);
+        $ips = is_array($ips) ? array_values(array_filter($ips, 'is_string')) : [];
+        /* AAAA 必须一起取：gethostbynamel() 只返回 A 记录，纯 IPv6 站点
+           会解析成空数组，下游若 fail-open 就等于放行任意地址（含 [::1]）。
+           取不到不算失败 —— 双栈站点常见只有 A 记录。 */
+        $aaaa = @dns_get_record($host, DNS_AAAA);
+        if (is_array($aaaa)) {
+            foreach ($aaaa as $rec) {
+                $v6 = is_array($rec) ? (string)($rec['ipv6'] ?? '') : '';
+                if ($v6 !== '') {
+                    $ips[] = $v6;
+                }
+            }
+        }
+        $ips = array_values(array_unique($ips));
+        self::dnsRemember($host, $ips);
+        return self::$dnsMem[$host] = $ips;
+    }
+
     /** 拒绝回环、内网、链路本地等地址 */
     public static function isPublicUrl(string $url): bool
     {
@@ -483,23 +656,34 @@ final class MetaFetcher
         if (!in_array(strtolower($p['scheme'] ?? ''), ['http', 'https'], true)) {
             return false;
         }
-        $host = strtolower($p['host']);
+        /* URL 里的 IPv6 字面量带方括号（https://[::1]/），
+           不剥掉 filter_var 认不出来，会当成域名去解析 →
+           解析失败 → 空数组 → 直接放行。这是个真实的 SSRF 缺口。 */
+        $host = trim(strtolower($p['host']), '[]');
         if (in_array($host, ['localhost', 'localhost.localdomain'], true)) {
             return false;
         }
-        $ips = [];
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $ips[] = $host;
-        } else {
-            $a = @gethostbynamel($host);
-            if (is_array($a)) {
-                $ips = $a;
-            }
-        }
+        $ips = filter_var($host, FILTER_VALIDATE_IP)
+            ? [$host]
+            : self::resolveIps($host);
         foreach ($ips as $ip) {
+            /* IPv4-mapped IPv6（::ffff:127.0.0.1）：PHP 的 NO_RES_RANGE 对这类
+               地址不一定拦得住，先归一成 IPv4 再判 —— 否则 [::ffff:127.0.0.1]
+               就是一个能进环回的缺口。 */
+            if (preg_match('~^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$~i', $ip, $m)) {
+                $ip = $m[1];
+            }
             if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
                 return false;
             }
+        }
+        /* 解析不出来时**拒绝**（fail-closed）：放行等于让攻击者用
+           「让 DNS 解析失败」直接绕过整道校验。代价是 DNS 抖动时正常站点
+           抓不到 —— 宁可抓不到，不可放过去；失败结果只缓存 10 分钟，
+           抖过去就自动恢复。 */
+        if ($ips === []) {
+            error_log('[vnav] isPublicUrl: 域名解析为空，按内网拒绝 host=' . $host);
+            return false;
         }
         return true;
     }
@@ -555,11 +739,14 @@ final class MetaFetcher
         if (!$p || empty($p['host'])) {
             return [];
         }
-        $host = strtolower($p['host']);
+        $host = trim(strtolower($p['host']), '[]');
         if (filter_var($host, FILTER_VALIDATE_IP)) {
             return []; // 字面量 IP 已是连接目标，isPublicUrl 已校验过
         }
-        $ip = @gethostbyname($host);
+        /* 走同一份缓存：这里要是再 gethostbyname 一次，
+           同一域名一次抓取就解析两遍，慢站点又要多等一轮。 */
+        $ips = self::resolveIps($host);
+        $ip  = $ips[0] ?? '';
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
             return [];
         }
@@ -653,6 +840,13 @@ final class MetaFetcher
             CURLOPT_USERAGENT       => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
             CURLOPT_ENCODING        => '',
             CURLOPT_SSL_VERIFYPEER  => true,
+            /* 响应体上限：一只恶意页面回 500 MB 就能把 PHP 内存打爆
+               （memory_limit 报 Fatal，整批刷新全挂）。2 MB 对 HTML
+               与图标都绰绰有余，超了在下载中途直接中断。 */
+            CURLOPT_NOPROGRESS       => false,
+            CURLOPT_PROGRESSFUNCTION => static function ($res, $dlTotal, $dlNow) {
+                return $dlNow > 2 * 1024 * 1024 ? 1 : 0;
+            },
             CURLOPT_SSL_VERIFYHOST  => 2,
             CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,

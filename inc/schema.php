@@ -10,12 +10,14 @@
  * 所以那一处必须先 PRAGMA table_info 判断列是否已存在。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /** 结构版本。加字段/加表就 +1，并在 hp_migrate() 里补一段。 */
+/** v8：users 增加 auth_epoch —— 会话吊销（改密 / 重置 / 切模式后旧会话失效）。 */
 /** v7：清掉历史的 UNIQUE(url) 单列索引，URL 唯一性只按 (user_id, url) 管。 */
 /** v6：多用户（users 表 + links/groups/settings 的 user_id 归属列）。 */
 /** v5：groups 增加 icon 列（分组图标可自定义）。 */
-const HP_SCHEMA_VERSION = 7;
+const HP_SCHEMA_VERSION = 8;
 
 /**
  * 建全部表与索引。纯 DDL，幂等。
@@ -83,7 +85,8 @@ CREATE TABLE IF NOT EXISTS users (
     pass_hash   TEXT    NOT NULL,
     role        TEXT    NOT NULL DEFAULT 'user',
     created_at  TEXT    NOT NULL,
-    last_login  TEXT    NOT NULL DEFAULT ''
+    last_login  TEXT    NOT NULL DEFAULT '',
+    auth_epoch  INTEGER NOT NULL DEFAULT 0
 );
 SQL);
 
@@ -407,6 +410,18 @@ function hp_migrate(PDO $pdo): void
     }
     if (!$has) {
         $pdo->exec('ALTER TABLE links ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0');
+    }
+
+    /* 会话吊销：改密 / 重置密码 / 切站点模式时把 auth_epoch +1，
+       已发出的会话在下次请求比对时失效（见 current_user()）。
+       老库补列默认 0，且老会话读不到该键也按 0 算 —— 所以升级本身
+       不会把任何人踢下线；只有"凭据真的变了"才会。 */
+    $hasEpoch = false;
+    foreach ($pdo->query('PRAGMA table_info(users)') as $c) {
+        if (($c['name'] ?? '') === 'auth_epoch') { $hasEpoch = true; break; }
+    }
+    if (!$hasEpoch) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN auth_epoch INTEGER NOT NULL DEFAULT 0');
     }
 
     /* v3 → v4：v4 只有新表（captcha / login_locks / icon_cache），

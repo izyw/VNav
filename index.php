@@ -64,7 +64,10 @@ unset($__outTok);
 $__isAdmin = is_logged_in();   // 能编辑（登录即可）
 $__isSuper = is_admin();       // 真正的管理员：后台 / 统计 / 访问控制
 $__ip      = hp_client_ip();
-$__acl     = hp_acl_check($__ip, $__isAdmin);
+/* 第二个参数是「是否管理员」，不是「是否登录」——
+   hp_acl_check() 的语义是「管理员永远放行」，传 is_logged_in() 会让
+   任何登录用户都跳过地区限制（含切模式前就登录的僵留会话）。 */
+$__acl     = hp_acl_check($__ip, $__isSuper);
 if (!$__acl['allow']) {
     // 拦截也留一条记录，否则管理员看不到「有人被挡在外面」
     hp_log_visit(false, 'blocked');
@@ -291,9 +294,12 @@ if ($__isAdmin) {
   /* guest.js 用它认出「localStorage 里那份只是默认库副本」，避免每次登录
      误报 67 条 / 9 个分组。游客态数组为空，不花首屏体积。 */
   window.__VNAV_DEFAULT = {
-    urls: <?= json_encode(array_column($__defLinks, 'url'), JSON_UNESCAPED_SLASHES) ?>,
-    titles: <?= json_encode(array_column($__defLinks, 'title'), JSON_UNESCAPED_UNICODE) ?>,
-    groups: <?= json_encode(array_column($__defGroups, 'name'), JSON_UNESCAPED_UNICODE) ?>
+    /* JSON_HEX_TAG/AMP/APOS/QUOT 不能省：这段是内联在 <script> 里的，
+       标题里只要出现 </script> 就会提前闭合标签，后面的内容变成可执行 HTML。
+       JSON_UNESCAPED_SLASHES 会把 / 原样输出，单靠它挡不住。 */
+    urls: <?= json_encode(array_column($__defLinks, 'url'), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+    titles: <?= json_encode(array_column($__defLinks, 'title'), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+    groups: <?= json_encode(array_column($__defGroups, 'name'), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>
   };
   try {
     /* 改名迁移：存储键从 vlinks.* 换成 vnav.*。
@@ -1223,8 +1229,8 @@ if ($__isAdmin) {
      反过来的话 ui.js 缓存的 .gnav-item 引用会在重建后失效，
      分组高亮和点击滚动全部失灵（实测坑）。三个都 defer，按文档顺序执行。 -->
 <script src="assets/guest.js?v=57" defer></script>
-<script src="assets/ui.js?v=50" defer></script>
-<script src="assets/app.js?v=54" defer></script>
+<script src="assets/ui.js?v=51" defer></script>
+<script src="assets/app.js?v=55" defer></script>
 
 </body>
 </html>

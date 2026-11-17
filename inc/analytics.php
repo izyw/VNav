@@ -10,6 +10,7 @@
  *  3. IP 明文存（用户明确要看 IP 地址），同时存一份 hash 用于去重计数。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /**
  * 取访客 IP。
@@ -24,10 +25,12 @@ function hp_client_ip(): string
     if (!empty($CONFIG['trust_proxy'])) {
         $fwd = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
         if ($fwd !== '') {
-            // 取最左边第一个合法地址（代理链里最靠近真实客户端）
-            foreach (explode(',', $fwd) as $part) {
-                $cand = trim($part);
-                if (filter_var($cand, FILTER_VALIDATE_IP)) { $ip = $cand; break; }
+            /* 从**右往左**取。XFF 的语义是「客户端自己先塞一段，代理逐跳 append」，
+               所以最左边那一段完全由请求方控制 —— 按左往右取第一个，
+               攻击者只要加一个头就能换一个 IP，ACL / 统计 / 限流全部绕过。
+               最右边的才是最近一跳代理写进来的，可信度最高。 */
+            foreach (array_reverse(array_map('trim', explode(',', $fwd))) as $part) {
+                if (filter_var($part, FILTER_VALIDATE_IP)) { $ip = $part; break; }
             }
         }
         $real = $_SERVER['HTTP_X_REAL_IP'] ?? '';

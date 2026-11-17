@@ -9,6 +9,15 @@ if (!defined('HP_ROOT')) {
     define('HP_ROOT', dirname(__DIR__));
 }
 
+/* 直接访问 /inc/boot.php 时挡成 404。不能像其他 inc 文件那样用
+   defined('HP_ROOT') 判 —— 这个常量就是本文件定义的，永远为真。
+   改为看「当前真正执行的脚本是不是自己」：被 require 时 SCRIPT_FILENAME
+   是入口文件（index.php 等），只有直接访问才会是 boot.php。 */
+if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === 'boot.php') {
+    http_response_code(404);
+    exit;
+}
+
 // ---------- 配置 ----------
 $__cfgFile = HP_ROOT . '/inc/config.php';
 if (!is_file($__cfgFile)) {
@@ -293,6 +302,9 @@ function session_boot(): void
        cookie，却已经掉登录 —— 比原来的会话 cookie 更让人困惑。 */
     $ttl = 30 * 86400;
     ini_set('session.gc_maxlifetime', (string)$ttl);
+    /* 严格模式：不认识的 session id 一律重新生成，防止会话固定攻击
+       （攻击者先给自己一个 id，再诱导受害者带着它登录）。 */
+    ini_set('session.use_strict_mode', '1');
     session_name(HP_SESSION_NAME);
     session_set_cookie_params([
         'lifetime' => $ttl,
@@ -380,34 +392,44 @@ function hp_remote_icon_ok(string $url): bool
 }
 
 /**
- * 当前请求该读哪一份数据。
+ * 归属判定分两套：读（渲染）与写（改数据），**不能共用一个函数**。
  *
- *   游客      → 0（站点默认，只读）
- *   普通用户  → 自己的 id
- *   admin     → 看 $lib：
- *                 'site'（默认）→ 0，即「网站默认链接库」，访客看到的就是它
- *                 'mine'        → 自己的 id，admin 私人的那一份
+ *   读 hp_read_uid_for()：
+ *     游客      → 0（站点默认，只读）
+ *     普通用户  → 自己的 id
+ *     admin     → 'site' → 0；'mine' → 自己的 id
+ *     单人模式  → 游客与站长都是 hp_single_uid()；**其他登录者读自己那份**
  *
- * 为什么 admin 要分成两个库（V1.5.6 起）：
- *   之前 admin 只有一份数据（user_id = 0），他一改就改到访客看的内容上，
- *   完全没有私人空间 —— 想给自己存几个私人书签只能勾「隐藏」，而那条
- *   仍然躺在站点默认库里：语义是混的，也没法把「我的收藏」整体带走。
- *   现在拆开，后台顶部显式切换，编辑的是哪一份一目了然。
+ *   写 hp_write_uid_for()：
+ *     游客      → 0（调用方 require_login 已拦，正常到不了）
+ *     普通用户  → 自己的 id；**单人模式返回 0，调用方必须先拒绝**
+ *     admin     → 单人模式 hp_single_uid()；多人模式按 $lib
  *
- * 这个函数只决定**读**哪一份；写接口必须用同一个值（api.php 的 $U），
- * 否则会出现「看着在编辑 A，实际改的是 B」这种最难查的错。
+ * 为什么必须拆（V1.5.7）：单人模式下归属与多人**方向相反**。
+ *   多人时"普通用户读自己那份"是对的；单人时全站只有一份（站长那份）。
+ *   若读侧沿用"单人即站长库"，一个切模式前登录、会话还没过期的普通账号
+ *   就能读到并改到访客看到的站点内容 —— 这正是本次修复的缺陷。
+ *   拆开后读侧按身份分流、写侧对非 admin 在单人模式下直接拒绝，
+ *   两侧不再互相污染。
+ *
+ * admin 两份库的来历（V1.5.6）：站点默认（user_id=0）与「我的库」，
+ *   后台顶部显式切换，编辑的是哪一份一目了然。
  */
-function hp_data_uid_for(string $lib = 'site'): int
+function hp_read_uid_for(string $lib = 'site'): int
 {
+    $u = current_user();
+
     /* 单人模式只有一份数据，不存在「站点默认 / 我的库」之分：
        站长自己那份就是全站唯一那份，访客读的也是它。
-       早先这里强制走 user_id = 0，于是数据放在「我的库」的站长
-       切到单人模式后前台是空的 —— 两份库并存时的取舍见 hp_single_uid()。 */
+       但**只对游客与站长**成立 —— 其他登录者读自己那份，
+       否则僵留会话可以读到站长库。 */
     if (hp_single_mode()) {
-        return hp_single_uid();
+        if ($u === null || ($u['role'] ?? '') === 'admin') {
+            return hp_single_uid();
+        }
+        return (int)$u['id'];
     }
 
-    $u = current_user();
     if ($u === null) {
         return 0;
     }
@@ -416,6 +438,35 @@ function hp_data_uid_for(string $lib = 'site'): int
     }
     // 普通用户没有「站点默认」这个概念，永远只碰自己那一份。
     // 即使前端伪造 lib=mine 也到不了这里以外的地方。
+    return (int)$u['id'];
+}
+
+/** 历史别名：所有渲染路径仍可继续调用它（index.php / admin.php 不用改） */
+function hp_data_uid_for(string $lib = 'site'): int
+{
+    return hp_read_uid_for($lib);
+}
+
+/**
+ * 写归属（唯一来源）。单人模式下只对站长生效，
+ * 普通用户返回 0 —— 调用方必须先判定并拒绝（见 api.php 的单人模式断言），
+ * 不要指望这里"自动纠正"，因为 0 是合法 uid（站点默认库）。
+ */
+function hp_write_uid_for(string $lib = 'site'): int
+{
+    $u = current_user();
+    if ($u === null) {
+        return 0;
+    }
+    if (($u['role'] ?? '') === 'admin') {
+        if (hp_single_mode()) {
+            return hp_single_uid();
+        }
+        return $lib === 'mine' ? (int)$u['id'] : 0;
+    }
+    if (hp_single_mode()) {
+        return 0;
+    }
     return (int)$u['id'];
 }
 
@@ -440,9 +491,16 @@ function current_user(): ?array
         return null;
     }
     try {
-        $st = db()->prepare('SELECT id, username, role, created_at, last_login FROM users WHERE id = ?');
+        $st = db()->prepare('SELECT id, username, role, created_at, last_login, auth_epoch FROM users WHERE id = ?');
         $st->execute([$uid]);
         $row = $st->fetch();
+        /* 会话吊销：登录时把这个数记进 session，改密 / 重置密码 / 切站点模式
+           时库里 +1 —— 于是攻击者手里那份"密码泄露时偷到的会话"下一次请求就失效。
+           老会话读不到这个键时按 0 算，与老库补列的默认值一致，
+           所以升级本身不会把任何人踢下线。 */
+        if ($row && (int)($row['auth_epoch'] ?? 0) !== (int)($_SESSION['auth_epoch'] ?? 0)) {
+            $row = false;
+        }
     } catch (Throwable $e) {
         $row = false;
     }

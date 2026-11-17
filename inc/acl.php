@@ -17,6 +17,7 @@
  *  3. 只在 acl_mode=on 时才查库，off 时零成本。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /** 国家码 → 中文名。只列常见国家/地区，其余按代码显示。 */
 function hp_country_name(string $cc): string

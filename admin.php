@@ -17,6 +17,12 @@ require_admin();
 hp_compress_start(6);
 
 if (isset($_GET['logout'])) {
+    /* 必须带 CSRF：否则第三方页面放一个 <img src=".../admin.php?logout=1">
+       就能把正在看后台的管理员踢下线（虽然拿不到数据，但足够打断操作）。 */
+    if (!hash_equals(csrf_token(), (string)$_GET['logout'])) {
+        http_response_code(403);
+        exit('退出登录需要有效的校验令牌，请从后台页面点击退出。');
+    }
     session_boot();
     $_SESSION = [];
     session_destroy();
@@ -353,7 +359,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
         </div>
       <?php endif; ?>
       <a class="adm-exit" href="./">← 回主页</a>
-      <a class="adm-exit" href="?logout=1">退出登录</a>
+      <a class="adm-exit" href="?logout=<?= h(csrf_token()) ?>">退出登录</a>
     </div>
   </aside>
 

@@ -20,6 +20,7 @@
  *   - 小于 1KB 的响应不压：gzip 头部开销反而让它变大。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /**
  * 折叠 HTML 里纯排版用的空白。

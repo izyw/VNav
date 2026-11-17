@@ -40,12 +40,19 @@ if ($action === 'export') {
     }
 
     $pdo = db();
+    /* 单人模式：全站只有站长那一份，非 admin 一律拒绝导出。
+       否则一个"切模式之前登录、会话还没过期"的普通账号能把站点内容
+       连配置与防御姿态一起导走（settings 共 23 项）。 */
+    if (hp_single_mode() && !is_admin()) {
+        http_response_code(403);
+        exit('当前为单人模式，只有站长可以导出站点');
+    }
     /* 之前这里三条查询全是全表：任意注册用户带自己的 csrf 就能导出
        站点默认库和其他所有用户的链接/分组/设置。现在按当前身份算 uid，
        三条都带 WHERE user_id = ?。导出格式（version=1、settings 扁平 k/v）
        保持不变，老备份照样能导入。管理员要整站备份请直接从服务器取
        data/home.db —— 不为此开一个可被越权调用的全量分支。 */
-    $uid = hp_data_uid_for((string)($_GET['lib'] ?? 'site'));
+    $uid = hp_read_uid_for((string)($_GET['lib'] ?? 'site'));
     $gs = $pdo->prepare('SELECT * FROM groups WHERE user_id = ? ORDER BY sort ASC, id ASC');
     $gs->execute([$uid]);
     $ls = $pdo->prepare('SELECT * FROM links WHERE user_id = ? ORDER BY sort ASC, id ASC');
@@ -73,7 +80,10 @@ if ($action === 'export') {
 
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Disposition: attachment; filename="vnav-backup-' . date('Ymd-His') . '.json"');
-    header('Content-Length: ' . strlen((string)$json));
+    /* 不要设 Content-Length：hp_compress_start() 的 ob 回调会把整个响应
+       gzip 掉，而自定义回调不像 ob_gzhandler 那样自动清掉这个头 ——
+       声明长度 ≠ 实际字节，浏览器会中途断开、文件截断
+       （实测：声明 3600、实收 64 字节、curl 退出码 18）。 */
     header('Cache-Control: no-store');
     echo $json;
     exit;
@@ -154,8 +164,12 @@ if ($action === 'login') {
 
     // 验证码先验
     if ($needCaptcha && !hp_captcha_check($capTok, $capIn)) {
+        /* $capTok 刚被 hp_captcha_check() 无条件删掉（无论对错），
+           原样回传就是回传一个死码 —— 前端拿它取图只会得到「已过期」。
+           这里发一张新的，与下面口令错误分支保持一致。 */
+        [$nt] = hp_captcha_new();
         json_out(['ok' => false, 'error' => '验证码不正确', 'need_captcha' => true,
-                  'captcha_token' => $capTok], 401);
+                  'captcha_token' => $nt], 401);
     }
 
     // 账号密码校验
@@ -231,7 +245,12 @@ $__lib = (string)($body['lib'] ?? $_GET['lib'] ?? 'site');
 if ($__lib !== 'mine') {
     $__lib = 'site'; // 脏值一律回落到默认库，不做猜测
 }
-$U = hp_data_uid_for($__lib);
+/* 单人模式：只有站长能写。非 admin 的会话若在切模式前就登录了（30 天），
+   不拦的话 $U 会落到站长库 —— 那就是"普通账号改到访客看到的站点内容"。 */
+if (hp_single_mode() && !is_admin()) {
+    json_err('当前为单人模式，只有站长可以修改站点', 403);
+}
+$U = hp_write_uid_for($__lib);
 
 /* 系统级接口：只有 admin。
    这一层是硬闸门 —— 前端把按钮藏起来只是体验，绕过按钮直接打
@@ -349,7 +368,23 @@ try {
             if (!MetaFetcher::isPublicUrl($url)) {
                 json_err('不允许访问内网地址');
             }
-            $meta = (new MetaFetcher((int)$CONFIG['fetch_timeout']))->fetch($url);
+
+            /* 前端手上已经有图标时（本机网络探到 ≥48px 的），让它带过来：
+               · want_icon=0  → 跳过下载图标，省掉一次请求
+               · local_icon   → 这张就用上，标成 remote（不落地）
+               图标本身只有 1~2KB，省的不是流量，是「没必要的那一趟」。
+               标题只能由服务器读，所以 HTML 照抓。 */
+            $wantIcon = !(isset($body['want_icon']) && (string)$body['want_icon'] === '0');
+            $localIcon = trim((string)($body['local_icon'] ?? ''));
+            if ($localIcon !== '' && !hp_remote_icon_ok($localIcon)) {
+                $localIcon = '';
+            }
+
+            $meta = (new MetaFetcher((int)$CONFIG['fetch_timeout']))->fetch($url, $wantIcon);
+            if (!$wantIcon && $localIcon !== '') {
+                $meta['icon'] = $localIcon;
+                $meta['icon_kind'] = 'remote';
+            }
             json_ok(['meta' => $meta]);
         }
 
@@ -848,6 +883,10 @@ try {
             if ($mode !== 'single' && $mode !== 'multi') json_err('未知的运行模式');
             setting_set('site_mode', $mode);
             settings_flush();
+            /* 切模式吊销所有**非管理员**的会话：单人模式下普通账号本就不该
+               再有访问权，而他们手里的会话可能是在切模式之前建立的。
+               管理员的 epoch 不动，所以操作者自己不会掉线。 */
+            db()->exec("UPDATE users SET auth_epoch = auth_epoch + 1 WHERE role <> 'admin'");
             json_ok(['mode' => $mode]);
         }
         case 'set_layout': {
@@ -987,9 +1026,15 @@ try {
             $st->execute([$uid]);
             $hash = (string)$st->fetchColumn();
             if ($hash === '' || !password_verify($old, $hash)) json_err('原密码不正确');
-            $st = db()->prepare('UPDATE users SET pass_hash = ? WHERE id = ?');
+            $st = db()->prepare('UPDATE users SET pass_hash = ?, auth_epoch = auth_epoch + 1 WHERE id = ?');
             $st->execute([password_hash($new, PASSWORD_BCRYPT, ['cost' => 11]), $uid]);
             if ($st->rowCount() < 1) json_err('保存失败，请重试', 500);
+            /* 自己这一份会话也跟着升级，否则改完密码立刻被自己踢下线；
+               同时换 session id —— 密码刚变，旧 id 不该继续可用。 */
+            $st = db()->prepare('SELECT auth_epoch FROM users WHERE id = ?');
+            $st->execute([$uid]);
+            $_SESSION['auth_epoch'] = (int)$st->fetchColumn();
+            session_regenerate_id(true);
             json_ok();
         }
 
@@ -1008,7 +1053,7 @@ try {
             $u = $st->fetch(PDO::FETCH_ASSOC);
             if (!$u) json_err('用户不存在');
             if ($u['role'] === 'admin') json_err('不能重置管理员密码，请在「安全控制」里修改');
-            $st = db()->prepare('UPDATE users SET pass_hash = ? WHERE id = ?');
+            $st = db()->prepare('UPDATE users SET pass_hash = ?, auth_epoch = auth_epoch + 1 WHERE id = ?');
             $st->execute([password_hash($new, PASSWORD_BCRYPT, ['cost' => 11]), $uid]);
             if ($st->rowCount() < 1) json_err('保存失败，请重试', 500);
             json_ok(['id' => $uid]);

@@ -67,6 +67,13 @@ Options -Indexes
 # ---------- 6. 默认首页 ----------
 DirectoryIndex index.php
 
+# ---------- 8. 点文件一律不对外 ----------
+# .release-token / .git/ / .env / .gitignore 这类以点开头的路径段，
+# 默认就不该能从浏览器拿到。上面的 ^/inc/ 与 ^/data/ 只覆盖两个目录，
+# 根目录下的点文件是另一条独立的暴露面。
+# 例外：.well-known/ 必须放行（ACME 证书续签要往这里写挑战文件）。
+RedirectMatch 404 ^/(?!\.well-known/)(?:.*/)?\.[^/]+
+
 # ---------- 7. 兜底：把 .db / .md 这类不该被下载的文件挡掉 ----------
 <FilesMatch "\.(db|db-wal|db-shm|md|sql|log)$">
     Require all denied

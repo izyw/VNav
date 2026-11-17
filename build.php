@@ -14,6 +14,14 @@
  */
 declare(strict_types=1);
 
+/* 只能命令行跑。放在网站根下时，浏览器访问它就是「把整个源码打个包给你」——
+   包里虽然没有 config.php 与 data/，但全部业务代码都在，等于源码公开。
+   （release.php 早就有同样的守卫，这里之前漏了。） */
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 $root = __DIR__;
 $ver  = trim((string)@file_get_contents($root . '/VERSION'));
 if ($ver === '') {
@@ -100,18 +108,25 @@ foreach ($it as $f) {
     }
 
     $top = explode('/', $rel)[0];
-    if (in_array($top, $skipDirs, true)) {
+    /* 两份 .htaccess 是部署必需，即使所在目录被整体跳过也要进包：
+         data/.htaccess —— 挡住 home.db 与目录列举
+         inc/.htaccess  —— 挡住 config.php 源码
+       少了它们，装完就是「数据库可下载 + 源码可读」，而这两件事
+       恰恰是这套代码最不该发生的（见 .htaccess 第一节的注释）。 */
+    $forceInclude = ['data/.htaccess', 'inc/.htaccess'];
+    if (in_array($top, $skipDirs, true) && !in_array($rel, $forceInclude, true)) {
         continue;
     }
     if (in_array($rel, $skipFiles, true)) {
         continue;
     }
     $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
-    if (in_array($ext, $skipExt, true)) {
+    if (in_array($ext, $skipExt, true) && !in_array($rel, $forceInclude, true)) {
         continue;
     }
-    // 隐藏文件（.htaccess 要留，它是部署必需）
-    if (str_starts_with(basename($rel), '.') && $rel !== '.htaccess') {
+    // 隐藏文件一律跳过，但**所有层级**的 .htaccess 都要留（不只是根目录那份）
+    $base = basename($rel);
+    if (str_starts_with($base, '.') && $base !== '.htaccess') {
         continue;
     }
 
@@ -158,10 +173,15 @@ printf("打包完成\n  文件：%s\n  条目：%d\n  体积：%s（%d B）\n", 
 $check = new ZipArchive();
 $check->open($zipPath);
 $bad = [];
+$names = [];
 $hasInstall = false;
 for ($i = 0; $i < $check->numFiles; $i++) {
     $n = (string)$check->getNameIndex($i);
-    if (str_contains($n, 'inc/config.php') || str_contains($n, '/data/')) {
+    $names[] = $n;
+    /* data/ 下只允许 data/.htaccess —— 它是部署必需的守卫文件，
+       其余（home.db / icons / dns-cache.json）一律不许进包。 */
+    $isData = str_contains($n, '/data/') && !str_ends_with($n, '/data/.htaccess');
+    if (str_contains($n, 'inc/config.php') || $isData) {
         $bad[] = $n;
     }
     if (preg_match('~^vnav/install\.php$~', $n)) $hasInstall = true;
@@ -169,6 +189,14 @@ for ($i = 0; $i < $check->numFiles; $i++) {
 $check->close();
 if ($bad) {
     fwrite(STDERR, "❌ 自检失败，包里含不该有的文件：\n  " . implode("\n  ", $bad) . "\n");
+    exit(2);
+}
+/* 三份 .htaccess 缺一不可：根那份挡 inc/ 与 data/，data/ 那份挡数据库，
+   inc/ 那份挡 config.php。少任何一份，装完就是一个可被直接下载的站点。 */
+$need = ['vnav/.htaccess', 'vnav/data/.htaccess', 'vnav/inc/.htaccess'];
+$missing = array_values(array_diff($need, $names));
+if ($missing) {
+    fwrite(STDERR, "❌ 自检失败，包里缺 .htaccess（部署必需）：\n  " . implode("\n  ", $missing) . "\n");
     exit(2);
 }
 if (!$hasInstall) {

@@ -2,14 +2,13 @@
 # 首次安装由 install.php 从 inc/config.sample.php 生成。
 /inc/config.php
 
-# 运行时数据：数据库、WAL 文件、抓取的站点图标缓存。
-# data/.htaccess 是安全配置，必须保留在仓库里。
-/data/home.db
-/data/home.db-shm
-/data/home.db-wal
-/data/icons/*
-/data/backup/
-/data/snapshots/
+# 运行时数据：整目录默认忽略，只显式放行安全配置。
+# 之前是逐条列举（home.db / icons / backup / snapshots），结果
+# data/dns-cache.json（域名→IP 缓存，等于「站长收藏了哪些站点」）
+# 一直没被忽略 —— 一次 git add -A 就会把整份书签清单推到公开仓库。
+# 排除式写法与 data/.htaccess 的「先全拒再放行」保持同一个方向。
+/data/*
+!/data/.htaccess
 
 # 打包产物
 *.zip

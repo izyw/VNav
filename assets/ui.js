@@ -715,7 +715,11 @@
             if (capImg) capImg.src = 'login.php?captcha=' + encodeURIComponent(d.captcha_token) + '&t=' + Date.now();
             capWrap.hidden = false;
           } else {
-            await newCap();
+            /* 换图失败要停下：既不清密码（让用户能直接重试），
+               也不给"图已经更新"的错觉。newCap() 在 429 时静默返回 false，
+               这里不接住就会变成「点了没反应 + 密码没了」。 */
+            const ok = await newCap();
+            if (!ok) { showErr('验证码获取过于频繁，请稍后重试'); return; }
           }
           document.getElementById('loginPass').value = '';
         }

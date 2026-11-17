@@ -4,6 +4,7 @@
  * 或直接访问 /install.php 自动生成
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：直接访问不暴露路径存在
 
 return [
     // 站点名称（后台可改，这里只是兜底）

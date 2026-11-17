@@ -11,9 +11,9 @@ Require all denied
     RewriteEngine On
     # 非 icons/ 路径下的图片请求直接拒掉（例如 data/tmp/xxx.png）
     RewriteCond %{REQUEST_URI} !/data/icons/
-    RewriteRule \.(png|ico|jpg|jpeg|webp|svg|gif)$ - [F,L]
+    RewriteRule \.(png|ico|jpg|jpeg|webp|gif)$ - [F,L]
 </IfModule>
 
-<FilesMatch "\.(png|ico|jpg|jpeg|webp|svg|gif)$">
+<FilesMatch "\.(png|ico|jpg|jpeg|webp|gif)$">
     Require all granted
 </FilesMatch>

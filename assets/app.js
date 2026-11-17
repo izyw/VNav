@@ -72,6 +72,18 @@
     return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : s.slice(0, 2).toUpperCase();
   }
 
+  /* 从网址猜一个像样的名字：拿域名倒数第二段，首字母大写。
+     服务器够不着时它是唯一的标题来源，所以粘贴浮层与编辑浮层都要用 ——
+     必须定义在这层，别塞进某一个 if 块里。 */
+  function guessTitle(url) {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '');
+      let name = host.replace(/\.(com|cn|net|org|io|co|me|dev|app|top|xyz|info|site|tv|cc)(\.[a-z]{2})?$/i, '');
+      name = name.split(/[.\-_]/).filter(Boolean).pop() || name;
+      return name ? name.charAt(0).toUpperCase() + name.slice(1) : host;
+    } catch { return ''; }
+  }
+
   function hue(host) {
     let h = 0;
     for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
@@ -85,95 +97,142 @@
        · 跨域页面的 HTML 读不到 —— 同源策略挡着，CSP 的 connect-src
          还只允许同源；就算两者都放开，对方不给 CORS 头照样读不到。
      所以标题/描述仍然只能由服务端抓，图标则本地优先。
-     探测与 identify 请求并行，不额外增加等待。
      后台 admin.js 有一份等价实现：线上部署链路无法新建文件，
      不能抽成共享的 probe.js（见部署说明），只能各留一份。 */
 
   /* 真正「加载出来」才算数：有些代理会返回 200 的错误页，
-     onload 也会触发，所以要求宽高至少 16px。 */
+     onload 也会触发，所以要求宽高至少 16px。
+     返回 { w, h } 或 null —— 尺寸要留着判断够不够清晰。 */
   function probeImg(src, ms = 2200) {
     return new Promise(resolve => {
       const img = new Image();
       let done = false;
-      const finish = ok => {
+      const finish = r => {
         if (done) return;
         done = true;
         clearTimeout(timer);
         img.onload = img.onerror = null;
-        resolve(ok);
+        resolve(r);
       };
-      const timer = setTimeout(() => finish(false), ms);
-      img.onload = () => finish(img.naturalWidth >= 16 && img.naturalHeight >= 16);
-      img.onerror = () => finish(false);
+      const timer = setTimeout(() => finish(null), ms);
+      img.onload = () => finish(
+        img.naturalWidth >= 16 && img.naturalHeight >= 16
+          ? { w: img.naturalWidth, h: img.naturalHeight }
+          : null
+      );
+      img.onerror = () => finish(null);
       img.referrerPolicy = 'no-referrer';
       img.src = src;
     });
   }
 
   /* 常见的两个图标位置并行试，谁先成功用谁。
-     串行最坏要等两轮超时，而这两个请求本来就可以同时发。 */
+     串行最坏要等两轮超时，而这两个请求本来就可以同时发。
+     返回 { url, w, h } 或 null。 */
   async function localIcon(url) {
     let origin = '';
     try {
       const u = new URL(url);
       // http 站点的图标会被 CSP 的 img-src（只放行 https:）拦掉，不去探
-      if (u.protocol !== 'https:') return '';
+      if (u.protocol !== 'https:') return null;
       origin = u.origin;
-    } catch { return ''; }
+    } catch { return null; }
 
     const ico   = origin + '/favicon.ico';
     const apple = origin + '/apple-touch-icon.png';
-    const [okIco, okApple] = await Promise.all([probeImg(ico), probeImg(apple)]);
-    if (okIco) return ico;
-    if (okApple) return apple;
-    return '';
+    const [a, b] = await Promise.all([probeImg(ico), probeImg(apple)]);
+    if (a) return { url: ico, w: a.w, h: a.h };
+    if (b) return { url: apple, w: b.w, h: b.h };
+    return null;
   }
 
-  /* 抓取一条链接的元信息：服务器为主，本机图标兜底。
-     返回 { title, desc, icon, iconKind, via }，
-     via 说明结果来路（页面提示要用，不然用户不知道图标哪来的）：
-       server     → 服务器读到了页面（常规情况，延迟与以前一致）
-       local-icon → 服务器够不着，图标来自本机网络
-       none       → 两边都没结果 */
-  async function identifyLink(url) {
-    const localP = localIcon(url).catch(() => '');
-    const serverP = api({ action: 'identify', url })
-      .then(d => d.meta || {})
-      .catch(() => null);
+  /* ---------------- 识别一条链接 ----------------
+     服务器为主、本机兜底，但有硬预算：从发起算起 3 秒必须给出结果。
 
-    /* 服务器 1.6 秒内给出「确实读到了页面」的结果就直接用，
-       不为本机探测多等 —— 正常站点走的就是这条快路。 */
-    const early = await Promise.race([serverP, new Promise(r => setTimeout(() => r(null), 1600))]);
-    if (early && early.fetched) {
-      return { ...early, via: 'server' };
+     为什么不能真的 AbortSignal.timeout()：那样会把「晚到的标题/描述」
+     一起掐掉，而慢站点（实测 notion 4.5 秒、超时站 8 秒）恰恰需要它。
+     所以这里做的是**逻辑超时**：3 秒先拿本地结果渲染，请求继续跑，
+     回来后再通过 onLate 补文字 —— 补的时候不碰图标。
+
+     前 900ms 先等本机探测，拿到就先用上：这样 3 秒到点时
+     即便服务器还没回，预览里也已经有一张真图标，不是字母。
+     返回 { title, desc, icon, iconKind, via, timedOut }。 */
+  const IDENTIFY_BUDGET = 3000;
+  const LOCAL_HEAD      = 900;
+  const ICON_GOOD       = 48;
+  const LATE            = Symbol('late');
+
+  async function identifyLink(url, onLate) {
+    const t0 = Date.now();
+    const localP = localIcon(url).catch(() => null);
+
+    // 先给本机一小段预算，够清晰就随请求带上，让服务器别白下图标
+    const head = await Promise.race([
+      localP,
+      new Promise(r => setTimeout(() => r(undefined), LOCAL_HEAD)),
+    ]);
+    const gotHead = head && head !== undefined ? head : null;
+
+    /* 这里刻意不传 want_icon：让服务器照常把图标抓下来落地。
+       本机探测到的地址只是「引用」，图标不落地就意味着每个访客都要
+       自己去源站拉那张图 —— 墙内访客看到的就是字母头像。
+       落地这张 96px WebP 值这一次请求，省它反而是退步。
+       （服务端仍保留 want_icon 能力，留给「明确不需要换图标」的场景。） */
+    const opts = { action: 'identify', url };
+
+    const serverP = api(opts).then(d => d.meta || null).catch(() => null);
+
+    // 本机探测最多再等 800ms（它自己的上限是 2.2s，通常早回来了）
+    let local = gotHead;
+    if (!local && head === undefined) {
+      const rest = await Promise.race([
+        localP,
+        new Promise(r => setTimeout(() => r(null), 800)),
+      ]);
+      local = rest || null;
     }
 
-    const [meta, local] = await Promise.all([
+    // 剩下的时间留给服务器，到点就用本机结果先出
+    const left = Math.max(300, IDENTIFY_BUDGET - (Date.now() - t0));
+    const meta = await Promise.race([
       serverP,
-      Promise.race([localP, new Promise(r => setTimeout(() => r(''), 1200))]),
+      new Promise(r => setTimeout(() => r(LATE), left)),
     ]);
 
+    if (meta === LATE) {
+      /* 服务器还没回来。先把本机能给的给出去，晚到的只补文字。
+         这就是「最坏 59 秒」被压到 3 秒的地方。 */
+      if (onLate) {
+        serverP.then(m => { if (m) { try { onLate(m); } catch (e) {} } }).catch(() => {});
+      }
+      return {
+        title: '', desc: '',
+        icon: local ? local.url : '',
+        iconKind: local ? 'remote' : 'auto',
+        via: local ? 'local-icon' : 'none',
+        fetched: false,
+        timedOut: true,
+      };
+    }
+
     if (meta && meta.fetched) {
-      // 服务器读到了页面但图标没落地（防盗链/CDN 抓不到）→ 用本机那份
+      // 服务器读到了页面：图标没落地（被跳过或下载失败）就用本机那张
       if (!meta.icon && local) {
-        return { ...meta, icon: local, iconKind: 'remote', via: 'local-icon' };
+        return { ...meta, icon: local.url, iconKind: 'remote', via: 'local-icon' };
       }
       return { ...meta, via: 'server' };
     }
 
-    // 服务器完全够不着：名称按域名兜底，图标用本机网络取到的那张
+    // 服务器确实够不着：名称按域名兜底，图标用本机网络取到的那张
     return {
-      title: meta?.title || '',
-      desc: meta?.desc || '',
-      icon: local || '',
+      title: (meta && meta.title) || '',
+      desc: (meta && meta.desc) || '',
+      icon: local ? local.url : '',
       iconKind: local ? 'remote' : 'auto',
       via: local ? 'local-icon' : 'none',
       fetched: false,
     };
   }
-
-  const isTyping = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
-    || document.activeElement?.isContentEditable;
 
   /* ==================================================================
      1. 点击热度上报（对用户无感）
@@ -329,23 +388,30 @@
       fTitle.removeAttribute('aria-invalid');
     }
 
-    function guessTitle(url) {
-      try {
-        const host = new URL(url).hostname.replace(/^www\./, '');
-        let name = host.replace(/\.(com|cn|net|org|io|co|me|dev|app|top|xyz|info|site|tv|cc)(\.[a-z]{2})?$/i, '');
-        name = name.split(/[.\-_]/).filter(Boolean).pop() || name;
-        return name ? name.charAt(0).toUpperCase() + name.slice(1) : host;
-      } catch { return ''; }
-    }
-
     async function identify(url) {
+      const guess = guessTitle(url);
+      /* 3 秒后服务器才回来的结果走这里：只补文字，不碰图标。
+         已经手动改过的字段一律不动 —— 晚到的数据不该冲掉用户打的字。 */
+      const applyLate = m => {
+        if (!m || fUrl.value.trim() !== url) return;
+        if (m.title && fTitle.value.trim() === guess) {
+          fTitle.value = String(m.title).slice(0, 60);
+        }
+        if (m.desc && !hostEl.textContent.trim()) {
+          hostEl.textContent = String(m.desc).slice(0, 120);
+        }
+        setStatus(m.title ? '已识别：' + m.title : '未能读取标题，已按域名生成', m.title ? 'ok' : 'warn');
+      };
+
       try {
-        const m = await identifyLink(url);
+        const m = await identifyLink(url, applyLate);
         if (fUrl.value.trim() !== url) return;
         if (m.title) fTitle.value = String(m.title).slice(0, 60);
         if (m.desc) hostEl.textContent = String(m.desc).slice(0, 120);
         paintIcon(iconEl, m.icon || '', fTitle.value, hostEl.textContent);
-        if (m.via === 'local-icon') {
+        if (m.timedOut) {
+          setStatus('服务器较慢，先用本机结果；标题稍后自动补上', 'warn');
+        } else if (m.via === 'local-icon') {
           /* 说清楚为什么图标有、名称却是域名：服务器够不着这个站，
              图标是本机网络取到的。用户才知道该不该手填名称。 */
           setStatus('服务器访问不到，图标已用本机网络取到', 'ok');
@@ -723,18 +789,30 @@
       clearEditError();
       setFetchBusy(true, '抓取中');
       eStatus.textContent = '正在读取页面信息…';
+      const guess = guessTitle(url);
+      /* 晚到的结果只补文字：编辑框里可能已有用户自己写的内容，
+         只有「还是域名兜底」时才允许覆盖标题。图标永远不在这里动。 */
+      const applyLate = m => {
+        if (!m || eUrl.value.trim() !== url) return;
+        if (m.title && eTitle.value.trim() === guess) eTitle.value = String(m.title).slice(0, 60);
+        if (m.desc && !eDescr.value.trim()) eDescr.value = String(m.desc).slice(0, 200);
+        eStatus.textContent = '已抓取：名称、描述（仍可手动修改）';
+      };
+
       try {
-        const m = await identifyLink(url);
+        const m = await identifyLink(url, applyLate);
         let filled = [];
         if (m.title) { eTitle.value = String(m.title).slice(0, 60); filled.push('名称'); }
         if (m.desc) { eDescr.value = String(m.desc).slice(0, 200); filled.push('描述'); }
         if (m.icon) { editIcon = String(m.icon); filled.push('图标'); }
         paintEditIcon(editIcon, eTitle.value, eHost.textContent);
-        eStatus.textContent = filled.length
-          ? (m.via === 'local-icon'
-              ? '已抓取：' + filled.join('、') + '（服务器访问不到，图标来自本机网络）'
-              : '已抓取：' + filled.join('、') + '（仍可手动修改）')
-          : '页面没有可读取的信息，请手动填写';
+        eStatus.textContent = m.timedOut
+          ? '服务器较慢，先显示已抓到的部分'
+          : (filled.length
+              ? (m.via === 'local-icon'
+                  ? '已抓取：' + filled.join('、') + '（服务器访问不到，图标来自本机网络）'
+                  : '已抓取：' + filled.join('、') + '（仍可手动修改）')
+              : '页面没有可读取的信息，请手动填写');
         toast(filled.length ? '已抓取' + filled.join('、') : '未读取到页面信息', filled.length ? 'ok' : 'bad');
       } catch (err) {
         eStatus.textContent = '抓取失败，请手动填写';

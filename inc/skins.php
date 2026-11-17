@@ -21,6 +21,7 @@
  * 其它地方（菜单、api 白名单、首屏脚本、后台单选框）全部自动生效。
  */
 declare(strict_types=1);
+if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /**
  * @return array<string, array{label:string, hint:string, svg:string, tone:'light'|'dark'|'auto'}>
