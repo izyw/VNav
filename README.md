@@ -1,8 +1,8 @@
 <div align="center">
   <img src="docs/logo.svg" width="92" height="92" alt="Vnav">
   <h1>Vnav</h1>
-  <p><strong>把常用站点摆成一屏的上网导航（浏览器起始页）</strong><br>
-  一个 PHP 目录、一个 SQLite 文件，传上去就能用。</p>
+  <p><strong>可能是最好用的开源上网导航（浏览器起始页）</strong><br>
+  把常用站点摆成一屏，一个 PHP 目录、一个 SQLite 文件，传上去就能用。</p>
   <p>
     <img alt="版本" src="https://img.shields.io/badge/version-1.1.4-blue">
     <img alt="PHP" src="https://img.shields.io/badge/PHP-8.1%2B-777bb4">
@@ -26,6 +26,8 @@
 
 所以动手写了一个：**能拖的就不填表，一步能做完的不拆成三步。** 用着顺手，就开源出来，谁都可以拿去用。
 
+还有一条：让上网导航回归本质。钟表、天气这类功能，点一下手机屏幕就能看到，没必要在起始页再放一遍。页面只干一件事——把链接摆好，点了就走。
+
 ## 特性
 
 - **粘贴即收藏** —— 复制网址，在主页按 `Ctrl` + `V`，标题、描述、图标自动补全并入库，不用打开后台填表。
@@ -48,11 +50,16 @@
 
 布局有卡片、横排、紧凑、宫格四种；分组默认在左侧一整列，可收起成 68px 的图标条。
 
-每个分组固定一种颜色——侧栏那枚色块、组标题的小图标、卡片悬停时掺进边框的那点组色，用的是同一个色相。颜色因此能当地图用，而不只是装饰。
-
-<p align="center"><img src="docs/home-dark.png" alt="深色主题">
+<p align="center"><img src="docs/home-menu.png" alt="横排形态">
   <br>
-  <sub>同一套网格换成石墨底：层次不变，夜里不刺眼</sub>
+  <sub>Atlas · 横排：一行胶囊串起链接，最省纵向空间</sub>
+</p>
+
+<br>
+
+<p align="center"><img src="docs/home-compact.png" alt="紧凑形态">
+  <br>
+  <sub>Atlas · 紧凑：单列密集行，站名后接描述</sub>
 </p>
 
 <br>
@@ -60,13 +67,6 @@
 <p align="center"><img src="docs/home-frame.png" alt="工作台皮肤">
   <br>
   <sub>工作台皮肤：应用被收进一张框里，顶栏、侧栏、主区三块并列</sub>
-</p>
-
-<br>
-
-<p align="center"><img src="docs/home-frame-dark.png" alt="工作台皮肤 暗色">
-  <br>
-  <sub>同一张框换成石墨底：外框、侧栏、主区还是三层，只是底翻过来</sub>
 </p>
 
 ## 安装
