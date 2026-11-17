@@ -2538,35 +2538,9 @@ html[data-theme='cyber'] {
   html { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
 }
 
-/* 编辑/粘贴浮层的「隐藏链接」开关（仅单人模式输出）。
-   用一整行可点区域，避免只有一个小复选框难以命中。 */
-.edit-hidden {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  margin: 4px 0 2px;
-  padding: 11px 12px;
-  border: 1px solid var(--line, rgba(0,0,0,.1));
-  border-radius: var(--r-sm, 9px);
-  background: color-mix(in srgb, var(--surface, #fff) 60%, transparent);
-  cursor: pointer;
-  font-size: 13.5px;
-}
-.edit-hidden input[type="checkbox"] {
-  width: 16px; height: 16px;
-  margin: 0;
-  accent-color: var(--acc, #3b6fe0);
-  cursor: pointer;
-}
-.edit-hidden > span { font-weight: 600; }
-.edit-hidden small {
-  flex: 1 1 100%;
-  padding-left: 26px;
-  color: var(--text-3, #888);
-  font-size: 12px;
-  line-height: 1.4;
-}
+/* 编辑/粘贴浮层的「隐藏链接」统一用 .switch / .sw-track（见上方开关一节）。
+   原先这里有一份 .edit-hidden 方框勾样式，与后台滑块并存，
+   同一个功能两副长相 —— V1.1.6 起删掉，只留滑块。 */
 
 /* 单人模式未登录访客：整站只读，不显示任何编辑入口（视觉上也不误导） */
 body.single-readonly .link-edit,

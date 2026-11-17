@@ -17,17 +17,24 @@ final class MetaFetcher
 
     /**
      * 抓取一个站点的元信息。
-     * @return array{title:string, desc:string, icon:string, icon_kind:string}
+     *
+     * fetched 表示「真的读到页面了」。没有它，调用方只能看 title 判断成败，
+     * 而 title 读不到时会被兜底成域名 —— 「抓到了但标题为空」和
+     * 「整个站都够不着」在结果里长得一模一样。前端要靠它决定
+     * 要不要改用本机网络取到的图标。
+     *
+     * @return array{title:string, desc:string, icon:string, icon_kind:string, fetched:bool}
      */
     public function fetch(string $url): array
     {
-        $out = ['title' => '', 'desc' => '', 'icon' => '', 'icon_kind' => 'auto'];
+        $out = ['title' => '', 'desc' => '', 'icon' => '', 'icon_kind' => 'auto', 'fetched' => false];
 
         $html = $this->get($url, $finalUrl);
         $host = host_of($finalUrl ?: $url);
 
         if ($html !== '') {
             $out = $this->parse($html, $finalUrl ?: $url) + $out;
+            $out['fetched'] = true;
         }
 
         if ($out['title'] === '') {

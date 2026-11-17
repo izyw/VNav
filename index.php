@@ -142,16 +142,15 @@ $groupnav = hp_groupnav_safe(setting('groupnav', 'tab'));
    admin 想检查自己那份私人库时，带 ?lib=mine 即可（后台切换器里有入口）。
    普通人带这个参数没用：hp_data_uid_for() 对游客和普通用户不认 lib。 */
 $dataUid = hp_data_uid_for(($_GET['lib'] ?? '') === 'mine' ? 'mine' : 'site');
-/* 单人模式只有一份站点库，手敲 ?lib=mine 也拉回默认库 */
-if (hp_single_mode()) {
-    $dataUid = hp_data_uid_for('site');
-}
+/* 单人模式不在这里特判：hp_data_uid_for() 内部已经统一成
+   「站长那份（空则回落 0）」，手敲 ?lib=mine 也拉不回另一份。 */
 
 /* 当前看的是哪一份库。管理员日常看「站点默认」（公共那份），
    想放私人条目就切到自己的库 —— V1.1.0 起这个切换有了明面入口，
    原先只能手敲 ?lib=mine，于是「隐藏链接」那个开关成了唯一手段。
-   普通用户不参与：他看的一直是自己的库，没有可切的东西。 */
-$onMine = $__isSuper && $dataUid !== 0;
+   普通用户不参与：他看的一直是自己的库，没有可切的东西。
+   单人模式更不参与：全站只有一份，那个切换器已经整块不输出。 */
+$onMine = !hp_single_mode() && $__isSuper && $dataUid !== 0;
 
 $sql = 'SELECT id, group_id, title, url, icon, icon_kind, descr, hits, hidden
           FROM links WHERE user_id = ?';
@@ -221,7 +220,7 @@ hp_log_visit(false, '/');
          对 Bricolage 恒为 false —— 这两个字体从没被真正用上。
          @font-face 定义保留（后台等非皮肤页仍可能引用），但只有实际
          用到才会下载，preload 等于每次白下 71KB。 */ ?>
-<link rel="stylesheet" href="assets/app.css?v=53">
+<link rel="stylesheet" href="assets/app.css?v=54">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
@@ -256,13 +255,16 @@ $__defLinks = array();
 $__defGroups = array();
 if ($__isAdmin) {
     try {
+        /* 比对基准必须跟着**当前实际展示的那份**走（$dataUid），
+           不能写死 user_id = 0：单人模式下数据在站长名下，
+           基准仍取 0 那份会让游客沙盒每次都误判「内容不一致」。 */
         $__pdo = db();
-        $__defLinks = $__pdo->query(
-            "SELECT url, title FROM links WHERE user_id = 0 ORDER BY sort, id"
-        )->fetchAll(PDO::FETCH_ASSOC);
-        $__defGroups = $__pdo->query(
-            "SELECT name FROM groups WHERE user_id = 0 ORDER BY sort, id"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        $__stD = $__pdo->prepare("SELECT url, title FROM links WHERE user_id = ? ORDER BY sort, id");
+        $__stD->execute([$dataUid]);
+        $__defLinks = $__stD->fetchAll(PDO::FETCH_ASSOC);
+        $__stD = $__pdo->prepare("SELECT name FROM groups WHERE user_id = ? ORDER BY sort, id");
+        $__stD->execute([$dataUid]);
+        $__defGroups = $__stD->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         $__defLinks = array(); $__defGroups = array();
     }
@@ -270,7 +272,7 @@ if ($__isAdmin) {
 ?>
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
-<meta name="adm-lib" content="<?= $dataUid === 0 ? 'site' : 'mine' ?>">
+<meta name="adm-lib" content="<?= (!hp_single_mode() && $dataUid !== 0) ? 'mine' : 'site' ?>">
 <?php endif; ?>
 <script>
 /* 偏好要在首屏之前定，否则会先渲染默认形态/皮肤再被 JS 改，出现明显闪烁。
@@ -649,8 +651,10 @@ if ($__isAdmin) {
                换协议时改两处：这里的名字，以及根目录 LICENSE 的正文。 */ ?>
       <?php /* 库切换：站点默认（公共）/ 我的（私人）。
                只有管理员看得到这两份 —— 普通用户的数据本来就在自己名下，
-               没有「切到哪一份」这回事。 */ ?>
-      <?php if ($onMine || $__isSuper): ?>
+               没有「切到哪一份」这回事。
+               单人模式下整块不输出：全站只有一份库（站长那份），
+               留着一个点了也不会变的切换器，只会让人以为点坏了。 */ ?>
+      <?php if (!hp_single_mode() && ($onMine || $__isSuper)): ?>
       <div class="gnav-lib" role="group" aria-label="数据范围">
         <a class="gnav-lib-btn<?= $onMine ? '' : ' is-on' ?>" href="./">站点库</a>
         <a class="gnav-lib-btn<?= $onMine ? ' is-on' : '' ?>" href="?lib=mine">我的库</a>
@@ -749,11 +753,17 @@ if ($__isAdmin) {
               $hue  = hue_of($host);
               $init = initials_of($l['title']);
               $isHidden = (int)($l['hidden'] ?? 0) === 1;
-              // 图标文件可能被手动清理/迁移丢失，先确认存在再输出，
-              // 否则页面会留一个破图空框。缺失时自动降级为首字母头像。
-              $hasIcon = $l['icon'] !== ''
-                  && $l['icon_kind'] === 'file'
-                  && is_file(HP_ROOT . '/' . $l['icon']);
+              /* 图标文件可能被手动清理/迁移丢失，先确认存在再输出，
+                 否则页面会留一个破图空框。缺失时自动降级为首字母头像。
+                 remote 是「本机网络取到的外链图标」（服务器抓不到的站点），
+                 不落地，直接引用 https 地址；加载失败时由内联 error
+                 兜回首字母 —— 访客没开代理时那张图本来就下不来。 */
+              $isRemote  = (string)$l['icon_kind'] === 'remote'
+                  && preg_match('~^https://~i', (string)$l['icon']);
+              $hasIcon = $isRemote
+                  || ($l['icon'] !== ''
+                      && $l['icon_kind'] === 'file'
+                      && is_file(HP_ROOT . '/' . $l['icon']));
             ?>
               <li class="link-item" style="--i:<?= $i ?>;--hue:<?= $hue ?>" data-id="<?= (int)$l['id'] ?>"
                   data-title="<?= h($l['title']) ?>"
@@ -782,7 +792,15 @@ if ($__isAdmin) {
                 <a class="link" href="<?= h($l['url']) ?>" <?= $newTab ? 'target="_blank" rel="noopener noreferrer"' : '' ?>
                    data-href="<?= h($l['url']) ?>">
                   <span class="link-icon<?= $hasIcon ? ' has-img' : '' ?>" aria-hidden="true">
-                    <?php if ($hasIcon): ?>
+                    <?php if ($isRemote): ?>
+                      <?php /* 首字母先铺在底下：外链图标一旦加载失败（访客没代理、
+                               源站防盗链），error 里撤掉 img 与 has-img，
+                               露出底下这层同色相头像，不留破图。 */ ?>
+                      <span class="initials"><?= h($init) ?></span>
+                      <img src="<?= h($l['icon']) ?>" alt="" width="24" height="24" decoding="async"
+                           referrerpolicy="no-referrer"
+                           onerror="this.parentNode.classList.remove('has-img');this.remove();">
+                    <?php elseif ($hasIcon): ?>
                       <?php /* 图标是首屏视觉的一部分，且只有几 KB：一律 eager。
                                用 lazy 会让首屏出现一片空白方块（无头截图与
                                部分浏览器下尤其明显），得不偿失。 */ ?>
@@ -904,15 +922,22 @@ if ($__isAdmin) {
       <?php endforeach; ?>
     </select>
 
-    <?php /* 隐藏开关：滑块。默认关（公开），因为绝大多数链接是给
-             自己看的公开收藏，把「隐藏」做成默认会让人莫名其妙
-             看不到自己刚加的链接。 */ ?>
+    <?php /* 隐藏开关：滑块，与后台添加面板同一个控件（.switch / .sw-track）。
+             以前这里是原生 checkbox —— 后台改了滑块，前台还留着方框勾，
+             同一个功能两副长相。默认关（公开），因为绝大多数链接是给
+             自己看的公开收藏，默认隐藏会让人找不到刚加的那条。 */ ?>
     <?php if (hp_single_mode()): /* 单人模式新增时可直接设为隐藏 */ ?>
-    <label class="edit-hidden" for="pHidden">
-      <input type="checkbox" id="pHidden" name="hidden">
-      <span>隐藏链接</span>
-      <small>开启后仅你登录可见，访客看不到</small>
-    </label>
+    <div class="switch-row switch-row--tight">
+      <div>
+        <p class="sw-label">隐藏链接</p>
+        <p class="sw-desc">关闭时所有访客可见</p>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pHidden" name="hidden">
+        <span class="sw-track" aria-hidden="true"></span>
+        <span class="sr-only">隐藏链接（仅登录后可见）</span>
+      </label>
+    </div>
     <?php endif; ?>
 
     <p class="f-error" id="pasteError" role="alert" hidden></p>
@@ -1025,11 +1050,17 @@ if ($__isAdmin) {
     </select>
 
     <?php if (hp_single_mode()): /* 单人模式才有隐藏链接；多人模式保持下线 */ ?>
-    <label class="edit-hidden" for="eHidden">
-      <input type="checkbox" id="eHidden" name="hidden">
-      <span>隐藏链接</span>
-      <small>开启后仅你登录可见，访客看不到</small>
-    </label>
+    <div class="switch-row switch-row--tight">
+      <div>
+        <p class="sw-label">隐藏链接</p>
+        <p class="sw-desc">关闭时所有访客可见</p>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="eHidden" name="hidden">
+        <span class="sw-track" aria-hidden="true"></span>
+        <span class="sr-only">隐藏链接（仅登录后可见）</span>
+      </label>
+    </div>
     <?php endif; ?>
 
     <p class="f-error" id="editError" role="alert" hidden></p>
@@ -1193,7 +1224,7 @@ if ($__isAdmin) {
      分组高亮和点击滚动全部失灵（实测坑）。三个都 defer，按文档顺序执行。 -->
 <script src="assets/guest.js?v=57" defer></script>
 <script src="assets/ui.js?v=50" defer></script>
-<script src="assets/app.js?v=52" defer></script>
+<script src="assets/app.js?v=54" defer></script>
 
 </body>
 </html>

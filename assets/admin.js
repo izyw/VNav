@@ -52,6 +52,52 @@
   function showErr(el, msg) { el.textContent = msg; el.hidden = false; }
   function clearErr(el) { el.hidden = true; el.textContent = ''; }
 
+  /* ---------------- 本机图标探测（新增链接时用） ----------------
+     服务端 curl 抓不到被墙站点，而浏览器往往能（本机开着代理）。
+     能用「本地网络」拿到的只有图标：<img> 加载任意 https 图片不受
+     同源限制（CSP 的 img-src 也放行 https:）；页面的 HTML 读不到。
+     前台 app.js 有一份等价实现 —— 线上部署链路无法新建文件，
+     不能抽成共享的 probe.js，只能各留一份。 */
+  function probeImg(src, ms) {
+    const wait = ms || 2200;
+    return new Promise(resolve => {
+      const el = new Image();
+      let done = false;
+      const finish = ok => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        el.onload = el.onerror = null;
+        resolve(ok);
+      };
+      const timer = setTimeout(() => finish(false), wait);
+      // 有些代理会返回 200 的错误页，onload 照样触发 —— 要求至少 16px
+      el.onload = () => finish(el.naturalWidth >= 16 && el.naturalHeight >= 16);
+      el.onerror = () => finish(false);
+      el.referrerPolicy = 'no-referrer';
+      el.src = src;
+    });
+  }
+
+  function localIcon(url) {
+    let origin = '';
+    try {
+      const u = new URL(url);
+      // http 站点的图标会被 CSP 的 img-src（只放行 https:）拦掉
+      if (u.protocol !== 'https:') return Promise.resolve('');
+      origin = u.origin;
+    } catch (e) {
+      return Promise.resolve('');
+    }
+    const ico = origin + '/favicon.ico';
+    const apple = origin + '/apple-touch-icon.png';
+    return Promise.all([probeImg(ico), probeImg(apple)]).then(r => {
+      if (r[0]) return ico;
+      if (r[1]) return apple;
+      return '';
+    });
+  }
+
   /* ================= 链接编辑 ================= */
   const editor = $('#linkEditor');
   const form = $('#linkForm');
@@ -179,19 +225,36 @@
       fTitle.removeAttribute('aria-invalid');
 
       const id = fId.value;
+      const gid = Number(fGroup.value || 0);
+      const descr = fDescr.value.trim();
+      // 多人模式没有隐藏开关（fHidden 不存在）：不带这个字段，
+      // 服务端 array_key_exists 判断会保留历史条目的 hidden 原值，不会误公开
+      const hiddenPart = fHidden ? { hidden: fHidden.checked ? 1 : 0 } : {};
       busy(saveBtn, true, '保存中', '保存');
+
+      /* 新增时并行探一次本机图标：被墙站点只有本机能取到，服务端那次抓取
+         注定失败。探测不阻塞保存，正常站点白跑一趟也无感 —— 只有服务端
+         确实没拿到图标时才补第二次请求。 */
+      const localP = (!id) ? localIcon(url).catch(() => '') : Promise.resolve('');
+
       try {
-        await api({
+        const res = await api({
           action: id ? 'update' : 'add',
           id: id ? Number(id) : 0,
-          url, title,
-          group_id: Number(fGroup.value || 0),
-          descr: fDescr.value.trim(),
+          url, title, group_id: gid, descr,
+          // 空串 = 不动图标（后端「传了非空才写」），编辑时不会误清空
           icon: '',
-          // 多人模式没有隐藏开关（fHidden 不存在）：不带这个字段，
-          // 服务端 array_key_exists 判断会保留历史条目的 hidden 原值，不会误公开
-          ...(fHidden ? { hidden: fHidden.checked ? 1 : 0 } : {}),
+          ...hiddenPart,
         });
+        const localIcon = await localP;
+        if (!id && localIcon && res && res.link && !res.link.icon) {
+          /* 服务端够不着这个站，用本机那份补一次。补失败不影响「已添加」：
+             图标缺一张，比让用户以为链接没加上要轻得多。 */
+          await api({
+            action: 'update', id: res.link.id, url, title, group_id: gid, descr,
+            icon: localIcon, ...hiddenPart,
+          }).catch(() => {});
+        }
         toast(id ? '已保存' : '已添加');
         location.reload(); // 图标可能被后端抓取，重载最稳
       } catch (err) {

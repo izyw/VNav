@@ -286,11 +286,18 @@ try {
                     $descr = $meta['desc'];
                 }
             }
-            // 只接受本地缓存的图标路径，防止被塞外链
+            /* 图标收两种：
+                 file   → data/icons/ 下的本地缓存文件（服务器抓取并落地的）
+                 remote → 公网 https 地址，不落地，由浏览器直接引用。
+                remote 是给「服务器抓不到、但本机能访问」的站点准备的
+               （典型是被墙站点）：那种站点的图标只有本地网络加载得出来。
+               其余一律清空，绝不让内网地址或任意字符串进库。 */
             $iconKind = 'auto';
             if ($icon !== '') {
                 if (preg_match('~^data/icons/[A-Za-z0-9._\-]+$~', $icon)) {
                     $iconKind = 'file';
+                } elseif (hp_remote_icon_ok($icon)) {
+                    $iconKind = 'remote';
                 } else {
                     $icon = '';
                 }
@@ -368,22 +375,39 @@ try {
             $dup->execute([$url, $id, $U]);
             if ($dup->fetchColumn()) json_err('另一个链接已经用了这个网址');
 
-            $iconKind = 'auto';
+            /* 图标也是「传了非空才动」。
+               原先无条件写：后台编辑表单根本不传图标（icon 恒为空串），
+               于是一保存就把已有图标连同 icon_kind 一起清掉 ——
+               本地缓存图和 remote 外链图都中招，只剩字母头像。
+               现在空值一律视为「没改」，想换图标就传新地址。 */
+            $writeIcon = array_key_exists('icon', $body);
+            $iconKind  = '';
             if ($icon !== '') {
+                /* 图标规则同 add：本地缓存文件，或本机网络取到的公网 https 地址 */
                 if (preg_match('~^data/icons/[A-Za-z0-9._\-]+$~', $icon)) {
                     $iconKind = 'file';
+                } elseif (hp_remote_icon_ok($icon)) {
+                    $iconKind = 'remote';
                 } else {
                     $icon = '';
                 }
             }
+            if ($icon === '' || $iconKind === '') {
+                $writeIcon = false;
+            }
 
             $st = db()->prepare(
-                'UPDATE links SET title = ?, url = ?, group_id = ?, descr = ?, icon = ?, icon_kind = ?,'
+                'UPDATE links SET title = ?, url = ?, group_id = ?, descr = ?,'
+                . ($writeIcon ? ' icon = ?, icon_kind = ?,' : '')
                 . ($hiddenSet ? ' hidden = ?,' : '')
                 . ' updated_at = ?
                  WHERE id = ? AND user_id = ?'
             );
-            $vals = [mb_substr($title, 0, 60), $url, $gid ?: null, mb_substr($descr, 0, 120), $icon, $iconKind];
+            $vals = [mb_substr($title, 0, 60), $url, $gid ?: null, mb_substr($descr, 0, 120)];
+            if ($writeIcon) {
+                $vals[] = $icon;
+                $vals[] = $iconKind;
+            }
             if ($hiddenSet) {
                 $vals[] = $hidden;
             }

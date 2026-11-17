@@ -220,7 +220,10 @@ function hp_icon_refill(int $limit = 12, ?array $ids = null, ?int $uid = null): 
     $args  = [];
     $total = 0;
     if ($ids === null) {
-        $where .= " AND (icon = '' OR icon_kind <> 'file')";
+        /* remote（本机网络取到的外链图标）不算「缺图标」：
+           那种图标只有本地网络加载得出来，服务器永远抓不到，
+           算进待补就会一直显示「还差 N 条」，点了也补不上。 */
+        $where .= " AND (icon = '' OR icon_kind NOT IN ('file', 'remote'))";
     } else {
         $ids = array_values(array_unique(array_filter(
             array_map('intval', $ids),
@@ -281,7 +284,7 @@ function hp_icon_refill(int $limit = 12, ?array $ids = null, ?int $uid = null): 
        前端是自己分批的，这里如实回报还剩几条没轮到。 */
     if ($ids === null) {
         $left = (int)db()->query(
-            "SELECT COUNT(*) FROM links WHERE (icon = '' OR icon_kind <> 'file') AND url <> ''"
+            "SELECT COUNT(*) FROM links WHERE (icon = '' OR icon_kind NOT IN ('file', 'remote')) AND url <> ''"
         )->fetchColumn();
     } else {
         $left = max(0, $total - count($rows));

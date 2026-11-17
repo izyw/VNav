@@ -271,7 +271,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=45">
+<link rel="stylesheet" href="assets/app.css?v=46">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=54">
 <link rel="stylesheet" href="assets/admin.css?v=50">
@@ -559,9 +559,14 @@ if ($tab === 'upgrade' || $tab === 'security') {
                 <button type="button" class="adm-pick-group" data-pick-group="<?= (int)$gid ?>">选中本组</button>
               </p>
               <?php foreach ($items as $l):
-                $hasIcon = $l['icon'] !== ''
-                    && $l['icon_kind'] === 'file'
-                    && is_file(HP_ROOT . '/' . $l['icon']);
+                /* remote = 本机网络取到的外链图标（服务器抓不到的站点）。
+                   不落地，直接引用；加载失败由内联 error 兜回首字母。 */
+                $isRemote = (string)($l['icon_kind'] ?? '') === 'remote'
+                    && preg_match('~^https://~i', (string)$l['icon']);
+                $hasIcon = $isRemote
+                    || ($l['icon'] !== ''
+                        && $l['icon_kind'] === 'file'
+                        && is_file(HP_ROOT . '/' . $l['icon']));
                 $hue = hue_of(host_of($l['url']));
                 $isHidden = (int)($l['hidden'] ?? 0) === 1;
               ?>
@@ -579,7 +584,12 @@ if ($tab === 'upgrade' || $tab === 'security') {
                     <span class="sr-only">选中「<?= h($l['title']) ?>」</span>
                   </label>
                   <span class="adm-row-icon<?= $hasIcon ? ' has-img' : '' ?>" aria-hidden="true">
-                    <?php if ($hasIcon): ?>
+                    <?php if ($isRemote): ?>
+                      <span class="initials"><?= h(initials_of($l['title'])) ?></span>
+                      <img src="<?= h($l['icon']) ?>" alt="" width="22" height="22"
+                           referrerpolicy="no-referrer"
+                           onerror="this.parentNode.classList.remove('has-img');this.remove();">
+                    <?php elseif ($hasIcon): ?>
                       <img src="<?= h($l['icon']) ?>" alt="" width="22" height="22" loading="lazy">
                     <?php else: ?>
                       <span class="initials"><?= h(initials_of($l['title'])) ?></span>
@@ -1958,6 +1968,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=28" defer></script>
+<script src="assets/admin.js?v=29" defer></script>
 </body>
 </html>

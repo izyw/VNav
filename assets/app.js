@@ -78,6 +78,100 @@
     return h % 360;
   }
 
+  /* ---------------- 本机网络取图标 ----------------
+     服务端 curl 抓不到被墙站点，而浏览器往往能（本机开着代理）。
+     能用「本地网络」拿到的只有图标：
+       · <img> 加载任意 https 图片不受同源限制（CSP 的 img-src 也放行 https:）
+       · 跨域页面的 HTML 读不到 —— 同源策略挡着，CSP 的 connect-src
+         还只允许同源；就算两者都放开，对方不给 CORS 头照样读不到。
+     所以标题/描述仍然只能由服务端抓，图标则本地优先。
+     探测与 identify 请求并行，不额外增加等待。
+     后台 admin.js 有一份等价实现：线上部署链路无法新建文件，
+     不能抽成共享的 probe.js（见部署说明），只能各留一份。 */
+
+  /* 真正「加载出来」才算数：有些代理会返回 200 的错误页，
+     onload 也会触发，所以要求宽高至少 16px。 */
+  function probeImg(src, ms = 2200) {
+    return new Promise(resolve => {
+      const img = new Image();
+      let done = false;
+      const finish = ok => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        img.onload = img.onerror = null;
+        resolve(ok);
+      };
+      const timer = setTimeout(() => finish(false), ms);
+      img.onload = () => finish(img.naturalWidth >= 16 && img.naturalHeight >= 16);
+      img.onerror = () => finish(false);
+      img.referrerPolicy = 'no-referrer';
+      img.src = src;
+    });
+  }
+
+  /* 常见的两个图标位置并行试，谁先成功用谁。
+     串行最坏要等两轮超时，而这两个请求本来就可以同时发。 */
+  async function localIcon(url) {
+    let origin = '';
+    try {
+      const u = new URL(url);
+      // http 站点的图标会被 CSP 的 img-src（只放行 https:）拦掉，不去探
+      if (u.protocol !== 'https:') return '';
+      origin = u.origin;
+    } catch { return ''; }
+
+    const ico   = origin + '/favicon.ico';
+    const apple = origin + '/apple-touch-icon.png';
+    const [okIco, okApple] = await Promise.all([probeImg(ico), probeImg(apple)]);
+    if (okIco) return ico;
+    if (okApple) return apple;
+    return '';
+  }
+
+  /* 抓取一条链接的元信息：服务器为主，本机图标兜底。
+     返回 { title, desc, icon, iconKind, via }，
+     via 说明结果来路（页面提示要用，不然用户不知道图标哪来的）：
+       server     → 服务器读到了页面（常规情况，延迟与以前一致）
+       local-icon → 服务器够不着，图标来自本机网络
+       none       → 两边都没结果 */
+  async function identifyLink(url) {
+    const localP = localIcon(url).catch(() => '');
+    const serverP = api({ action: 'identify', url })
+      .then(d => d.meta || {})
+      .catch(() => null);
+
+    /* 服务器 1.6 秒内给出「确实读到了页面」的结果就直接用，
+       不为本机探测多等 —— 正常站点走的就是这条快路。 */
+    const early = await Promise.race([serverP, new Promise(r => setTimeout(() => r(null), 1600))]);
+    if (early && early.fetched) {
+      return { ...early, via: 'server' };
+    }
+
+    const [meta, local] = await Promise.all([
+      serverP,
+      Promise.race([localP, new Promise(r => setTimeout(() => r(''), 1200))]),
+    ]);
+
+    if (meta && meta.fetched) {
+      // 服务器读到了页面但图标没落地（防盗链/CDN 抓不到）→ 用本机那份
+      if (!meta.icon && local) {
+        return { ...meta, icon: local, iconKind: 'remote', via: 'local-icon' };
+      }
+      return { ...meta, via: 'server' };
+    }
+
+    // 服务器完全够不着：名称按域名兜底，图标用本机网络取到的那张
+    return {
+      title: meta?.title || '',
+      desc: meta?.desc || '',
+      icon: local || '',
+      iconKind: local ? 'remote' : 'auto',
+      via: local ? 'local-icon' : 'none',
+      fetched: false,
+    };
+  }
+
   const isTyping = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
     || document.activeElement?.isContentEditable;
 
@@ -199,14 +293,29 @@
       statusEl.className = 'paste-status' + (kind ? ' is-' + kind : '');
     }
 
+    /* 预览里的图标。用变量记着当前值，不从 DOM 反读：
+       外链图标是异步加载的，用户抢在图片就绪前按「添加」就会读不到 src，
+       于是明明有图标却存成空。 */
+    let pasteIcon = '';
+
     function paintIcon(el, icon, title, host) {
-      if (icon) {
+      pasteIcon = icon || '';
+      const initial = `<span class="initials">${esc(initials(title || host))}</span>`;
+      el.classList.remove('has-img');
+      el.innerHTML = initial;
+      if (!pasteIcon) return;
+      /* 加载成功才铺上去。remote 外链（本机网络取到的那种）可能因为
+         网络抖动或源站防盗链失败，直接 innerHTML 会留一个破图框。 */
+      const img = new Image();
+      img.width = 40;
+      img.height = 40;
+      img.alt = '';
+      img.addEventListener('load', () => {
         el.classList.add('has-img');
-        el.innerHTML = `<img src="${esc(icon)}" alt="" width="40" height="40">`;
-      } else {
-        el.classList.remove('has-img');
-        el.innerHTML = `<span class="initials">${esc(initials(title || host))}</span>`;
-      }
+        el.innerHTML = '';
+        el.appendChild(img);
+      });
+      img.src = pasteIcon;
     }
 
     function showError(msg) {
@@ -231,13 +340,20 @@
 
     async function identify(url) {
       try {
-        const data = await api({ action: 'identify', url });
+        const m = await identifyLink(url);
         if (fUrl.value.trim() !== url) return;
-        const m = data.meta || {};
-        if (m.title) fTitle.value = m.title.slice(0, 60);
-        if (m.desc) hostEl.textContent = m.desc;
+        if (m.title) fTitle.value = String(m.title).slice(0, 60);
+        if (m.desc) hostEl.textContent = String(m.desc).slice(0, 120);
         paintIcon(iconEl, m.icon || '', fTitle.value, hostEl.textContent);
-        setStatus(m.title ? '已识别：' + m.title : '未能读取标题，已按域名生成', m.title ? 'ok' : 'warn');
+        if (m.via === 'local-icon') {
+          /* 说清楚为什么图标有、名称却是域名：服务器够不着这个站，
+             图标是本机网络取到的。用户才知道该不该手填名称。 */
+          setStatus('服务器访问不到，图标已用本机网络取到', 'ok');
+        } else if (m.title) {
+          setStatus('已识别：' + m.title, 'ok');
+        } else {
+          setStatus('未能读取标题，已按域名生成', 'warn');
+        }
         clearError();
       } catch (err) {
         setStatus('未能自动识别，请手动确认名称', 'warn');
@@ -391,7 +507,7 @@
           url,
           title,
           group_id: Number(fGroup.value || 0),
-          icon: iconEl.classList.contains('has-img') ? iconEl.querySelector('img')?.getAttribute('src') : '',
+          icon: pasteIcon,
           ...(() => { const h = document.getElementById('pHidden'); return h ? { hidden: h.checked ? 1 : 0 } : {}; })(),
         });
         insertCard(data.link);
@@ -570,13 +686,21 @@
     }
 
     function paintEditIcon(icon, title, host) {
-      if (icon) {
+      const initial = `<span class="initials">${esc(initials(title || host))}</span>`;
+      eIcon.classList.remove('has-img');
+      eIcon.innerHTML = initial;
+      if (!icon) return;
+      /* 同粘贴浮层：加载成功才显示，失败保留首字母，不留破图 */
+      const img = new Image();
+      img.width = 40;
+      img.height = 40;
+      img.alt = '';
+      img.addEventListener('load', () => {
         eIcon.classList.add('has-img');
-        eIcon.innerHTML = `<img src="${esc(icon)}" alt="" width="40" height="40">`;
-      } else {
-        eIcon.classList.remove('has-img');
-        eIcon.innerHTML = `<span class="initials">${esc(initials(title || host))}</span>`;
-      }
+        eIcon.innerHTML = '';
+        eIcon.appendChild(img);
+      });
+      img.src = icon;
     }
 
     const fetchText = eFetch?.querySelector('.btn-fetch-text');
@@ -600,15 +724,16 @@
       setFetchBusy(true, '抓取中');
       eStatus.textContent = '正在读取页面信息…';
       try {
-        const data = await api({ action: 'identify', url });
-        const m = data.meta || {};
+        const m = await identifyLink(url);
         let filled = [];
         if (m.title) { eTitle.value = String(m.title).slice(0, 60); filled.push('名称'); }
         if (m.desc) { eDescr.value = String(m.desc).slice(0, 200); filled.push('描述'); }
         if (m.icon) { editIcon = String(m.icon); filled.push('图标'); }
         paintEditIcon(editIcon, eTitle.value, eHost.textContent);
         eStatus.textContent = filled.length
-          ? '已抓取：' + filled.join('、') + '（仍可手动修改）'
+          ? (m.via === 'local-icon'
+              ? '已抓取：' + filled.join('、') + '（服务器访问不到，图标来自本机网络）'
+              : '已抓取：' + filled.join('、') + '（仍可手动修改）')
           : '页面没有可读取的信息，请手动填写';
         toast(filled.length ? '已抓取' + filled.join('、') : '未读取到页面信息', filled.length ? 'ok' : 'bad');
       } catch (err) {

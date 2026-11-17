@@ -341,6 +341,45 @@ function current_user_id(): int
 }
 
 /**
+ * remote 图标地址是否可以存。
+ *
+ * 与 MetaFetcher::isPublicUrl() 的关键区别：**不做 DNS 解析**。
+ * 这张图服务器根本不会去请求 —— 只是把地址存进库，由浏览器（访客的本机
+ * 网络）去加载。所以「域名在服务器上解析不出来」不该成为拒绝理由：
+ * 被墙站点的域名在境内 DNS 常被投到黑洞地址，而那正是这个功能的适用场景。
+ * 用 isPublicUrl 判会把这类地址全拒掉，功能等于没做。
+ *
+ * 仍要挡的是字面量内网地址：存一个 https://127.0.0.1/x.png 进库，
+ * 等于让每个访客的浏览器替站长探内网。
+ */
+function hp_remote_icon_ok(string $url): bool
+{
+    if ($url === '' || strlen($url) > 512) {
+        return false;
+    }
+    $p = parse_url($url);
+    if (!$p || strtolower((string)($p['scheme'] ?? '')) !== 'https') {
+        return false;
+    }
+    $host = strtolower(trim((string)($p['host'] ?? ''), '[]'));
+    if ($host === '' || strlen($host) > 253) {
+        return false;
+    }
+    if ($host === 'localhost'
+        || str_ends_with($host, '.localhost')
+        || str_ends_with($host, '.local')
+        || str_ends_with($host, '.internal')) {
+        return false;
+    }
+    // 字面量 IP：只放行公网段（私有/保留/回环一律拒绝）
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+    // 单标签主机名（https://intranet/x.png）在公网没有意义，直接拒
+    return str_contains($host, '.');
+}
+
+/**
  * 当前请求该读哪一份数据。
  *
  *   游客      → 0（站点默认，只读）
@@ -360,6 +399,14 @@ function current_user_id(): int
  */
 function hp_data_uid_for(string $lib = 'site'): int
 {
+    /* 单人模式只有一份数据，不存在「站点默认 / 我的库」之分：
+       站长自己那份就是全站唯一那份，访客读的也是它。
+       早先这里强制走 user_id = 0，于是数据放在「我的库」的站长
+       切到单人模式后前台是空的 —— 两份库并存时的取舍见 hp_single_uid()。 */
+    if (hp_single_mode()) {
+        return hp_single_uid();
+    }
+
     $u = current_user();
     if ($u === null) {
         return 0;
@@ -580,4 +627,48 @@ function hp_site_mode(): string
 function hp_single_mode(): bool
 {
     return hp_site_mode() === 'single';
+}
+
+/**
+ * 单人模式下全站的唯一数据归属。
+ *
+ * 单人模式只有一个人能登录，所以「站点默认（user_id = 0）」与
+ * 「我的库（站长 id）」的分野没有意义 —— 只留一份，优先用站长那份：
+ * 站长通常在自己账号里编辑，数据也就落在那儿。
+ *
+ * 但站长那份**完全为空**时回落 0，这不是随手兜底：
+ *   · 全新安装的种子数据写在 user_id = 0；
+ *   · V1.1.5 之前从多人模式切过来的站点，内容也都还在 0。
+ * 不做这个回落，一装好或一切模式整站就是空的，看着像数据全丢。
+ *
+ * 判定只看「内容」——链接 + 分组。只改过皮肤/布局的账号不算有库，
+ * 否则换过一次主题就会把整站数据源抢过去。
+ */
+function hp_single_uid(): int
+{
+    static $uid = null;
+    if ($uid !== null) {
+        return $uid;
+    }
+    $uid = 0;
+    try {
+        $pdo = db();
+        /* 一条查询拿到「最早的站长 + 他名下有多少内容」。
+           两个标量子查询比再发一次往返省事，也让判定用同一份快照。 */
+        $row = $pdo->query(
+            "SELECT u.id,
+                    (SELECT COUNT(*) FROM links  l WHERE l.user_id = u.id)
+                  + (SELECT COUNT(*) FROM groups g WHERE g.user_id = u.id) AS n
+               FROM users u
+              WHERE u.role = 'admin'
+              ORDER BY u.id ASC
+              LIMIT 1"
+        )->fetch();
+        if ($row && (int)$row['n'] > 0) {
+            $uid = (int)$row['id'];
+        }
+    } catch (Throwable $e) {
+        // 未安装或表还没建好：当作站点默认库，绝不让首页因判定数据源而 500
+    }
+    return $uid;
 }

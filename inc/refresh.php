@@ -275,7 +275,9 @@ function hp_meta_refresh_stats(): array
     try {
         $total = (int)db()->query("SELECT COUNT(*) FROM links WHERE url LIKE 'http%'")->fetchColumn();
         $noIcon = (int)db()->query(
-            "SELECT COUNT(*) FROM links WHERE url LIKE 'http%' AND (icon = '' OR icon_kind <> 'file')"
+            /* remote 图标（本机网络取到的）不算缺：服务器抓不到那种站，
+               算进来这个数字就永远降不到 0。 */
+            "SELECT COUNT(*) FROM links WHERE url LIKE 'http%' AND (icon = '' OR icon_kind NOT IN ('file', 'remote'))"
         )->fetchColumn();
         $noDesc = (int)db()->query(
             "SELECT COUNT(*) FROM links WHERE url LIKE 'http%' AND descr = ''"
