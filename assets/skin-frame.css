@@ -263,6 +263,12 @@ html[data-theme^='frame'] body.hp .shell {
      这里的中文分类两到四个字，240 已经把「名称 …… 计数」撑得很开。 */
   grid-template-columns: 240px 1fr;
   grid-template-rows: 56px 1fr;
+  /* 跟 atlas 用同一个内容宽度，别占满屏。body 左右各留 12px，
+     这里再限到 --hp-maxw(1340px) 并居中：1440 视口下窗口左右各留
+     12 + (1416-1340)/2 = 50px，正好和 atlas 侧栏左缘的 50px 对齐。
+     小屏视口本就窄于 1340，max-width 自然不生效，仍铺满。 */
+  max-width: var(--hp-maxw);
+  margin: 0 auto;
   height: 100%;
   min-height: 0;
   border: 1px solid var(--fr-line);
@@ -578,7 +584,8 @@ html[data-theme^='frame'] body.hp .search-wrap {
 }
 html[data-theme^='frame'] body.hp .search-wrap:focus-within {
   border-color: var(--fr-line-2);
-  box-shadow: 0 0 0 3px var(--fr-ring);
+  /* 2px 贴边环，不再向外扩成一大圈 */
+  box-shadow: 0 0 0 2px var(--fr-ring);
 }
 html[data-theme^='frame'] body.hp .search input {
   min-height: 36px;

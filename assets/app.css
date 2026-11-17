@@ -564,8 +564,16 @@ html[data-theme='auto'] :where(a, button, input, select, [tabindex]):focus-visib
   outline: none;
 }
 .search input::placeholder { color: var(--text-3); }
-/* focus 时不再单独描边（外框已经有 focus-within 的强调框） */
-.search input:focus { outline: none; }
+/* focus 焦点反馈只由外层 .search-wrap 的 :focus-within 框承担，输入区不再画内框。
+   文本输入即使用鼠标点也会命中 :focus-visible，home.css 那条全局焦点环
+   会给它加 2px 深蓝 outline + 5px 外扩阴影；叠在外层光晕上就成两个错位的框，
+   也就是「发光框比输入框大一圈」。这里特异性 (0,3,2) 高于首页那条 (0,2,1)，
+   即使 app.css 先加载也能盖住。 */
+body.hp .search input:focus,
+body.hp .search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
 .search input::-webkit-search-cancel-button { filter: grayscale(1); }
 
 /* 引擎下拉面板比常规面板窄，贴着搜索框左侧展开 */

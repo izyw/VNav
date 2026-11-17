@@ -436,7 +436,8 @@ body.hp .search-wrap:focus-within {
   background: var(--at-card);
   box-shadow:
     inset 0 1px 2px rgba(0, 0, 0, .03),
-    0 0 0 4px var(--at-accent-s);
+    /* 焦点环贴着控件走，2px 就够；原来 4px 会明显溢出胶囊轮廓 */
+    0 0 0 2px var(--at-accent-s);
 }
 
 body.hp .eng-btn {

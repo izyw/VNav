@@ -205,7 +205,7 @@ hp_log_visit(false, '/');
          （字体按 CORS 规则取，不带这个属性预载会被丢弃再重下）。 */ ?>
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=50">
+<link rel="stylesheet" href="assets/app.css?v=51">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
@@ -215,8 +215,8 @@ hp_log_visit(false, '/');
          它的每条规则都带 html[data-theme='atlas'] 前缀，靠「特异性 +1
          属性选择器」与「后加载」双重压过 home.css 的结构规则。
          顺序反了，它就只能改到颜色，改不动结构。 */ ?>
-<link rel="stylesheet" href="assets/skin-atlas.css?v=61">
-<link rel="stylesheet" href="assets/skin-frame.css?v=56">
+<link rel="stylesheet" href="assets/skin-atlas.css?v=62">
+<link rel="stylesheet" href="assets/skin-frame.css?v=57">
 <?php if ($__isAdmin): ?>
 <meta name="csrf" content="<?= h(csrf_token()) ?>">
 <?php /* 当前页面显示的是哪一份库。app.js 每次写请求都会带上它，
