@@ -228,7 +228,7 @@ hp_log_visit(false, '/');
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=56">
+<link rel="stylesheet" href="assets/home.css?v=59">
 <?php /* 皮肤 CSS 必须排在 home.css 之后：靠「特异性 +1 属性选择器」与
          「后加载」双重压过 home.css 的结构规则，顺序反了只能改色改不动结构。
 
@@ -425,14 +425,13 @@ if ($__isAdmin) {
                  GET 提交会把 action 里的查询串整个丢掉，写死 q 等于让百度
                  去解析一个它不认识的参数 —— 结果就是用户看到的空白页。 */ ?>
         <input id="q" name="<?= h($engines[$engine]['param']) ?>" type="search" placeholder="搜索 <?= h($engines[$engine]['label']) ?>" autocomplete="off" enterkeyhint="search">
-        <?php /* 键帽从按钮里搬出来，独立成一行灰字：按钮是一枚实心方圆角，
-                 再往里塞 Ctrl K 就成了"字挤在色块里"，又小又糊。
-                 现在字只做提示，输入框一聚焦或一有内容就淡出，不挡视线。
+        <?php /* 提示与按钮是同一个东西：不聚焦时它就是一枚写着 Ctrl+K 的浅色胶囊，
+                 光标进到输入框后收成实心方块换成箭头（CSS 用 :focus-within 切）。
                  图标用箭头而不是放大镜 —— 放大镜在这条框里已经删掉了。 */ ?>
-        <span class="search-key" aria-hidden="true">Ctrl K</span>
-        <button class="search-go" type="submit" title="搜索（Ctrl K）">
+        <button class="search-go" type="submit" title="搜索（Ctrl+K）">
           <span class="sr-only">搜索</span>
-          <svg class="go-ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
+          <span class="go-kbd" aria-hidden="true">Ctrl+K</span>
+          <svg class="go-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
         </button>
       </form>
       <?php /* 搜索建议下拉。只是个空壳，内容由 ui.js 按需填 ——
