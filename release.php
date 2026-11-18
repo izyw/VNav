@@ -78,6 +78,12 @@ if ($notesFile !== '') {
         exit(1);
     }
 } else {
+    /* changelog.php 顶部有入口守卫：没定义 HP_ROOT 就直接 404 退出。
+       release.php 是 CLI 工具，此前没定义，于是加载更新日志时静默 exit，
+       打包完就没了下文（2026-11-18 踩到）。先补上再 require。 */
+    if (!defined('HP_ROOT')) {
+        define('HP_ROOT', $root);
+    }
     require $root . '/inc/changelog.php';
     $entry = null;
     foreach (hp_changelog() as $e) {
