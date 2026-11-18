@@ -228,7 +228,7 @@ hp_log_visit(false, '/');
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=49">
+<link rel="stylesheet" href="assets/home.css?v=54">
 <?php /* 皮肤 CSS 必须排在 home.css 之后：靠「特异性 +1 属性选择器」与
          「后加载」双重压过 home.css 的结构规则，顺序反了只能改色改不动结构。
 
@@ -419,25 +419,25 @@ if ($__isAdmin) {
         </div>
       </div>
 
-      <form class="search" role="search" action="<?= h($action) ?>" method="get" target="_blank">
+      <form class="search" role="search" action="<?= h($action) ?>" method="get" target="_blank" rel="noreferrer">
         <label for="q" class="sr-only">搜索</label>
-        <svg class="search-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
         <?php /* 参数名跟着引擎走：百度认 wd、搜狗认 query，其余是 q。
                  GET 提交会把 action 里的查询串整个丢掉，写死 q 等于让百度
                  去解析一个它不认识的参数 —— 结果就是用户看到的空白页。 */ ?>
         <input id="q" name="<?= h($engines[$engine]['param']) ?>" type="search" placeholder="搜索 <?= h($engines[$engine]['label']) ?>" autocomplete="off" enterkeyhint="search">
-        <?php /* 快捷键提示：Homepage / Dashy 这些起始页都有，用户不用翻
-                 快捷键面板就知道能按 Ctrl+K。聚焦后它淡出，把位置让给输入。
-                 窄屏隐藏 —— 手机没有物理键盘，它只会挡住文字。 */ ?>
-        <kbd class="search-kbd" aria-hidden="true">Ctrl K</kbd>
-        <?php /* 提交按钮：以前只有回车一条路，触屏和鼠标用户找不到出口。
-                 图标是箭头而不是放大镜 —— 左边已经有一个放大镜当装饰，
-                 两个放大镜并排会分不清哪个能点。 */ ?>
-        <button class="search-go" type="submit" title="搜索">
+        <?php /* 提交按钮与 Ctrl K 提示合成一个：常态显示键帽（也是个能点的按钮），
+                 悬停或输入时换成箭头。以前两者各占一块，右侧挤着两个东西。
+                 图标用箭头而不是放大镜 —— 左边已经有一个放大镜当装饰。 */ ?>
+        <button class="search-go" type="submit" title="搜索（Ctrl K）">
           <span class="sr-only">搜索</span>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
+          <span class="go-kbd" aria-hidden="true">Ctrl K</span>
+          <svg class="go-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
         </button>
       </form>
+      <?php /* 搜索建议下拉。只是个空壳，内容由 ui.js 按需填 ——
+               服务端不预渲染任何关键词，隐私上更干净。绝对定位挂在
+               .search-wrap 的下沿，宽度与搜索框对齐（见 home.css）。 */ ?>
+      <div class="search-sug" id="sug" role="listbox" aria-label="搜索建议" hidden></div>
     </div>
   <?php endif; ?>
 
@@ -1242,7 +1242,7 @@ if ($__isAdmin) {
      反过来的话 ui.js 缓存的 .gnav-item 引用会在重建后失效，
      分组高亮和点击滚动全部失灵（实测坑）。三个都 defer，按文档顺序执行。 -->
 <script src="assets/guest.js?v=57" defer></script>
-<script src="assets/ui.js?v=52" defer></script>
+<script src="assets/ui.js?v=53" defer></script>
 <script src="assets/app.js?v=55" defer></script>
 
 </body>

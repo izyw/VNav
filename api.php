@@ -90,6 +90,12 @@ if ($action === 'export') {
 }
 
 if ($method !== 'POST') {
+    /* 搜索建议：公开只读，游客也要用。必须由服务端代取 ——
+       本站 CSP 是 connect-src 'self'，浏览器直连百度 / 必应会被自己拦掉。
+       拿不到就是空数组，前端不显示下拉，不影响搜索本身。 */
+    if ($action === 'suggest') {
+        json_out(hp_suggest((string)($_GET['engine'] ?? ''), (string)($_GET['q'] ?? '')));
+    }
     // 换一张验证码走 GET：登录页的 <img> 与刷新按钮都只能发 GET
     if ($action === 'captcha_new') {
         require __DIR__ . '/inc/captcha.php';

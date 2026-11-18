@@ -361,51 +361,150 @@ body.hp .eng-btn::after {
 }
 body.hp .search input {
   min-height: 42px;
-  padding: 0 16px 0 32px;
+  /* 左边 16px：放大镜去掉了，原来的 32px 是给它让位的，留着会空一块 */
+  padding: 0 16px 0 16px;
   border-radius: 0 999px 999px 0;
   font-size: 15.5px;
 }
-body.hp .search-icon { left: 35px; }
 
-/* 提交按钮 —— 全页唯一一个「按下去才搜索」的出口。
-   在此之前只能按回车：触屏、用鼠标的人找不到触发点，只能猜。
-   图标用箭头而不是放大镜：左边那颗放大镜是装饰，两个并排会分不清谁可点。
-   定位挂在 .search-wrap（它是 relative）上，所以引擎按钮的宽度变化不影响右边距。 */
-body.hp .search-wrap form.search input { padding-right: 100px; }
-/* Ctrl K 键帽让位给按钮，仍留在按钮左侧；聚焦后本来就淡出（见皮肤文件） */
-body.hp .search-wrap form.search .search-kbd { right: 48px; }
+/* 提交按钮 = Ctrl K 提示，两者合成一个元素。
+   常态是一枚键帽（它同时也是按钮，点一下就能搜）；悬停、或输入框聚焦时
+   换成主题色箭头。宽高不变，所以切换状态时搜索框不会抖。
+   图标用箭头而不是放大镜：左边那颗放大镜是装饰，两个并排分不清谁可点。 */
+/* 右侧只留「清除 X + 提交按钮」的宽度：以前留 100px，X 和按钮之间
+   空出一大块，看着像忘了放东西。56px 让 X 正好贴到按钮左边。 */
+body.hp .search-wrap form.search input { padding-right: 56px; }
 
 body.hp .search-go {
   position: absolute;
   right: 5px;
   top: 50%;
   transform: translateY(-50%);
-  width: 34px;
+  width: 52px;
   height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 0;
+  border: 1px solid var(--line-hi);
   border-radius: 999px;
-  background: var(--acc);
-  color: #fff;
+  background: var(--surface-hi);
+  color: var(--text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .02em;
   cursor: pointer;
-  transition: filter .16s, transform .16s, opacity .16s;
+  transition: background .16s, color .16s, border-color .16s;
 }
-body.hp .search-go:hover { filter: brightness(1.08); }
-body.hp .search-go:active { transform: translateY(-50%) scale(.93); }
+body.hp .search-go .go-kbd { display: block; }
+body.hp .search-go .go-ico { display: none; }
+
+body.hp .search-go:hover,
+body.hp .search-wrap:focus-within .search-go {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: #fff;
+}
+body.hp .search-go:hover .go-kbd,
+body.hp .search-wrap:focus-within .search-go .go-kbd { display: none; }
+body.hp .search-go:hover .go-ico,
+body.hp .search-wrap:focus-within .search-go .go-ico { display: block; }
+
+body.hp .search-go:active { transform: translateY(-50%) scale(.95); }
 body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 
-/* 工作台皮肤：跟旁边 34px 的工具按钮同族，方角、矮一档，不用主题色实心 */
+/* 工作台皮肤：方角、矮一档，日常是描边键帽，悬停变实心黑 */
+html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 50px; }
 html[data-theme^='frame'] body.hp .search-go {
-  width: 26px;
+  width: 44px;
   height: 26px;
   border-radius: 7px;
+  border-color: var(--fr-line);
+  background: var(--fr-side);
+  color: var(--fr-ink-3);
+  font-size: 10px;
+}
+html[data-theme^='frame'] body.hp .search-go:hover,
+html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
   background: var(--fr-ink);
+  border-color: var(--fr-ink);
   color: var(--fr-app);
 }
-html[data-theme^='frame'] body.hp .search-go:hover { filter: none; opacity: .86; }
+
+/* 触屏 / 窄屏：没有物理键盘，Ctrl K 这两个字只占地方 —— 直接给主题色箭头 */
+@media (max-width: 720px), (hover: none) {
+  body.hp .search-wrap form.search input { padding-right: 46px; }
+  body.hp .search-go {
+    width: 36px;
+    background: var(--acc);
+    border-color: var(--acc);
+    color: #fff;
+  }
+  body.hp .search-go .go-kbd { display: none; }
+  body.hp .search-go .go-ico { display: block; }
+  html[data-theme^='frame'] body.hp .search-go {
+    width: 30px;
+    height: 24px;
+    background: var(--fr-ink);
+    border-color: var(--fr-ink);
+    color: var(--fr-app);
+  }
+}
+
+/* 搜索建议下拉。贴在整条搜索框的下沿（左对齐引擎按钮、右对齐提交按钮），
+   宽度与胶囊一致 —— 只对齐输入区会显得歪。空的时候 hidden，不占位。 */
+body.hp .search-sug {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 120;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--hp-card-line);
+  background: var(--hp-card-bg);
+  backdrop-filter: var(--hp-card-blur);
+  -webkit-backdrop-filter: var(--hp-card-blur);
+  box-shadow: 0 20px 44px -20px rgba(0, 0, 0, .5);
+  max-height: 330px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+body.hp .sug-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 高亮要能一眼看出来：--surface-hi 在浅色卡片上几乎和白底一样，
+   混一点主题色才分得清「现在停在哪一条」。 */
+body.hp .sug-item:hover,
+body.hp .sug-item.is-active {
+  background: color-mix(in srgb, var(--acc) 13%, transparent);
+  color: var(--text);
+}
+html[data-theme^='frame'] body.hp .search-sug {
+  border-radius: 9px;
+  background: var(--fr-app);
+  border-color: var(--fr-line);
+  box-shadow: 0 14px 30px -18px rgba(0, 0, 0, .45);
+}
+html[data-theme^='frame'] body.hp .sug-item {
+  border-radius: 5px;
+  font-family: var(--fr-font);
+  font-size: 14px;
+}
 
 /* 引擎标志：26px 圆角方块。旧版 22px 太小，几个品牌符号在 15px 的
    SVG 视窗里糊成一团。26px 配 17px 的标记，形状辨识度明显好一档。 */

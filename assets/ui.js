@@ -405,7 +405,148 @@
     closeMenus();
     $('.eng-menu .eng-btn')?.focus();
     $('#q')?.focus();
+    closeSug();
+    scheduleSug(0);
   });
+
+  /* ================= 搜索：提交与建议 =================
+     两个坑都在这里收口：
+
+     ① 提交不能走表单。本站 CSP 是 `form-action 'self'`，跨源表单提交会被
+        浏览器直接拦掉 —— 表现就是「新标签打开了、地址栏也有 URL，但页面
+        空白，按 F5 才加载」（刷新属于普通导航，不受 form-action 管）。
+        所以改为自己拼 URL 再 window.open，普通导航不在该指令约束范围内。
+
+     ② 建议由服务端代取（api.php?action=suggest）。本站 CSP 是
+        connect-src 'self'，浏览器直连百度 / 必应会被自己的 CSP 拦掉；
+        而且各家跨域策略不统一，只有放服务端才能都吃下来。
+
+     隐私：每敲一次字（停顿 220ms）会把当前关键词发给对应引擎，
+     这是搜索建议的固有行为；不输入就不会发请求。 */
+  const sugBox = document.getElementById('sug');
+  const qInput = document.getElementById('q');
+  let sugTimer = 0;
+  let sugSeq = 0;
+  let sugItems = [];
+  let sugActive = -1;
+
+  function closeSug() {
+    if (!sugBox) return;
+    sugBox.hidden = true;
+    sugBox.innerHTML = '';
+    sugItems = [];
+    sugActive = -1;
+    qInput?.setAttribute('aria-expanded', 'false');
+  }
+
+  function drawSug() {
+    if (!sugBox) return;
+    if (!sugItems.length) { closeSug(); return; }
+    sugBox.innerHTML = '';
+    sugItems.forEach((text, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sug-item' + (i === sugActive ? ' is-active' : '');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', i === sugActive ? 'true' : 'false');
+      btn.textContent = text;
+      // 按下时别让输入框失焦，否则 blur 先把下拉关了、click 就落空
+      btn.addEventListener('mousedown', e => e.preventDefault());
+      btn.addEventListener('click', () => pickSug(i));
+      sugBox.appendChild(btn);
+    });
+    sugBox.hidden = false;
+    qInput?.setAttribute('aria-expanded', 'true');
+  }
+
+  function pickSug(i) {
+    const v = sugItems[i];
+    if (!v || !qInput) return;
+    qInput.value = v;
+    closeSug();
+    submitSearch();
+  }
+
+  function fetchSug() {
+    if (!sugBox || !qInput) return;
+    const q = qInput.value.trim();
+    const eng = engState.cur || $('.eng-menu .eng-logo')?.dataset.engLogo || '';
+    if (!q || !eng) { closeSug(); return; }
+    const my = ++sugSeq;
+    fetch('api.php?action=suggest&engine=' + encodeURIComponent(eng) + '&q=' + encodeURIComponent(q), {
+      credentials: 'same-origin',
+    })
+      .then(r => r.json())
+      .then(j => {
+        if (my !== sugSeq) return;            // 慢的旧请求不许覆盖新结果
+        sugItems = Array.isArray(j.items) ? j.items.slice(0, 8) : [];
+        sugActive = -1;
+        drawSug();
+      })
+      .catch(() => { if (my === sugSeq) closeSug(); });
+  }
+
+  function scheduleSug(delay) {
+    clearTimeout(sugTimer);
+    const v = qInput ? qInput.value.trim() : '';
+    if (!v) { closeSug(); return; }
+    sugTimer = setTimeout(fetchSug, delay === undefined ? 220 : delay);
+  }
+
+  function submitSearch() {
+    if (!searchForm || !qInput) return;
+    const v = qInput.value.trim();
+    if (!v) { qInput.focus(); return; }
+    let url;
+    try {
+      url = new URL(searchForm.action, location.href);
+      url.search = '';                                  // 丢掉 action 里的空参数
+      url.searchParams.set(qInput.name || 'q', v);      // 参数名跟着引擎走
+    } catch (err) {
+      window.open(searchForm.action + encodeURIComponent(v), '_blank');
+      return;
+    }
+    const href = url.toString();
+    const w = window.open(href, '_blank');
+    if (w) {
+      try { w.opener = null; } catch (err) {}            // 断开 opener，别让目标页反向操作本页
+    } else {
+      location.href = href;                             // 弹窗被拦：同标签打开，至少能搜到
+    }
+  }
+
+  if (searchForm && qInput) {
+    qInput.setAttribute('aria-expanded', 'false');
+    qInput.setAttribute('aria-controls', 'sug');
+    qInput.setAttribute('autocomplete', 'off');
+
+    searchForm.addEventListener('submit', e => {
+      e.preventDefault();
+      closeSug();
+      submitSearch();
+    });
+
+    qInput.addEventListener('input', () => scheduleSug());
+
+    qInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeSug(); return; }
+      if (!sugItems.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        sugActive = (sugActive + step + sugItems.length) % sugItems.length;
+        drawSug();
+      } else if (e.key === 'Enter' && sugActive >= 0) {
+        e.preventDefault();
+        pickSug(sugActive);
+      }
+    });
+
+    qInput.addEventListener('blur', () => setTimeout(closeSug, 120));
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.search-wrap')) closeSug();
+    });
+  }
 
   /* ================= 分组导航 =================
      V1.3.0 起 tab 与 side 共用同一套「目录」行为：

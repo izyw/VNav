@@ -4,7 +4,7 @@
   <p><strong>可能是最好用的开源上网导航（浏览器起始页）</strong><br>
   把常用站点摆成一屏，一个 PHP 目录、一个 SQLite 文件，传上去就能用。</p>
   <p>
-    <img alt="版本" src="https://img.shields.io/badge/version-1.2.0-blue">
+    <img alt="版本" src="https://img.shields.io/badge/version-1.2.1-blue">
     <img alt="PHP" src="https://img.shields.io/badge/PHP-8.1%2B-777bb4">
     <img alt="SQLite" src="https://img.shields.io/badge/SQLite-单文件-003b57">
     <img alt="构建步骤" src="https://img.shields.io/badge/构建步骤-无-brightgreen">
