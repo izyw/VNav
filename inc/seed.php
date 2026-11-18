@@ -12,7 +12,7 @@
  * 再点「拉取图标」，几十秒就能补齐。
  */
 declare(strict_types=1);
-if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
+if (!defined('HP_ROOT')) { http_response_code(404); exit; }
 
 function hp_seed_groups(): array
 {
@@ -107,27 +107,27 @@ function hp_seed_links(): array
   3 => 
   array (
     'g' => '常用',
-    'title' => 'bilibili',
-    'url' => 'https://www.bilibili.com',
-    'descr' => '哔哩哔哩（bilibili.com)是国内知名的视频弹幕网站，这里有及时的动漫新番，活跃的ACG氛围，有创意的Up主。大家可以在这里找到许多欢乐。',
+    'title' => 'ChatGPT',
+    'url' => 'https://chat.openai.com',
+    'descr' => 'OpenAI 的对话助手',
     'icon' => '',
     'sort' => 4,
   ),
   4 => 
   array (
     'g' => '常用',
-    'title' => 'ChatGPT',
-    'url' => 'https://chat.openai.com',
-    'descr' => 'OpenAI 的对话助手',
+    'title' => 'Chat Deepseek',
+    'url' => 'https://chat.deepseek.com',
+    'descr' => '国产推理模型，免费',
     'icon' => '',
     'sort' => 5,
   ),
   5 => 
   array (
     'g' => '常用',
-    'title' => 'Chat Deepseek',
-    'url' => 'https://chat.deepseek.com',
-    'descr' => '国产推理模型，免费',
+    'title' => 'bilibili',
+    'url' => 'https://www.bilibili.com',
+    'descr' => '哔哩哔哩（bilibili.com)是国内知名的视频弹幕网站，这里有及时的动漫新番，活跃的ACG氛围，有创意的Up主。大家可以在这里找到许多欢乐。',
     'icon' => '',
     'sort' => 6,
   ),
@@ -170,27 +170,27 @@ function hp_seed_links(): array
   10 => 
   array (
     'g' => '影音',
-    'title' => 'QQ音乐',
-    'url' => 'https://y.qq.com',
-    'descr' => 'QQ音乐是腾讯公司推出的一款网络音乐服务产品，海量音乐在线试听、新歌热歌在线首发、歌词翻译、手机铃声下载、高品质无损音乐试听、海量无损曲库、正版音乐下载、空间背景音乐设置、MV观看等，是互联网音乐播放和下载的优选。',
+    'title' => '哔哩哔哩漫画 - bilibili 正版漫画平台',
+    'url' => 'https://manga.bilibili.com',
+    'descr' => '哔哩哔哩正版漫画阅读平台, 海量官方漫画连载在线观看, 二次元动漫迷的追漫神器, 热门漫画: 海贼王, 五等分的新娘, 约定的梦幻岛, 辉夜大小姐想让我告白 ~天才们的恋爱头脑战~, 关于我转生变成史莱姆这档事, 我的英雄学园, 修真聊天群',
     'icon' => '',
     'sort' => 3,
   ),
   11 => 
   array (
     'g' => '影音',
-    'title' => '虎牙直播-技术驱动娱乐-弹幕式互动直播平台',
-    'url' => 'https://www.huya.com',
-    'descr' => '虎牙直播是以游戏直播为主的弹幕式互动直播平台，累计注册用户2亿，提供热门游戏直播、电竞赛事直播与游戏赛事直播，手游直播等。包含英雄联盟lol，王者荣耀，绝地求生，和平精英等游戏直播，lol、dota2、dnf等热门游戏直播以及单机游戏、手游',
+    'title' => '芒果TV-天生青春',
+    'url' => 'https://www.mgtv.com',
+    'descr' => '芒果TV-大家都在看的在线视频网站-热门综艺最新电影电视剧在线观看',
     'icon' => '',
     'sort' => 4,
   ),
   12 => 
   array (
     'g' => '影音',
-    'title' => 'Youku',
-    'url' => 'https://www.youku.com',
-    'descr' => '优酷视频是中国领先的在线视频平台，提供海量正版高清电视剧、电影、综艺、动漫、纪录片等视频内容，独家热播剧集实时更新，畅享流畅观影体验。',
+    'title' => '腾讯视频',
+    'url' => 'https://v.qq.com',
+    'descr' => '腾讯视频官方网站，腾讯视频提供最新热门电视剧、电影、综艺、动漫、纪录片等高清正版视频在线观看。海量独家内容持续更新，涵盖国产剧、美剧、韩剧、院线大片、热门综艺，支持超清流畅播放，尽在腾讯视频，当前热播《日落时分说爱你 第2季》，支持高清在线',
     'icon' => '',
     'sort' => 5,
   ),
@@ -206,72 +206,72 @@ function hp_seed_links(): array
   14 => 
   array (
     'g' => '影音',
-    'title' => '芒果TV-天生青春',
-    'url' => 'https://www.mgtv.com',
-    'descr' => '芒果TV-大家都在看的在线视频网站-热门综艺最新电影电视剧在线观看',
+    'title' => 'QQ音乐',
+    'url' => 'https://y.qq.com',
+    'descr' => 'QQ音乐是腾讯公司推出的一款网络音乐服务产品，海量音乐在线试听、新歌热歌在线首发、歌词翻译、手机铃声下载、高品质无损音乐试听、海量无损曲库、正版音乐下载、空间背景音乐设置、MV观看等，是互联网音乐播放和下载的优选。',
     'icon' => '',
     'sort' => 7,
   ),
   15 => 
   array (
     'g' => '影音',
-    'title' => '快手',
-    'url' => 'https://www.kuaishou.com',
-    'descr' => '快手是一款国民级短视频App。在快手，了解真实的世界，认识有趣的人，也可以记录真实而有趣的自己。快手，拥抱每一种生活。',
+    'title' => '虎牙直播-技术驱动娱乐-弹幕式互动直播平台',
+    'url' => 'https://www.huya.com',
+    'descr' => '虎牙直播是以游戏直播为主的弹幕式互动直播平台，累计注册用户2亿，提供热门游戏直播、电竞赛事直播与游戏赛事直播，手游直播等。包含英雄联盟lol，王者荣耀，绝地求生，和平精英等游戏直播，lol、dota2、dnf等热门游戏直播以及单机游戏、手游',
     'icon' => '',
     'sort' => 8,
   ),
   16 => 
   array (
     'g' => '影音',
-    'title' => '哔哩哔哩漫画 - bilibili 正版漫画平台',
-    'url' => 'https://manga.bilibili.com',
-    'descr' => '哔哩哔哩正版漫画阅读平台, 海量官方漫画连载在线观看, 二次元动漫迷的追漫神器, 热门漫画: 海贼王, 五等分的新娘, 约定的梦幻岛, 辉夜大小姐想让我告白 ~天才们的恋爱头脑战~, 关于我转生变成史莱姆这档事, 我的英雄学园, 修真聊天群',
+    'title' => 'Youku',
+    'url' => 'https://www.youku.com',
+    'descr' => '优酷视频是中国领先的在线视频平台，提供海量正版高清电视剧、电影、综艺、动漫、纪录片等视频内容，独家热播剧集实时更新，畅享流畅观影体验。',
     'icon' => '',
     'sort' => 9,
   ),
   17 => 
   array (
     'g' => '影音',
-    'title' => '快看漫画_官方漫画_漫画大全免费在线观看',
-    'url' => 'https://www.kuaikanmanhua.com',
-    'descr' => '快看漫画是引领行业的新生代漫画阅读平台和兴趣社区。它为用户提供优质原创漫画内容，营造良好的二次元社区氛围，成为年轻一代的潮流文化阵地。',
+    'title' => '快手',
+    'url' => 'https://www.kuaishou.com',
+    'descr' => '快手是一款国民级短视频App。在快手，了解真实的世界，认识有趣的人，也可以记录真实而有趣的自己。快手，拥抱每一种生活。',
     'icon' => '',
     'sort' => 10,
   ),
   18 => 
   array (
     'g' => '影音',
-    'title' => 'YouTube',
-    'url' => 'https://www.youtube.com',
-    'descr' => 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on Yo',
+    'title' => '快看漫画_官方漫画_漫画大全免费在线观看',
+    'url' => 'https://www.kuaikanmanhua.com',
+    'descr' => '快看漫画是引领行业的新生代漫画阅读平台和兴趣社区。它为用户提供优质原创漫画内容，营造良好的二次元社区氛围，成为年轻一代的潮流文化阵地。',
     'icon' => '',
     'sort' => 11,
   ),
   19 => 
   array (
     'g' => '影音',
-    'title' => '网易云音乐',
-    'url' => 'https://music.163.com',
-    'descr' => '网易云音乐是一款专注于发现与分享的音乐产品，依托专业音乐人、DJ、好友推荐及社交功能，为用户打造全新的音乐生活。',
+    'title' => 'YouTube',
+    'url' => 'https://www.youtube.com',
+    'descr' => 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on Yo',
     'icon' => '',
     'sort' => 12,
   ),
   20 => 
   array (
     'g' => '影音',
-    'title' => '豆瓣',
-    'url' => 'https://www.douban.com',
-    'descr' => '提供图书、电影、音乐唱片的推荐、评论和价格比较，以及城市独特的文化生活。',
+    'title' => '网易云音乐',
+    'url' => 'https://music.163.com',
+    'descr' => '网易云音乐是一款专注于发现与分享的音乐产品，依托专业音乐人、DJ、好友推荐及社交功能，为用户打造全新的音乐生活。',
     'icon' => '',
     'sort' => 13,
   ),
   21 => 
   array (
     'g' => '影音',
-    'title' => '腾讯视频',
-    'url' => 'https://v.qq.com',
-    'descr' => '腾讯视频官方网站，腾讯视频提供最新热门电视剧、电影、综艺、动漫、纪录片等高清正版视频在线观看。海量独家内容持续更新，涵盖国产剧、美剧、韩剧、院线大片、热门综艺，支持超清流畅播放，尽在腾讯视频，当前热播《日落时分说爱你 第2季》，支持高清在线',
+    'title' => '豆瓣',
+    'url' => 'https://www.douban.com',
+    'descr' => '提供图书、电影、音乐唱片的推荐、评论和价格比较，以及城市独特的文化生活。',
     'icon' => '',
     'sort' => 14,
   ),
@@ -287,36 +287,36 @@ function hp_seed_links(): array
   23 => 
   array (
     'g' => '资讯',
-    'title' => '36Kr',
-    'url' => 'https://36kr.com',
-    'descr' => '科技与商业创投报道',
+    'title' => 'V2EX',
+    'url' => 'https://www.v2ex.com',
+    'descr' => '创意工作者的社区。讨论编程、设计、硬件、游戏等令人激动的话题。',
     'icon' => '',
     'sort' => 2,
   ),
   24 => 
   array (
     'g' => '资讯',
-    'title' => '少数派 - 高效工作，品质生活',
-    'url' => 'https://sspai.com',
-    'descr' => '少数派致力于更好地运用数字产品或科学方法，帮助用户提升工作效率和生活品质',
+    'title' => '36Kr',
+    'url' => 'https://36kr.com',
+    'descr' => '科技与商业创投报道',
     'icon' => '',
     'sort' => 3,
   ),
   25 => 
   array (
     'g' => '资讯',
-    'title' => '今日头条',
-    'url' => 'https://www.toutiao.com',
-    'descr' => '个性化推荐信息资讯聚合平台',
+    'title' => '少数派 - 高效工作，品质生活',
+    'url' => 'https://sspai.com',
+    'descr' => '少数派致力于更好地运用数字产品或科学方法，帮助用户提升工作效率和生活品质',
     'icon' => '',
     'sort' => 4,
   ),
   26 => 
   array (
     'g' => '资讯',
-    'title' => 'V2EX',
-    'url' => 'https://www.v2ex.com',
-    'descr' => '创意工作者的社区。讨论编程、设计、硬件、游戏等令人激动的话题。',
+    'title' => '今日头条',
+    'url' => 'https://www.toutiao.com',
+    'descr' => '个性化推荐信息资讯聚合平台',
     'icon' => '',
     'sort' => 5,
   ),
@@ -368,27 +368,27 @@ function hp_seed_links(): array
   32 => 
   array (
     'g' => 'AI 工具',
-    'title' => 'App unavailable in region',
-    'url' => 'https://claude.ai',
-    'descr' => 'Anthropic 的对话助手',
+    'title' => '豆包 - 字节跳动旗下 AI 智能助手',
+    'url' => 'https://www.doubao.com',
+    'descr' => 'Seedance 2.0 视频生成模型现已全面接入豆包，现在登录即可免费使用！豆包 是你的 AI 聊天智能对话问答助手，写作文案翻译编程工具。豆包为你答疑解惑，提供灵感，辅助创作，也可以和你畅聊任何你感兴趣的话题',
     'icon' => '',
     'sort' => 1,
   ),
   33 => 
   array (
     'g' => 'AI 工具',
-    'title' => '豆包 - 字节跳动旗下 AI 智能助手',
-    'url' => 'https://www.doubao.com',
-    'descr' => 'Seedance 2.0 视频生成模型现已全面接入豆包，现在登录即可免费使用！豆包 是你的 AI 聊天智能对话问答助手，写作文案翻译编程工具。豆包为你答疑解惑，提供灵感，辅助创作，也可以和你畅聊任何你感兴趣的话题',
+    'title' => '即梦AI - 即刻造梦',
+    'url' => 'https://jimeng.jianying.com',
+    'descr' => '即梦AI一站式智能创作平台，即刻造梦。提供AI绘画和AIGC视频创作体验，拥有激发无限创作灵感的社区。让即梦AI开启您的智能创作之旅，探索梦境实现的无限可能！',
     'icon' => '',
     'sort' => 2,
   ),
   34 => 
   array (
     'g' => 'AI 工具',
-    'title' => '即梦AI - 即刻造梦',
-    'url' => 'https://jimeng.jianying.com',
-    'descr' => '即梦AI一站式智能创作平台，即刻造梦。提供AI绘画和AIGC视频创作体验，拥有激发无限创作灵感的社区。让即梦AI开启您的智能创作之旅，探索梦境实现的无限可能！',
+    'title' => 'Kimi AI 官网：K3.1 Pro 上线，编程与智能体任务全面升级',
+    'url' => 'https://www.kimi.com',
+    'descr' => '全新 Kimi K3.1 Pro 正式上线：轻松应对复杂编程项目、构建 3D 模型、开展深度金融研究，以更强大的智能体能力，高效完成更多复杂任务。',
     'icon' => '',
     'sort' => 3,
   ),
@@ -404,18 +404,18 @@ function hp_seed_links(): array
   36 => 
   array (
     'g' => 'AI 工具',
-    'title' => 'Kimi AI 官网：K3.1 Pro 上线，编程与智能体任务全面升级',
-    'url' => 'https://www.kimi.com',
-    'descr' => '全新 Kimi K3.1 Pro 正式上线：轻松应对复杂编程项目、构建 3D 模型、开展深度金融研究，以更强大的智能体能力，高效完成更多复杂任务。',
+    'title' => '‎Google Gemini',
+    'url' => 'https://gemini.google.com',
+    'descr' => 'Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of ge',
     'icon' => '',
     'sort' => 5,
   ),
   37 => 
   array (
     'g' => 'AI 工具',
-    'title' => '‎Google Gemini',
-    'url' => 'https://gemini.google.com',
-    'descr' => 'Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of ge',
+    'title' => 'App unavailable in region',
+    'url' => 'https://claude.ai',
+    'descr' => 'Anthropic 的对话助手',
     'icon' => '',
     'sort' => 6,
   ),
