@@ -54,6 +54,7 @@ function hp_groupnav_safe(?string $v): string
 function hp_group_icon_set(): array
 {
     return [
+        /* ---------- 第一批：语义最常用的 15 个 ---------- */
         'star'  => '<path d="M12 3.2l2.6 5.9 6.1.5-4.6 4.1 1.4 6-5.5-3.3-5.5 3.3 1.4-6L3.3 9.6l6.1-.5z"/>',
         'code'  => '<path d="M8.5 8L4 12l4.5 4M15.5 8L20 12l-4.5 4"/>',
         'pen'   => '<path d="M12.5 20H21"/><path d="M16.6 3.6a2 2 0 012.9 2.9L7.4 18.6l-4 1.1 1.1-4z"/>',
@@ -69,6 +70,46 @@ function hp_group_icon_set(): array
         'music' => '<circle cx="7" cy="17.5" r="2.6"/><circle cx="18" cy="15.5" r="2.6"/><path d="M9.6 17.5V7l11-2v10.5"/>',
         'game'  => '<rect x="2.5" y="7" width="19" height="10" rx="4"/><path d="M7 10.5v3M5.5 12h3M16 11.5h.01M18.5 14h.01"/>',
         'grid'  => '<rect x="3.4" y="3.4" width="7" height="7" rx="1.8"/><rect x="13.6" y="3.4" width="7" height="7" rx="1.8"/><rect x="3.4" y="13.6" width="7" height="7" rx="1.8"/><rect x="13.6" y="13.6" width="7" height="7" rx="1.8"/>',
+
+        /* ---------- 第二批：办公 / 技术 / 生活，补到 39 个 ----------
+           全部沿用同一套画法：24 网格、纯描边、无填充、圆头圆角，
+           混在第一批里不会有「某个图标线条粗细不一样」的突兀感。 */
+        'wrench'   => '<path d="M14.5 6.2a4.2 4.2 0 015.3 5.3l-8.6 8.6a2.4 2.4 0 01-3.4-3.4l8.6-8.6z"/><path d="M4.6 15.4l3.9 3.9"/>',
+        'camera'   => '<path d="M4 8h3l1.5-2.2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13.4" r="3.4"/>',
+        'image'    => '<rect x="3" y="4" width="18" height="16" rx="2.4"/><circle cx="8.6" cy="9.4" r="1.6"/><path d="M4 17.5l5-4.6 4 3.6 3-2.6 4 3.6"/>',
+        'video'    => '<rect x="3" y="6" width="12" height="12" rx="2.2"/><path d="M15 10.5l6-3.5v10l-6-3.5z"/>',
+        'mail'     => '<rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="M3.6 6.6l8.4 6 8.4-6"/>',
+        'calendar' => '<rect x="3.5" y="5" width="17" height="16" rx="2.4"/><path d="M3.5 10h17M8 3.2v3.6M16 3.2v3.6"/>',
+        'chart'    => '<path d="M4 20V10M10 20V4M16 20v-7M21.2 20H2.8"/>',
+        'terminal' => '<rect x="3" y="4" width="18" height="16" rx="2.4"/><path d="M7.2 9.6l3 2.6-3 2.6M13 15.2h4"/>',
+        'server'   => '<rect x="3" y="4" width="18" height="6.8" rx="2"/><rect x="3" y="13.2" width="18" height="6.8" rx="2"/><path d="M7 7.4h.01M7 16.6h.01"/>',
+        'db'       => '<ellipse cx="12" cy="6" rx="7.6" ry="3"/><path d="M4.4 6v12c0 1.7 3.4 3 7.6 3s7.6-1.3 7.6-3V6"/><path d="M4.4 12c0 1.7 3.4 3 7.6 3s7.6-1.3 7.6-3"/>',
+        'download' => '<path d="M12 3.8v10.6M7.6 10.2L12 14.6l4.4-4.4"/><path d="M4.5 17.2v1.6a1.6 1.6 0 001.6 1.6h11.8a1.6 1.6 0 001.6-1.6v-1.6"/>',
+        'folder'   => '<path d="M3 7.4A1.6 1.6 0 014.6 5.8h4.1l2 2.6h8.7A1.6 1.6 0 0121 10v8.6a1.6 1.6 0 01-1.6 1.6H4.6A1.6 1.6 0 013 18.6z"/>',
+        'file'     => '<path d="M6 3.6h7l5.2 5.2V20a1.6 1.6 0 01-1.6 1.6H6A1.6 1.6 0 014.4 20V5.2A1.6 1.6 0 016 3.6z"/><path d="M13 3.6v5.2h5.2"/>',
+        'lock'     => '<rect x="4.6" y="10" width="14.8" height="10.4" rx="2.2"/><path d="M8.2 10V7.6a3.8 3.8 0 017.6 0V10"/>',
+        'shield'   => '<path d="M12 3l8 3v6.1c0 4.5-3.3 8.2-8 9-4.7-.8-8-4.5-8-9V6z"/>',
+        'bulb'     => '<path d="M9.4 17.8h5.2M10.4 21h3.2"/><path d="M12 3a5.8 5.8 0 00-3.4 10.5v2.1h6.8v-2.1A5.8 5.8 0 0012 3z"/>',
+        'rocket'   => '<path d="M12 2.8c3.1 1.6 5 4.9 5 8.6 0 2-.8 3.8-1.8 5.2H8.8C7.8 15.2 7 13.4 7 11.4c0-3.7 1.9-7 5-8.6z"/><path d="M9.2 16.6L6.8 21l3.9-1.4M14.8 16.6L17.2 21l-3.9-1.4"/><circle cx="12" cy="10" r="1.4"/>',
+        'heart'    => '<path d="M12 20.2s-7.2-4.6-7.2-9.4A4 4 0 0112 8.2a4 4 0 017.2 2.6c0 4.8-7.2 9.4-7.2 9.4z"/>',
+        'bookmark' => '<path d="M6.6 3.6h10.8A1.6 1.6 0 0119 5.2v15.6l-7-4.2-7 4.2V5.2a1.6 1.6 0 011.6-1.6z"/>',
+        'clock'    => '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.4V12l3.1 2"/>',
+        'search'   => '<circle cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4L20.4 20.4"/>',
+        'gear'     => '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.9v2.5M12 18.6v2.5M4.4 4.4l1.8 1.8M17.8 17.8l1.8 1.8M2.9 12h2.5M18.6 12h2.5M4.4 19.6l1.8-1.8M17.8 6.2l1.8-1.8"/>',
+        'chat'     => '<path d="M20 15.6a2.4 2.4 0 01-2.4 2.4H9.2L5 21V6.4A2.4 2.4 0 017.4 4h10.2A2.4 2.4 0 0120 6.4z"/>',
+        'tag'      => '<path d="M11.6 3.5H20a.5.5 0 01.5.5v8.4a2 2 0 01-.6 1.4l-7.1 7.1a2 2 0 01-2.8 0l-6.4-6.4a2 2 0 010-2.8l7.1-7.1a2 2 0 011.4-.6z"/><circle cx="16.3" cy="7.7" r="1.3"/>',
+        'link'     => '<path d="M10.2 13.6a3.9 3.9 0 005.5 0l2.7-2.7a3.9 3.9 0 10-5.5-5.5l-1.2 1.2"/><path d="M13.8 10.4a3.9 3.9 0 00-5.5 0l-2.7 2.7a3.9 3.9 0 105.5 5.5l1.2-1.2"/>',
+        'globe'    => '<circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2"/><path d="M12 3.4c2.5 2.4 3.8 5.4 3.8 8.6s-1.3 6.2-3.8 8.6c-2.5-2.4-3.8-5.4-3.8-8.6s1.3-6.2 3.8-8.6z"/>',
+        'wallet'   => '<rect x="3" y="6" width="18" height="13" rx="2.6"/><path d="M3 10.4h18"/><circle cx="16.6" cy="14.6" r="1.2"/>',
+        'gift'     => '<rect x="3.4" y="9.2" width="17.2" height="11" rx="1.9"/><path d="M3.4 13.4h17.2M12 9.2V20.2"/><path d="M12 9.2C9.4 9.2 7.9 8 7.9 6.5A2.2 2.2 0 0112 5.3a2.2 2.2 0 014.1 1.2c0 1.5-1.5 2.7-4.1 2.7z"/>',
+        'plane'    => '<path d="M10.6 13.4L3 10.9V8.4l7.6 1.2V5.4a1.4 1.4 0 012.8 0v4.2L21 8.4v2.5l-7.6 2.5V18l2.2 1.5V21L12 19.8 8.4 21v-1.5L10.6 18z"/>',
+        'palette'  => '<path d="M12 3.6a8.4 8.4 0 000 16.8c1.4 0 2-.9 2-1.9 0-1.6-1.5-1.9-1.5-3.2 0-1 .8-1.7 2-1.7h1.8a4.2 4.2 0 004.2-4.2c0-3.2-3.8-5.8-8.5-5.8z"/><circle cx="7.9" cy="9.6" r="1.1"/><circle cx="11.1" cy="7.1" r="1.1"/><circle cx="15.1" cy="8.1" r="1.1"/>',
+        'headphones' => '<path d="M4.6 14v-2a7.4 7.4 0 0114.8 0v2"/><rect x="2.9" y="13.4" width="4" height="6.6" rx="1.9"/><rect x="17.1" y="13.4" width="4" height="6.6" rx="1.9"/>',
+        'mug'      => '<path d="M4.6 7.6h11.8v7.4a4 4 0 01-4 4H8.6a4 4 0 01-4-4z"/><path d="M16.4 9.6h1.6a2.2 2.2 0 010 4.4h-1.6"/><path d="M7.6 3.6v2.2M10.8 3.6v2.2"/>',
+        'leaf'     => '<path d="M20 4c0 8-5 13-11 13H4.8v-4C4.8 7 11 4 20 4z"/><path d="M4.8 20c2-5 5.4-8.4 9.6-10.4"/>',
+        'pin'      => '<path d="M12 21s6.4-6.2 6.4-10.4a6.4 6.4 0 10-12.8 0C5.6 14.8 12 21 12 21z"/><circle cx="12" cy="10.4" r="2.4"/>',
+        'git'      => '<circle cx="7" cy="6" r="2.2"/><circle cx="7" cy="18" r="2.2"/><circle cx="17.2" cy="12" r="2.2"/><path d="M7 8.2v7.6M9.2 6.6c3.4 0 6 2.2 6 5.4"/>',
+        'keyboard' => '<rect x="2.6" y="6" width="18.8" height="12" rx="2.4"/><path d="M6.4 10h.01M9.8 10h.01M13.2 10h.01M16.6 10h.01M7.6 14.2h8.8"/>',
     ];
 }
 
@@ -113,6 +154,45 @@ function hp_group_icon_tones(): array
         'music' => 300,  // 品红
         'game'  => 80,   // 青柠
         'grid'  => 214,  // 石板蓝（兜底，低饱和）
+
+        /* 第二批沿用同一思路：一个图标一枚色相，按语义挑，
+           彼此至少隔 15° 以上 —— 28px 的色块上，太近的两种色分不出来。 */
+        'wrench'     => 202,
+        'camera'     => 342,
+        'image'      => 286,
+        'video'      => 14,
+        'mail'       => 222,
+        'calendar'   => 16,
+        'chart'      => 196,
+        'terminal'   => 152,
+        'server'     => 236,
+        'db'         => 262,
+        'download'   => 206,
+        'folder'     => 42,
+        'file'       => 26,
+        'lock'       => 4,
+        'shield'     => 174,
+        'bulb'       => 52,
+        'rocket'     => 336,
+        'heart'      => 352,
+        'bookmark'   => 22,
+        'clock'      => 216,
+        'search'     => 190,
+        'gear'       => 226,
+        'chat'       => 266,
+        'tag'        => 312,
+        'link'       => 182,
+        'globe'      => 200,
+        'wallet'     => 132,
+        'gift'       => 322,
+        'plane'      => 208,
+        'palette'    => 292,
+        'headphones' => 282,
+        'mug'        => 30,
+        'leaf'       => 122,
+        'pin'        => 356,
+        'git'        => 12,
+        'keyboard'   => 232,
     ];
 }
 
@@ -182,6 +262,15 @@ function hp_group_icon_labels(): array
         'play' => '播放', 'zap' => '闪电', 'ai' => '智能', 'cloud' => '云',
         'book' => '书籍', 'bag' => '购物', 'users' => '人群', 'home' => '首页',
         'music' => '音乐', 'game' => '游戏', 'grid' => '网格',
+        'wrench' => '工具', 'camera' => '相机', 'image' => '图片', 'video' => '视频',
+        'mail' => '邮件', 'calendar' => '日历', 'chart' => '图表', 'terminal' => '终端',
+        'server' => '服务器', 'db' => '数据库', 'download' => '下载', 'folder' => '文件夹',
+        'file' => '文档', 'lock' => '加密', 'shield' => '安全', 'bulb' => '灵感',
+        'rocket' => '火箭', 'heart' => '收藏夹', 'bookmark' => '书签', 'clock' => '时间',
+        'search' => '搜索', 'gear' => '设置', 'chat' => '对话', 'tag' => '标签',
+        'link' => '链接', 'globe' => '全球', 'wallet' => '钱包', 'gift' => '礼物',
+        'plane' => '出行', 'palette' => '配色', 'headphones' => '耳机', 'mug' => '咖啡',
+        'leaf' => '生活', 'pin' => '地点', 'git' => 'Git', 'keyboard' => '键盘',
     ];
 }
 
@@ -198,4 +287,30 @@ function hp_group_icon(string $name, string $custom = ''): string
 {
     $set = hp_group_icon_set();
     return $set[hp_group_icon_key($name, $custom)] ?? $set['grid'];
+}
+
+/**
+ * 分组图标的完整标记（内联 svg 或 <img>）。
+ *
+ * $custom 可能是三种东西：
+ *   ① 空                       → 按组名自动匹配的内置图标
+ *   ② 内置图标键（'star' 等）   → 同上，但按用户选的
+ *   ③ 自定义图片（'data/icons/g-xxx.png' 或 http(s)://…）
+ *      → 用 <img>。前两种内联 svg 不产生任何额外请求，只有第三种要下载，
+ *        而且后台保存时就已经抓下来落到 data/icons/，前台读的是本机文件。
+ *
+ * 为什么要单独一个函数：模板里 <svg> 的尺寸、描边宽度各不相同（侧栏 15、
+ * 分组头 13、后台 18），自定义图标又不能用 <svg> 包 —— 于是把「外壳」交给
+ * 调用方决定尺寸，这里只负责里面的内容形态。
+ */
+function hp_group_icon_markup(string $name, string $custom = '', int $size = 18): string
+{
+    $c = trim($custom);
+    if ($c !== '' && (str_starts_with($c, 'data/icons/') || preg_match('#^https?://#i', $c))) {
+        return '<img class="gicon-img" src="' . h($c) . '" width="' . $size . '" height="' . $size
+            . '" alt="" loading="lazy" decoding="async">';
+    }
+    return '<svg viewBox="0 0 24 24" width="' . $size . '" height="' . $size
+        . '" fill="none" stroke="currentColor" stroke-width="' . ($size >= 18 ? '1.7' : '2.1') . '"'
+        . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . hp_group_icon($name, $custom) . '</svg>';
 }

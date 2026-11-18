@@ -326,6 +326,21 @@ body.hp .brand-mark {
   box-shadow: none;
 }
 body.hp .brand-mark svg { width: 16px; height: 16px; }
+/* 自定义站点图标。选择器比 body.hp .brand-mark 多一级（0,3,1），
+   才能压过皮肤文件里在它之后加载的渐变背景 —— 那里的选择器同样带
+   body.hp，靠「后加载」本来会赢。 */
+body.hp .brand .brand-mark--logo {
+  background: none;
+  box-shadow: none;
+  border-radius: 7px;
+  overflow: hidden;
+}
+body.hp .brand .brand-mark--logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 
 /* ==========================================================================
    5. 搜索框
@@ -366,32 +381,24 @@ body.hp .search input {
   font-size: 15.5px;
 }
 
-/* 右侧留白：按钮不聚焦时是一枚「Ctrl+K」胶囊，聚焦后收成方形箭头，
-   输入框的右内距要跟着这两种宽度走。
-   ⚠️ 收起态的写法必须比常态「更具体」：常态是 .search-wrap + form + .search
-   三个类两级元素（0,3,3），若写成 body.hp .search:focus-within input（0,3,2），
-   元素层级少一层依然输给常态规则 —— 之前「聚焦了内距不动」就是这个原因。 */
-body.hp .search-wrap form.search input { padding-right: 78px; }
-/* 只有「正在输入」才收窄：失焦后按钮又变回 60px 胶囊，此时若也用 48px，
-   框里的字会伸到胶囊底下。 */
-body.hp .search-wrap form.search:focus-within input { padding-right: 48px; }
+/* 右侧内距：按钮宽度是固定值（62px），所以这里也只有一个定值。
+   以前按钮会从 60px 收成 28px，右内距得跟着 78→48 地跳 —— 打字时
+   输入区突然收一下，加上按钮同时变形，观感就是「撕裂」。 */
+body.hp .search-wrap form.search input { padding-right: 76px; }
 
-/* 提交按钮：不聚焦时是一枚浅色调方圆角胶囊，里面直接写 Ctrl+K ——
-   提示与触发点合成同一个东西，不再有「一个灰字 + 一颗按钮」两个元素。
-   光标进到搜索框后换成实心主题色 + 白箭头，高度不变，框不会抖。
-   配色取主题色的中间档：字 = accent 混正文色，底 = accent 混透明，
-   比原来的深蓝浅、比原来的灰字深，两者对比度接近，看着是一体的。 */
+/* 提交按钮：一枚固定 62×28 的方圆角控件，两种形态叠在同一个位置上 ——
+   不聚焦是浅底 + 「Ctrl+K」，光标进来换成主题色实心 + 白箭头。
+   宽高完全不变（只有底色和内容透明度在动），所以切换时没有任何位移。 */
 body.hp .search-go {
   position: absolute;
   right: 5px;
   top: 50%;
   transform: translateY(-50%);
+  width: 62px;
   height: 28px;
-  min-width: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 9px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--acc) 15%, transparent);
@@ -402,26 +409,31 @@ body.hp .search-go {
   letter-spacing: .05em;
   line-height: 1;
   cursor: pointer;
-  transition: background .16s, border-color .16s, color .16s, transform .12s;
+  overflow: hidden;
+  transition: background .18s, border-color .18s, color .18s, transform .12s;
 }
 body.hp .search-go:hover {
-  background: color-mix(in srgb, var(--acc) 20%, transparent);
-  border-color: color-mix(in srgb, var(--acc) 38%, transparent);
+  background: color-mix(in srgb, var(--acc) 22%, transparent);
+  border-color: color-mix(in srgb, var(--acc) 40%, transparent);
 }
-body.hp .search-go .go-kbd { display: block; }
-body.hp .search-go .go-ico { display: none; }
+/* 提示与箭头占同一格，只交换透明度 —— 不用 display 切换，因为那会让
+   内容瞬间消失/出现，和宽度变化叠在一起就成了「抖」 */
+body.hp .search-go > .go-kbd,
+body.hp .search-go > .go-ico {
+  grid-area: 1 / 1;
+  transition: opacity .15s ease;
+}
+body.hp .search-go > .go-kbd { opacity: 1; }
+body.hp .search-go > .go-ico { opacity: 0; }
 
-/* 聚焦：胶囊收成 28×28 的方块，实心主题色，出箭头 */
+/* 聚焦：同一枚按钮换配色，尺寸一律不动 */
 body.hp .search-wrap:focus-within .search-go {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
   background: var(--acc);
   border-color: var(--acc);
   color: var(--acc-ink);
 }
-body.hp .search-wrap:focus-within .search-go .go-kbd { display: none; }
-body.hp .search-wrap:focus-within .search-go .go-ico { display: block; }
+body.hp .search-wrap:focus-within .search-go > .go-kbd { opacity: 0; }
+body.hp .search-wrap:focus-within .search-go > .go-ico { opacity: 1; }
 
 body.hp .search-go:active { transform: translateY(-50%) scale(.94); }
 body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
@@ -430,16 +442,15 @@ body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset
 html[data-theme^='frame'] body.hp .search-wrap { border-radius: 9px; }
 html[data-theme^='frame'] body.hp .eng-btn { border-radius: 9px 0 0 9px; }
 html[data-theme^='frame'] body.hp .search input { border-radius: 0 9px 9px 0; }
-html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 74px; }
-html[data-theme^='frame'] body.hp .search-wrap form.search:focus-within input { padding-right: 44px; }
-html[data-theme^='frame'] body.hp .search-go {
+html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 70px; }
+html[data-theme^='frame'] body.hp .search-go,
+html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
   right: 5px;
+  width: 56px;
   height: 26px;
-  min-width: 26px;
-  padding: 0 8px;
   border-radius: 6px;
-  border-color: var(--fr-line);
   background: var(--fr-side);
+  border-color: var(--fr-line);
   color: var(--fr-ink-2);
   font-size: 10px;
 }
@@ -448,9 +459,6 @@ html[data-theme^='frame'] body.hp .search-go:hover {
   border-color: var(--fr-line-2);
 }
 html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
-  width: 26px;
-  min-width: 26px;
-  padding: 0;
   background: var(--fr-ink);
   border-color: var(--fr-ink);
   color: var(--fr-app);
@@ -459,28 +467,26 @@ html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
 /* 触屏 / 窄屏：没有物理键盘，Ctrl+K 只占地方 —— 常态与聚焦都给箭头。
    两个选择器都要写：聚焦态那条更具体（0,4,1），只写常态会被它盖住。 */
 @media (max-width: 720px), (hover: none) {
-  body.hp .search-wrap form.search input,
-  body.hp .search-wrap form.search:focus-within input { padding-right: 46px; }
+  body.hp .search-wrap form.search input { padding-right: 46px; }
   body.hp .search-go,
   body.hp .search-wrap:focus-within .search-go {
     width: 32px;
     height: 32px;
-    min-width: 32px;
-    padding: 0;
     border-radius: 9px;
     background: var(--acc);
     border-color: var(--acc);
     color: var(--acc-ink);
   }
-  body.hp .search-go .go-kbd { display: none; }
-  body.hp .search-go .go-ico { display: block; }
-  html[data-theme^='frame'] body.hp .search-wrap form.search input,
-  html[data-theme^='frame'] body.hp .search-wrap form.search:focus-within input { padding-right: 40px; }
+  /* 这一档始终是箭头：直接改透明度，不靠 display 切换 */
+  body.hp .search-go > .go-kbd,
+  body.hp .search-wrap:focus-within .search-go > .go-kbd { opacity: 0; }
+  body.hp .search-go > .go-ico,
+  body.hp .search-wrap:focus-within .search-go > .go-ico { opacity: 1; }
+  html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 40px; }
   html[data-theme^='frame'] body.hp .search-go,
   html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
     width: 28px;
     height: 28px;
-    min-width: 28px;
     border-radius: 6px;
     background: var(--fr-ink);
     border-color: var(--fr-ink);
@@ -1622,15 +1628,27 @@ body.hp.is-editing .gnav-del { display: inline-flex; }
 /* ==========================================================================
    编辑浮层：描述字段 + 抓取按钮
    ========================================================================== */
-/* 名称标签与「抓取信息」按钮同一行：按钮贴右，label 的上下间距保留 */
-.f-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 14px;
+/* 网址框 + 内嵌的「抓取信息」按钮。
+   按钮是「按这个网址重读一次」的附属动作，放进同一个框里才是一件事；
+   以前它挂在名称标签右边，悬空一格还压着输入框。 */
+.url-field { position: relative; }
+/* 右侧留够按钮宽度 + 8px 间隙，网址再长也不会钻到按钮底下 */
+.url-field .f-input { padding-right: 112px; }
+.url-field .btn-fetch {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  /* 实底：半透明会透出底下的网址文字，字叠字更糊 */
+  background: var(--surface-solid);
 }
-.f-label-row .f-label { margin: 0; }
+/* 窄屏：文字收起来只留图标，否则网址可输入的宽度只剩一半 */
+@media (max-width: 520px) {
+  .url-field .f-input { padding-right: 48px; }
+  .url-field .btn-fetch { width: 34px; height: 34px; min-height: 34px; padding: 0; }
+  .url-field .btn-fetch-text { display: none; }
+  .url-field .btn-fetch svg { width: 15px; height: 15px; }
+}
 .btn-fetch {
   display: inline-flex;
   align-items: center;

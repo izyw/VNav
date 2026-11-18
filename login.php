@@ -268,13 +268,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex, nofollow">
 <title>登录 · <?= h(setting('site_title', 'Vnav')) ?></title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="icon" href="<?= hp_site_logo() !== '' ? h(hp_site_logo()) : "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" ?>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=46">
+<link rel="stylesheet" href="assets/app.css?v=47">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=54">
-<link rel="stylesheet" href="assets/auth.css?v=40">
+<link rel="stylesheet" href="assets/auth.css?v=41">
 <script>
 /* 抢先应用已保存的皮肤，避免登录页闪一下默认皮肤。
    白名单由 PHP 注入，新增皮肤不必回来改这段。 */
@@ -296,6 +296,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $wait === 0) {
 
 <main class="auth-wrap">
   <div class="auth-aside">
+    <?php $__logo = hp_site_logo(); ?>
+    <?php if ($__logo !== ''): ?>
+      <span class="auth-logo"><img src="<?= h($__logo) ?>" width="44" height="44" alt="" decoding="async"></span>
+    <?php endif; ?>
     <p class="auth-kicker">Vnav</p>
     <h1 class="auth-big">回你的<br><em>主页</em>。</h1>
     <p class="auth-note">登录后你的分组、链接和外观会存到账号里，换一台设备打开还是同一份。</p>

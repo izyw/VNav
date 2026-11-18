@@ -216,19 +216,24 @@ hp_log_visit(false, '/');
 <meta name="color-scheme" content="dark light">
 <meta name="description" content="<?= h($title) ?>">
 <title><?= h($title) ?></title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="icon" href="<?php
+  /* 站点图标：后台「基本信息」里设过就用那张图（原生 favicon 也一起换），
+     没设才回落到内置的勾形标记。 */
+  $__fav = hp_site_logo();
+  echo $__fav !== '' ? h($__fav) : "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>";
+?>">
 <?php /* 不预载 bricolage/instrument 两个 woff2（省 71KB）：
          五套皮肤全部把 --font-display/--font-body 覆盖成系统字体栈
          （atlas 系 -apple-system、frame 系 Geist），实测 document.fonts.check
          对 Bricolage 恒为 false —— 这两个字体从没被真正用上。
          @font-face 定义保留（后台等非皮肤页仍可能引用），但只有实际
          用到才会下载，preload 等于每次白下 71KB。 */ ?>
-<link rel="stylesheet" href="assets/app.css?v=54">
+<link rel="stylesheet" href="assets/app.css?v=55">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=59">
+<link rel="stylesheet" href="assets/home.css?v=62">
 <?php /* 皮肤 CSS 必须排在 home.css 之后：靠「特异性 +1 属性选择器」与
          「后加载」双重压过 home.css 的结构规则，顺序反了只能改色改不动结构。
 
@@ -237,14 +242,14 @@ hp_log_visit(false, '/');
          两套全下等于每次白费一套（gzip 后 13~30KB）。
          切到另一系时，ui.js 会动态补载对应 CSS（见下方 data-skin-css）。 */ ?>
 <?php $__skinCss = str_starts_with($theme, 'frame') ? 'frame' : 'atlas'; ?>
-<link rel="stylesheet" href="assets/skin-<?= $__skinCss ?>.css?v=<?= $__skinCss === 'frame' ? '59' : '63' ?>" data-skin-css="<?= $__skinCss ?>">
+<link rel="stylesheet" href="assets/skin-<?= $__skinCss ?>.css?v=<?= $__skinCss === 'frame' ? '60' : '64' ?>" data-skin-css="<?= $__skinCss ?>">
 <script>
 /* 记录当前已加载的皮肤系，供切换时判断是否要补载另一套。
    放在 body 之前，ui.js 执行时已可用。 */
 window.__VNAV_SKIN_CSS = <?= json_encode($__skinCss) ?>;
 window.__VNAV_SKIN_HREF = {
-  atlas: 'assets/skin-atlas.css?v=63',
-  frame: 'assets/skin-frame.css?v=59'
+  atlas: 'assets/skin-atlas.css?v=64',
+  frame: 'assets/skin-frame.css?v=60'
 };
 </script>
 <?php /* 登录态要判断 localStorage 里那份「67 条链接、9 个分组」究竟是不是
@@ -367,9 +372,19 @@ if ($__isAdmin) {
            的位置随左右两侧宽度变化，窗口一窄就偏。用 grid 的
            1fr auto 1fr 让中间那格永远在正中。 */ ?>
   <a class="brand" href="./" aria-label="<?= h($title) ?> 首页">
-    <span class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
-    </span>
+    <?php /* 自定义了站点图标就整块换成图片：不再套强调色方块 ——
+             用户的 logo 自带配色，套一层彩色底会把边缘吃掉，
+             看起来像贴了两层色。 */
+    $__logo = hp_site_logo(); ?>
+    <?php if ($__logo !== ''): ?>
+      <span class="brand-mark brand-mark--logo">
+        <img src="<?= h($__logo) ?>" width="28" height="28" alt="" decoding="async">
+      </span>
+    <?php else: ?>
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+      </span>
+    <?php endif; ?>
     <span class="brand-text"><?= h($title) ?></span>
   </a>
 
@@ -639,9 +654,7 @@ if ($__isAdmin) {
              style="--gt-h:<?= $ghue ?>"
              aria-current="<?= $gi === 0 ? 'true' : 'false' ?>"
              title="<?= h($nm) ?>">
-            <span class="gnav-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($nm, (string)($g['icon'] ?? '')) ?></svg>
-            </span>
+            <span class="gnav-ico" aria-hidden="true"><?= hp_group_icon_markup($nm, (string)($g['icon'] ?? ''), 15) ?></span>
             <span class="gnav-name"><?= h($nm) ?></span>
             <span class="gnav-count"><?= count($g['items']) ?></span>
             <?php /* 编辑态下的删除入口。放在 <a> 里用 <span role=button> 而不是
@@ -679,10 +692,16 @@ if ($__isAdmin) {
         <a class="gnav-lib-btn<?= $onMine ? ' is-on' : '' ?>" href="?lib=mine">我的库</a>
       </div>
       <?php endif; ?>
+      <?php /* 页脚版权区，两行 + 可选备案。
+               第一行只放「谁 + 哪个版本」，第二行是协议与项目入口，整体压淡一档。
+
+               为什么不写「Made By izyw」：版权惯例本身是「© 年份 权利人」，
+               加 Made By 既不增加法律含义，又让中文界面里多出一截英文；
+               版本号跟在署名后面（用 · 分隔）比单独一行更像一句话，也省一行高度。 */ ?>
       <div class="gnav-foot">
-        <p class="gnav-copy">&copy; <?= h($copyYear) ?> <?php if ($copyAuthor !== ''): ?>Made By <a class="gnav-owner" href="<?= h($authorUrl) ?>" target="_blank" rel="noopener noreferrer"><?= h($copyAuthor) ?></a><?php else: ?><span class="gnav-owner"><?= h($copyOwner) ?></span><?php endif; ?></p>
+        <p class="gnav-copy">&copy; <?= h($copyYear) ?> <?php if ($copyAuthor !== ''): ?><a class="gnav-owner" href="<?= h($authorUrl) ?>" target="_blank" rel="noopener noreferrer"><?= h($copyAuthor) ?></a><?php else: ?><span class="gnav-owner"><?= h($copyOwner) ?></span><?php endif; ?><span class="gnav-dot" aria-hidden="true">·</span><span class="gnav-ver">Vnav <?= h(hp_version()) ?></span></p>
         <p class="gnav-rights">
-          <a class="gnav-license" href="LICENSE" rel="license">MIT License</a>
+          <a class="gnav-license" href="LICENSE" rel="license">MIT License</a><span class="gnav-dot" aria-hidden="true">·</span><a class="gnav-link" href="<?= h($authorGh) ?>" target="_blank" rel="noopener noreferrer">项目主页</a>
         </p>
         <?php if ($icpBeian !== ''): ?>
           <?php /* 备案号与开源协议是两回事：前者是国内主机的合规要求，
@@ -691,11 +710,6 @@ if ($__isAdmin) {
             <a class="gnav-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer"><?= h($icpBeian) ?></a>
           </p>
         <?php endif; ?>
-        <p class="gnav-meta">
-          <span class="gnav-ver">Vnav <?= h(hp_version()) ?></span>
-          <a class="gnav-link" href="<?= h($authorGh) ?>"
-             target="_blank" rel="noopener noreferrer">项目主页</a>
-        </p>
       </div>
     </nav>
     <?php endif; ?>
@@ -757,9 +771,7 @@ if ($__isAdmin) {
                      「紫色那栏 = 紫色那组」才成立，颜色才成为导航线索。
                      组名前的 6px 圆点因此退役。 */ ?>
             <div class="group-head">
-              <span class="gh-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?= hp_group_icon($g['name'], (string)($g['icon'] ?? '')) ?></svg>
-              </span>
+              <span class="gh-ico" aria-hidden="true"><?= hp_group_icon_markup($g['name'], (string)($g['icon'] ?? ''), 13) ?></span>
               <h2 id="gh<?= $gi ?>" class="group-name"><?= h($g['name']) ?></h2>
               <span class="group-count"><?= count($g['items']) ?></span>
               <span class="group-rule" aria-hidden="true"></span>
@@ -1043,18 +1055,19 @@ if ($__isAdmin) {
     </div>
 
     <label class="f-label" for="eUrl">网址</label>
-    <input class="f-input" id="eUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
-
-    <div class="f-label-row">
-      <label class="f-label" for="eTitle">名称</label>
-      <?php /* 抓取按钮：按当前网址重读页面的标题 / 图标 / 描述，填回下面三个字段。
-             用户只想改其中一两项时也方便——抓取后仍可手动覆盖任何字段。 */ ?>
+    <?php /* 抓取按钮内嵌在网址框右侧：它是「按这个网址重读一次」的附属动作，
+             跟网址是同一件事，所以放进同一个框里；以前挂在名称标签右边，
+             悬空一格、又压着输入框，看着像没摆好。 */ ?>
+    <div class="url-field">
+      <input class="f-input" id="eUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
       <button type="button" class="btn-fetch" id="eFetch" title="从网址重新抓取名称、图标和描述">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
         <span class="btn-fetch-text">抓取信息</span>
         <span class="spinner" hidden aria-hidden="true"></span>
       </button>
     </div>
+
+    <label class="f-label" for="eTitle">名称</label>
     <input class="f-input" id="eTitle" name="title" type="text" required maxlength="60" autocomplete="off">
 
     <label class="f-label" for="eDescr">描述</label>

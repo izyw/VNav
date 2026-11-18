@@ -418,8 +418,12 @@ final class MetaFetcher
         return 'data/icons/' . $name;
     }
 
-    /** 用 GD 把位图居中裁成正方形、缩到 $px、编码成 WebP；失败返回 null（调用方回退原图） */
-    public static function shrinkWebp(string $bin, int $px): ?string
+    /** 用 GD 把位图居中裁成正方形、缩到 $px、编码成 WebP；失败返回 null（调用方回退原图）
+     *
+     *  $contain = true 时不裁切，改成「等比缩到框内 + 居中 + 四周留透明」。
+     *  站点 logo 用这个模式：横版 logo（比如「字标 + 图形」）按 cover 裁会把
+     *  两侧的字整个切掉，只剩中间一块，看起来像别的牌子。 */
+    public static function shrinkWebp(string $bin, int $px, bool $contain = false): ?string
     {
         if (!function_exists('imagecreatefromstring') || !function_exists('imagewebp')) {
             return null;
@@ -434,13 +438,27 @@ final class MetaFetcher
         }
         $w = imagesx($im);
         $h = imagesy($im);
-        $side = min($w, $h);
-        $sx = (int)(($w - $side) / 2);
-        $sy = (int)(($h - $side) / 2);
         $canvas = imagecreatetruecolor($px, $px);
         imagealphablending($canvas, false);
         imagesavealpha($canvas, true);
-        $ok = imagecopyresampled($canvas, $im, 0, 0, $sx, $sy, $px, $px, $side, $side);
+
+        if ($contain) {
+            /* 目标尺寸按长边贴住 $px，短边等比缩；
+               底铺一层全透明，否则未覆盖区域是不透明白/黑。 */
+            $scale = min($px / max(1, $w), $px / max(1, $h));
+            $dw = max(1, (int)round($w * $scale));
+            $dh = max(1, (int)round($h * $scale));
+            $dx = (int)(($px - $dw) / 2);
+            $dy = (int)(($px - $dh) / 2);
+            imagefilledrectangle($canvas, 0, 0, $px, $px, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+            $ok = imagecopyresampled($canvas, $im, $dx, $dy, 0, 0, $dw, $dh, $w, $h);
+        } else {
+            $side = min($w, $h);
+            $sx = (int)(($w - $side) / 2);
+            $sy = (int)(($h - $side) / 2);
+            $ok = imagecopyresampled($canvas, $im, 0, 0, $sx, $sy, $px, $px, $side, $side);
+        }
+
         imagedestroy($im);
         if (!$ok) {
             imagedestroy($canvas);
@@ -451,6 +469,56 @@ final class MetaFetcher
         $out = (string)ob_get_clean();
         imagedestroy($canvas);
         return $out !== '' ? $out : null;
+    }
+
+    /**
+     * 把一段**图片字节**落到 data/icons/，返回相对路径（失败返回空串）。
+     *
+     * 和 cacheIcon 的唯一区别是不用下载 —— 后台「上传站点图标」走这里。
+     * 校验口径与 cacheIcon 保持一致：2 MB 上限、必须能解析出真实图片尺寸、
+     * SVG 不落盘（同源可执行文档，理由见 cacheIcon 里的注释）。
+     * 与 cacheIcon 的另一处不同：用 contain 缩放而非居中裁切，见 shrinkWebp。
+     */
+    public function storeIconBytes(string $bin, string $key, int $px = 128): string
+    {
+        $len = strlen($bin);
+        if ($len < 24 || $len > 2 * 1024 * 1024) {
+            return '';
+        }
+        // getimagesizefromstring 是「真的能解出图片头」才算数，比看扩展名可靠
+        $info = @getimagesizefromstring($bin);
+        if (!$info || empty($info[0]) || empty($info[1])) {
+            return '';
+        }
+        $ext = match ((int)$info[2]) {
+            IMAGETYPE_PNG  => 'png',
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_GIF  => 'gif',
+            IMAGETYPE_WEBP => 'webp',
+            IMAGETYPE_ICO  => 'ico',
+            default        => '',
+        };
+        if ($ext === '') {
+            return '';
+        }
+
+        $webp = self::shrinkWebp($bin, $px, true);
+        if ($webp !== null) {
+            $bin = $webp;
+            $ext = 'webp';
+        }
+
+        $dir = HP_ROOT . '/data/icons';
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+            return '';
+        }
+        // 随机后缀而不是 md5(内容)：重新上传同名 logo 要得到一个**新文件名**，
+        // 否则浏览器和 CDN 会继续用旧缓存（data/icons/ 被 .htaccess 打了长缓存）
+        $name = preg_replace('~[^a-z0-9.\-]~i', '_', $key) . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+        if (@file_put_contents($dir . '/' . $name, $bin) === false) {
+            return '';
+        }
+        return 'data/icons/' . $name;
     }
 
     /**

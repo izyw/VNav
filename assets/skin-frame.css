@@ -831,6 +831,9 @@ html[data-theme^='frame'] body.hp .gnav-copy {
 html[data-theme^='frame'] body.hp .gnav-owner {
   font-weight: 700;
   color: var(--fr-ink-2);
+  /* 署名里的名字是链接，但页脚不该出现下划线 —— 一有下划线就变成
+     「一排可点的东西」，署名的语气就没了（atlas 皮肤本来就是这样，这里补齐） */
+  text-decoration: none;
 }
 html[data-theme^='frame'] body.hp .gnav-rights {
   color: var(--fr-ink-3);
@@ -848,12 +851,12 @@ html[data-theme^='frame'] body.hp .gnav-link:hover {
   color: var(--fr-ink);
   border-bottom-color: var(--fr-line-hi, currentColor);
 }
-html[data-theme^='frame'] body.hp .gnav-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+/* 版本号回到署名同一行（原 .gnav-meta 一行已撤），用间隔点分隔 */
+html[data-theme^='frame'] body.hp .gnav-dot {
+  margin: 0 5px;
+  opacity: .5;
 }
+html[data-theme^='frame'] body.hp .gnav-beian { opacity: .72; }
 html[data-nav='mini'] body.hp .gnav-foot { display: none; }
 @media (max-width: 1139px) {
   html[data-theme^='frame'] body.hp .gnav-foot { display: none; }

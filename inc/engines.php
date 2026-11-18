@@ -160,16 +160,19 @@ function hp_suggest(string $engine, string $q): array
     $dir  = HP_ROOT . '/data/suggest';
     $file = $dir . '/' . md5($engine . '|' . $q) . '.json';
 
-    if (is_file($file) && time() - (int)@filemtime($file) < 600) {
+    /* 缓存 24 小时：热词（"测试""中国"这种）基本一次就够，之后命中缓存
+       等于零上游耗时 —— 站点本身就有一层 ~0.7s 的固定开销，能省的都要省。 */
+    if (is_file($file) && time() - (int)@filemtime($file) < 86400) {
         $cached = json_decode((string)@file_get_contents($file), true);
         if (is_array($cached)) {
             return ['items' => $cached];
         }
     }
 
-    /* 限流只在缓存未命中时算：正常打字每个词只打一次上游，
-       刷子会被这 40 次/分钟挡住，返回空而不是报错（前端静默即可）。 */
-    if (!hp_rate_allow('sug:' . hp_client_ip(), 40, 60)) {
+    /* 限流只在缓存未命中时算。120 次/分钟：拼音输入每敲一个字母就是一个
+       新前缀，「40 次」很容易被自己打到限流上（表现是打着打着下拉不出了）。
+       刷子照样挡得住，返回空而不是报错（前端静默即可）。 */
+    if (!hp_rate_allow('sug:' . hp_client_ip(), 120, 60)) {
         return ['items' => []];
     }
 

@@ -5,10 +5,6 @@
 declare(strict_types=1);
 define('HP_ROOT', __DIR__);
 require __DIR__ . '/inc/boot.php';
-require __DIR__ . '/inc/MetaFetcher.php';
-require __DIR__ . '/inc/analytics.php';
-require __DIR__ . '/inc/acl.php';
-require __DIR__ . '/inc/geo.php';
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
@@ -27,6 +23,24 @@ if ($raw !== '') {
     }
 }
 $action = (string)($body['action'] ?? $_POST['action'] ?? $_GET['action'] ?? '');
+
+/* ---------- 搜索建议（最快路径） ----------
+   打字时每停顿一次就是一枪，是全站最频繁的接口。所以放在四个大模块
+   （MetaFetcher / analytics / acl / geo，合计 90 KB）加载之前就返回：
+   这几个文件对取候选词一个字都用不上，白白走一遍编译。
+   公开只读，游客也要用；必须服务端代取 —— 本站 CSP 是 connect-src 'self'，
+   浏览器直连百度 / 必应会被自己拦掉。拿不到就是空数组，前端不显示下拉。 */
+if ($action === 'suggest' && $method !== 'POST') {
+    /* 只借 analytics.php 里的 hp_client_ip()（限流要按 IP 算）。
+       其余三个大模块与取词无关，不加载。 */
+    require_once __DIR__ . '/inc/analytics.php';
+    json_out(hp_suggest((string)($_GET['engine'] ?? ''), (string)($_GET['q'] ?? '')));
+}
+
+require_once __DIR__ . '/inc/MetaFetcher.php';
+require_once __DIR__ . '/inc/analytics.php';
+require_once __DIR__ . '/inc/acl.php';
+require_once __DIR__ . '/inc/geo.php';
 
 /* ---------- 数据导出 ----------
    下载必须走 GET（浏览器只能这样触发文件下载），所以放在 POST 检查之前。
@@ -90,12 +104,6 @@ if ($action === 'export') {
 }
 
 if ($method !== 'POST') {
-    /* 搜索建议：公开只读，游客也要用。必须由服务端代取 ——
-       本站 CSP 是 connect-src 'self'，浏览器直连百度 / 必应会被自己拦掉。
-       拿不到就是空数组，前端不显示下拉，不影响搜索本身。 */
-    if ($action === 'suggest') {
-        json_out(hp_suggest((string)($_GET['engine'] ?? ''), (string)($_GET['q'] ?? '')));
-    }
     // 换一张验证码走 GET：登录页的 <img> 与刷新按钮都只能发 GET
     if ($action === 'captcha_new') {
         require __DIR__ . '/inc/captcha.php';
@@ -267,6 +275,7 @@ $ADMIN_ONLY = [
     'change_pass', 'user_reset_pass', 'user_delete', 'set_captcha', 'unlock_all',
     'set_site_mode',
     'icon_sync', 'icon_refill', 'icon_gc', 'icon_purge', 'icon_webp',
+    'site_logo', 'site_logo_upload',
     'upgrade_apply', 'upgrade_rollback', 'upgrade_drop_snapshot', 'upgrade_inspect',
     'meta_refresh', 'meta_refresh_stats',
 ];
@@ -705,15 +714,93 @@ try {
            新增图标只需改那一处，这里不必跟着补。 */
         case 'group_icon': {
             $id   = (int)($body['id'] ?? 0);
-            $icon = (string)($body['icon'] ?? '');
+            $icon = trim((string)($body['icon'] ?? ''));
             if ($id <= 0) json_err('缺少分组 ID');
-            if ($icon !== '' && !in_array($icon, hp_group_icon_keys(), true)) {
+
+            /* 自定义图标：用户贴的是一个外部图片地址。
+               这里当场下载并落盘（走 MetaFetcher::cacheIcon，自带内网地址
+               拦截、2MB 上限、类型嗅探），存进库的是本地路径 —— 之后前台
+               读本机文件，不再回源，也不把访客的 IP 暴露给那台图床。 */
+            if (preg_match('#^https?://#i', $icon)) {
+                $host  = (string)(parse_url($icon, PHP_URL_HOST) ?: 'custom');
+                $local = (new MetaFetcher(8))->cacheIcon($icon, 'gicon-' . $host);
+                if ($local === '') {
+                    json_err('这个地址取不到图片：可能不是图片、超过 2 MB，或对方禁止外链');
+                }
+                $icon = $local;
+            }
+
+            if ($icon !== '' && !in_array($icon, hp_group_icon_keys(), true)
+                && !str_starts_with($icon, 'data/icons/')) {
                 json_err('不认识的图标');
             }
             $stG = db()->prepare('UPDATE groups SET icon = ? WHERE id = ? AND user_id = ?');
             $stG->execute([$icon, $id, $U]);
-            if ($stG->rowCount() === 0) json_err('没有这个分组');
+            if ($stG->rowCount() === 0) {
+                /* 值没变时 SQLite 也报 0 行（不算错），所以回查一次，
+                   确认「没更新」还是「根本没这个分组」。 */
+                $chk = db()->prepare('SELECT 1 FROM groups WHERE id = ? AND user_id = ?');
+                $chk->execute([$id, $U]);
+                if (!$chk->fetchColumn()) json_err('没有这个分组');
+            }
             json_ok(['icon' => $icon]);
+        }
+
+        /* ---------- 站点图标（logo） ----------
+           两个入口（外链 / 上传）最后都落到同一个 setting：data/icons/ 下的
+           本站路径。前台只读本机文件 —— 不把访客的 IP 交给图床，
+           也不会因为对方换图、删图、防盗链而在首页上开一个破图。
+
+           存**新文件名**而不是复用旧路径：data/icons/ 被 .htaccess 打了一年
+           immutable 缓存，同一个 URL 换内容 = 换不了（浏览器和 CDN 都不会回来问）。 */
+        case 'site_logo': {
+            $url = trim((string)($body['url'] ?? ''));
+
+            // 空值 = 恢复默认的勾形标记
+            if ($url === '') {
+                hp_site_logo_drop();
+                setting_set('site_logo', '');
+                json_ok(['logo' => '']);
+            }
+            if (!preg_match('#^https?://#i', $url)) {
+                json_err('请填一个 http(s) 开头的图片地址');
+            }
+            $host  = (string)(parse_url($url, PHP_URL_HOST) ?: 'site');
+            $local = (new MetaFetcher(8))->cacheIcon($url, 'sitelogo-' . $host);
+            if ($local === '') {
+                json_err('这个地址取不到图片：可能不是位图（SVG 请先导出成 PNG）、超过 2 MB，或对方禁止外链');
+            }
+            $local = hp_site_logo_unique($local);
+            hp_site_logo_drop();               // 换掉旧文件，别在 data/icons 里堆垃圾
+            setting_set('site_logo', $local);
+            json_ok(['logo' => $local]);
+        }
+        /* 上传：和升级包一样走 multipart，所以从 $_FILES 读，不经过 $body */
+        case 'site_logo_upload': {
+            $f = $_FILES['logo'] ?? null;
+            if (!$f || !is_array($f) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                $code = (int)($f['error'] ?? UPLOAD_ERR_NO_FILE);
+                json_err(match ($code) {
+                    UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => '图片超过服务器允许的上传大小',
+                    UPLOAD_ERR_PARTIAL => '上传中断，请重试',
+                    UPLOAD_ERR_NO_FILE => '没有收到文件',
+                    default => '上传失败（错误码 ' . $code . '）',
+                });
+            }
+            if (!is_uploaded_file($f['tmp_name'])) {
+                json_err('非法上传');
+            }
+            if ((int)$f['size'] > 2 * 1024 * 1024) {
+                json_err('图片超过 2 MB，先压缩一下再传');
+            }
+            $bin = (string)@file_get_contents($f['tmp_name']);
+            $local = (new MetaFetcher(8))->storeIconBytes($bin, 'sitelogo', 128);
+            if ($local === '') {
+                json_err('这不是能识别的图片：请用 PNG / JPG / WebP / GIF / ICO（SVG 请先导出成 PNG）');
+            }
+            hp_site_logo_drop();
+            setting_set('site_logo', $local);
+            json_ok(['logo' => $local]);
         }
 
         /* ---------- 分组排序：一次提交整个列表 ----------

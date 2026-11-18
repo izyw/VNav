@@ -430,6 +430,35 @@
   let sugItems = [];
   let sugActive = -1;
 
+  /* 本地结果缓存：engine|q -> { items, t }
+     站点每个请求都有一层固定开销（线上实测首页与接口的 TTFB 都在 0.7s
+     上下，是反代那一层的成本，不是 PHP），所以「像官网那样一敲就有」只能
+     靠本机缓存兑现：命中就直接画，不命中才发请求。
+     另外支持「前缀复用」：查过「测试」再打「测试关」，先用「测试」那批
+     按前缀筛出来垫着，网络结果回来再替换 —— 打字过程中几乎看不到空窗。 */
+  const SUG_TTL = 5 * 60 * 1000;
+  const sugCache = new Map();
+  const sugKeyOf = (eng, q) => eng + '|' + q;
+
+  function sugCached(eng, q) {
+    const now = Date.now();
+    const exact = sugCache.get(sugKeyOf(eng, q));
+    if (exact && now - exact.t < SUG_TTL) return exact.items;
+
+    let best = null;
+    const pfx = eng + '|';
+    for (const [k, v] of sugCache) {
+      if (now - v.t >= SUG_TTL || !k.startsWith(pfx)) continue;
+      const key = k.slice(pfx.length);
+      if (key.length > q.length && key.startsWith(q)) {
+        if (!best || key.length > best.key.length) best = { key, items: v.items };
+      }
+    }
+    if (!best) return null;
+    const out = best.items.filter(s => s.startsWith(q)).slice(0, 8);
+    return out.length ? out : null;
+  }
+
   function closeSug() {
     if (!sugBox) return;
     sugBox.hidden = true;
@@ -439,17 +468,36 @@
     qInput?.setAttribute('aria-expanded', 'false');
   }
 
+  /* 画下拉。第一条永远是「你自己输入的内容」：接口再慢，框下面也立刻
+     有东西可点、可回车，不会出现「打了字半天没反应」。 */
+  function paintSug(q, items) {
+    if (!sugBox) return;
+    const list = [];
+    const seen = new Set();
+    if (q) { list.push({ text: q, lit: true }); seen.add(q); }
+    for (const s of items) {
+      const v = String(s || '').trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      list.push({ text: v, lit: false });
+    }
+    sugItems = list.slice(0, 9);
+    sugActive = -1;
+    drawSug();
+  }
+
   function drawSug() {
     if (!sugBox) return;
     if (!sugItems.length) { closeSug(); return; }
     sugBox.innerHTML = '';
-    sugItems.forEach((text, i) => {
+    sugItems.forEach((it, i) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'sug-item' + (i === sugActive ? ' is-active' : '');
+      btn.className = 'sug-item' + (i === sugActive ? ' is-active' : '')
+        + (it.lit ? ' sug-item--literal' : '');
       btn.setAttribute('role', 'option');
       btn.setAttribute('aria-selected', i === sugActive ? 'true' : 'false');
-      btn.textContent = text;
+      btn.textContent = it.text;
       // 按下时别让输入框失焦，否则 blur 先把下拉关了、click 就落空
       btn.addEventListener('mousedown', e => e.preventDefault());
       btn.addEventListener('click', () => pickSug(i));
@@ -460,37 +508,48 @@
   }
 
   function pickSug(i) {
-    const v = sugItems[i];
-    if (!v || !qInput) return;
-    qInput.value = v;
+    const it = sugItems[i];
+    if (!it || !qInput) return;
+    qInput.value = it.text;
     closeSug();
     submitSearch();
   }
 
-  function fetchSug() {
-    if (!sugBox || !qInput) return;
-    const q = qInput.value.trim();
+  function fetchSug(q) {
+    if (!sugBox || !qInput || !q) return;
     const eng = engState.cur || $('.eng-menu .eng-logo')?.dataset.engLogo || '';
-    if (!q || !eng) { closeSug(); return; }
+    if (!eng) return;
     const my = ++sugSeq;
     fetch('api.php?action=suggest&engine=' + encodeURIComponent(eng) + '&q=' + encodeURIComponent(q), {
       credentials: 'same-origin',
     })
       .then(r => r.json())
       .then(j => {
-        if (my !== sugSeq) return;            // 慢的旧请求不许覆盖新结果
-        sugItems = Array.isArray(j.items) ? j.items.slice(0, 8) : [];
-        sugActive = -1;
-        drawSug();
+        const items = Array.isArray(j.items) ? j.items.slice(0, 8) : [];
+        /* 先落缓存再判序号：慢请求的结果对缓存仍然有效，
+           只是不该覆盖用户此刻正在看的那一屏。 */
+        sugCache.set(sugKeyOf(eng, q), { items, t: Date.now() });
+        if (my !== sugSeq) return;
+        if ((qInput.value || '').trim() !== q) return;
+        paintSug(q, items);
       })
-      .catch(() => { if (my === sugSeq) closeSug(); });
+      .catch(() => {});
   }
 
+  /* delay：汉字输入 110ms，拼音阶段 180ms —— 拼音每敲一个字母都会变一次，
+     防抖太短会把同一串的前缀打成一串请求，服务器那层 0.7s 的开销扛不住。 */
   function scheduleSug(delay) {
     clearTimeout(sugTimer);
-    const v = qInput ? qInput.value.trim() : '';
-    if (!v) { closeSug(); return; }
-    sugTimer = setTimeout(fetchSug, delay === undefined ? 220 : delay);
+    const q = qInput ? (qInput.value || '').trim() : '';
+    if (!q) { closeSug(); return; }
+    const eng = engState.cur || $('.eng-menu .eng-logo')?.dataset.engLogo || '';
+    const local = eng ? sugCached(eng, q) : null;
+    if (local) {
+      paintSug(q, local);                       // 有缓存：立刻画，零延迟
+    } else if (!sugBox || sugBox.hidden) {
+      paintSug(q, []);                          // 没缓存：先只给「输入本身」占位
+    }
+    sugTimer = setTimeout(() => fetchSug(q), delay === undefined ? 110 : delay);
   }
 
   function submitSearch() {
@@ -526,10 +585,15 @@
       submitSearch();
     });
 
-    qInput.addEventListener('input', () => scheduleSug());
+    /* 拼音输入法：composition 期间 input 事件的 value 就是那串拼音
+       （"ceshi"），百度 / 必应都能按拼音给出中文候选 —— 所以这里不拦
+       composing，只把防抖放长一点；选定汉字（compositionend）后立刻请求，
+       不再等第二次停顿。 */
+    qInput.addEventListener('input', e => scheduleSug(e.isComposing ? 180 : 110));
+    qInput.addEventListener('compositionend', () => scheduleSug(0));
 
     qInput.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { closeSug(); return; }
+      if (e.key === 'Escape') { clearTimeout(sugTimer); closeSug(); return; }
       if (!sugItems.length) return;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();

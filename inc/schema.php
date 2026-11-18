@@ -274,6 +274,9 @@ function hp_seed_settings(PDO $pdo): void
         'open_new_tab'  => '1',
         'show_desc'     => '1',
         'footer_note'   => '',
+        // 站点图标：存本站相对路径（data/icons/…）。空 = 用内置的勾形标记。
+        // 只认自己下载/上传落盘的那份，不存外链（见 boot.php 的 hp_site_logo）
+        'site_logo'     => '',
         // 侧栏底部的版权署名。author_name 是署名里的名字（可点，指向个人主页）；
         // author_github 是「项目主页」，指到仓库而不是个人页；
         // author_url 是署名里那个名字的链接。三者留空都有兜底。

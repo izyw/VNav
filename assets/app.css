@@ -424,6 +424,10 @@ html[data-theme='auto'] :where(a, button, input, select, [tabindex]):focus-visib
   box-shadow: 0 4px 14px -4px rgb(var(--acc-glow) / .8);
   flex: 0 0 auto;
 }
+/* 自定义站点图标（后台「外观 → 基本信息」）：方块退成透明底，只留图片本身。
+   套着强调色底会把用户的 logo 边缘染色、圆角切角，看起来像两层色。 */
+.brand-mark--logo { background: none; box-shadow: none; overflow: hidden; }
+.brand-mark--logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .brand-text {
   white-space: nowrap;
   overflow: hidden;

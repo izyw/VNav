@@ -636,6 +636,76 @@ function setting(string $key, string $default = ''): string
     return settings_all()[$key] ?? $default;
 }
 
+/* ---------- 站点图标（logo） ----------
+   后台「外观偏好 → 基本信息」里设的。存的是**本站相对路径**（data/icons/…），
+   不是原始外链 —— 外链会在对方换图/删图/防盗链时静默变成一张破图，
+   而且每个访客打开首页都要向第三方握手一次。
+   设定时（api.php 的 site_logo / site_logo_upload）就下载并落盘了，
+   这里只负责「读路径 + 确认文件还在」。 */
+function hp_site_logo(): string
+{
+    static $p = null;
+    if ($p !== null) {
+        return $p;
+    }
+    $p = '';
+    $v = trim(setting('site_logo', ''));
+    // 只认本站图标目录里的东西：库被手改过也不会变成 <img src="javascript:…">
+    if ($v !== '' && str_starts_with($v, 'data/icons/') && is_file(HP_ROOT . '/' . $v)) {
+        $p = $v;
+    }
+    return $p;
+}
+
+/** 站点图标的 <img>；没设置时返回空串，调用方保留原来的默认图形 */
+function hp_site_logo_img(string $class = '', int $size = 18): string
+{
+    $p = hp_site_logo();
+    if ($p === '') {
+        return '';
+    }
+    $cls = $class !== '' ? ' class="' . h($class) . '"' : '';
+    return '<img' . $cls . ' src="' . h($p) . '" width="' . $size . '" height="' . $size
+        . '" alt="" decoding="async">';
+}
+
+/** <link rel="icon"> 用的地址：有自定义图标就用它，没有交给调用方用内联 SVG */
+function hp_site_favicon_href(): string
+{
+    $p = hp_site_logo();
+    return $p === '' ? '' : h($p);
+}
+
+/**
+ * 把刚落进 data/icons/ 的图换成**新文件名**，失败就原名返回。
+ *
+ * data/icons/ 被 .htaccess 打了一年 immutable 缓存，同一个 URL 换内容
+ * 是换不掉的（浏览器和 CDN 都不会再回来问一次）。所以每次设新图标都产一个
+ * 新路径 —— 旧文件由 hp_site_logo_drop() 删掉。
+ */
+function hp_site_logo_unique(string $rel): string
+{
+    if (!str_starts_with($rel, 'data/icons/')) {
+        return $rel;
+    }
+    $abs = HP_ROOT . '/' . $rel;
+    if (!is_file($abs)) {
+        return $rel;
+    }
+    $ext = strtolower((string)pathinfo($rel, PATHINFO_EXTENSION)) ?: 'webp';
+    $new = 'data/icons/sitelogo-' . bin2hex(random_bytes(6)) . '.' . $ext;
+    return @rename($abs, HP_ROOT . '/' . $new) ? $new : $rel;
+}
+
+/** 删掉当前设置的图标文件（换图 / 恢复默认时调）。只碰 data/icons/ 里的 */
+function hp_site_logo_drop(): void
+{
+    $old = trim(setting('site_logo', ''));
+    if ($old !== '' && str_starts_with($old, 'data/icons/') && is_file(HP_ROOT . '/' . $old)) {
+        @unlink(HP_ROOT . '/' . $old);
+    }
+}
+
 /** 个人偏好键：这些按用户存。其余都是站点级，只有 admin 能改。 */
 function hp_user_setting_keys(): array
 {

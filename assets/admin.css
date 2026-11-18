@@ -591,6 +591,61 @@
   box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--acc) 70%, transparent);
 }
 
+/* 时间范围整块：上面是快捷段，下面是自定义起止日期。
+   窄屏要能换行 —— 六个药丸 + 两个日期框挤一行会溢出。 */
+.adm-range-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.adm-dates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.adm-date {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-0) 45%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.adm-date:hover { border-color: var(--line-hi); }
+.adm-date:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.adm-dates-sep { color: var(--text-3); font-size: 12px; }
+.adm-dates-go { min-height: 36px; padding: 0 14px; font-size: 13px; border-radius: 9px; }
+
+/* ---------- 面板标题行 ----------
+   标题 + 说明在左，操作按钮在右。以前「清理 / 清空统计」压在明细表格
+   最底下，得把几十行翻完才看见 —— 这类维护动作应该一眼能找到。 */
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.panel-head .panel-title { margin: 0; }
+.panel-head .panel-hint { margin: 6px 0 0; }
+.panel-head-act { display: flex; gap: 8px; flex-wrap: wrap; flex: 0 0 auto; }
+/* 小号按钮：跟在 44px 的主按钮旁边会显得喧宾夺主，缩一档 */
+.btn-sm {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+
 /* ---------- 统计：四个大数字 ---------- */
 /* 数字用 display 字体、拉到 40px —— 与正文形成 2.5 倍以上的跳跃。
    一排四个在手机上必然挤成面条，所以直接改单列。 */
@@ -1000,6 +1055,9 @@
 }
 /* 总开关关着时，下面两个选项降到「可读但明显不是重点」 */
 .acl-grid.is-off { opacity: .52; }
+/* 跟随 grid 的那条提示：.panel-hint 默认 margin-top:-10px 是为紧贴面板标题准备的，
+   放在下拉框后面就变成骑在下拉框底边上（实测压进去 10px）。这里改回正间距。 */
+.acl-grid + .panel-hint { margin: 10px 0 0; }
 .acl-sub {
   margin: 26px 0 10px;
   font-family: var(--font-display);
@@ -1012,7 +1070,10 @@
 .acl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .acl-item {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  /* 四列全部定宽：原来是 auto 1fr auto auto，国家代码 CN(19px) 与 MO(22px)
+     宽度不同，名称也长短不一，后面的徽章和「移除」就跟着左右漂 ——
+     两行并排看就是错位。定宽后每行的列起点完全一致。 */
+  grid-template-columns: 34px minmax(0, 1fr) 64px 52px;
   align-items: center;
   gap: 10px;
   padding: 8px 10px 8px 12px;
@@ -1028,8 +1089,16 @@
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-.acl-name { font-size: 14px; color: var(--text); }
+.acl-name {
+  font-size: 14px;
+  color: var(--text);
+  /* 名字列可能很长（「圣赫勒拿岛」之类），省略而不是把后面几列顶出去 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .acl-role {
+  justify-self: center;
   padding: 2px 9px;
   border-radius: 999px;
   font-size: 11.5px;
@@ -1038,6 +1107,7 @@
 .acl-role--deny  { color: #ff8fa3; background: rgba(255, 125, 146, .13); border: 1px solid rgba(255, 125, 146, .3); }
 .acl-role--allow { color: #4ade9e; background: rgba(74, 222, 158, .12); border: 1px solid rgba(74, 222, 158, .28); }
 .acl-del {
+  justify-self: end;
   min-height: 32px;
   padding: 0 10px;
   border-radius: 8px;
@@ -1077,6 +1147,11 @@
   margin: 4px 0 14px;
 }
 .geo-cell {
+  /* 四格内容上下居中：第 4 格是 14px 的「未导入」，前三个是 19px 的「—」，
+     顶对齐时两条基线一高一低，四格看着像错位。 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 12px 14px;
   border-radius: var(--r-md);
   border: 1px solid var(--line);
@@ -1090,10 +1165,15 @@
   letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  line-height: 1.15;
+  /* 固定行高 = 19px × 1.15，小字号那一格也占同样的高度，标签才能齐平 */
+  line-height: 22px;
+  min-height: 22px;
 }
 .geo-num--sm { font-size: 14px; letter-spacing: 0; }
 .geo-lab { display: block; margin-top: 3px; font-size: 12px; color: var(--text-3); }
+/* 主按钮自带 22px 投影，和旁边的描边按钮并排时有"高一档"的错觉（实测同高 44px）。
+   这两个按钮是并列的两种选择，不该有主次高差，投影抹掉。 */
+#geoImportFast { box-shadow: none; }
 
 /* ---------- 保存条 ---------- */
 .adm-savebar {
@@ -1159,7 +1239,18 @@
   .adm-brand span:last-child { display: none; }
 
   .adm-nav { flex-direction: row; gap: 4px; flex: 0 0 auto; }
-  .adm-tab { padding: 0 11px; font-size: 14px; gap: 7px; min-width: 44px; justify-content: center; }
+  /* flex:0 0 auto + nowrap：不加这两句，选中的那一项会被挤到只剩 44px，
+     「链接管理」四个汉字竖着排成一列 —— 窄屏上最显眼的一处破相。
+     整行本来就横向滚动，让每项按内容撑开才是对的做法。 */
+  .adm-tab {
+    flex: 0 0 auto;
+    padding: 0 11px;
+    font-size: 14px;
+    gap: 7px;
+    min-width: 44px;
+    justify-content: center;
+    white-space: nowrap;
+  }
   .adm-tab span { display: none; }
   .adm-tab.is-on span { display: inline; }
   .adm-tab.is-on::before { display: none; }
@@ -1301,7 +1392,11 @@
   white-space: nowrap;
 }
 .acl-badge--deny { color: #ff8fa3; background: rgba(255, 125, 146, .13); border: 1px solid rgba(255, 125, 146, .3); }
-.acl-list > li {
+/* 登录锁定清单专用。⚠️ 以前这里写的是 `.acl-list > li`：特异性 (0,1,1)
+   压过 `.acl-item` 的 (0,1,0)，把访问控制那四列网格悄悄改成了 flex ——
+   于是「CN / 中国 / 拒绝 / 移除」按内容宽度各走各的，每行都错开。
+   两个清单共用 .acl-list，各给一个修饰类，互不干扰。 */
+.acl-list--lock > li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1311,7 +1406,7 @@
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-0) 34%, transparent);
 }
-.acl-list > li code {
+.acl-list--lock > li code {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text);
@@ -1350,20 +1445,43 @@
 
 /* ---------- 一键刷新元信息（链接管理页顶部） ----------
    这一块的存在理由是「很多链接没有 logo，而且站点会自动变化」，
-   所以它必须看起来像「一次批量动作」而不是「一条顺手的小工具」：
-   给个独立的头部 + 数字 + 进度条。 */
+   所以它必须看起来像「一次批量动作」而不是「一条顺手的小工具」。
+
+   但它是低频动作：默认收起，只留一条标题行（名称 + 两个数字 + 右侧展开键）。
+   展开才出现的部分都放进 .mr-body，收起时 height 归零 —— 按高度省空间，
+   比把里面的按钮缩小有效得多。 */
 .meta-refresh { border-color: rgb(var(--acc-glow) / .28); }
 
+/* 标题行用两列栅格而不是 flex-wrap：
+   flex 换行时「展开」会被挤到第二行的**左边**（space-between 对单独一行
+   的元素没有右侧可撑），窄屏上看着像走丢了。栅格把右边那格钉死，
+   无论标题多长、统计胶囊换不换行，按钮永远在右上角。 */
 .mr-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+/* 标题与两个胶囊同一行；窄屏时胶囊换到标题下面，展开键始终留在最右 */
+.mr-copy {
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
   flex-wrap: wrap;
 }
-.mr-copy { min-width: 0; }
-.mr-copy .panel-title { margin-bottom: 4px; }
-.mr-copy .panel-hint { margin: 0; }
+.mr-copy .panel-title { margin: 0; }
+
+.mr-toggle { flex: 0 0 auto; gap: 5px; }
+.mr-toggle svg { transition: transform .22s var(--ease-out); }
+.meta-refresh[data-open="1"] .mr-toggle svg { transform: rotate(180deg); }
+
+/* 收起态的额外收益：标题行本身也更矮，省掉 panel-title 的下边距 */
+.meta-refresh[data-open="0"] { padding-top: 13px; padding-bottom: 13px; }
+
+.mr-body { margin-top: 15px; }
+/* .panel-hint 默认是 -10px 上边距（为紧贴面板标题而设），这里上面是标题行，要归零 */
+.mr-body .panel-hint { margin: 0 0 15px; }
 
 .mr-stats { display: flex; gap: 8px; flex-wrap: wrap; }
 .mr-stat {
@@ -1411,9 +1529,13 @@
 }
 
 @media (max-width: 720px) {
-  .mr-head { flex-direction: column; gap: 10px; }
-  .mr-stats { width: 100%; }
-  .mr-stat { flex: 1 1 auto; justify-content: center; }
+  .mr-head { align-items: start; gap: 10px; }
+  .mr-copy { gap: 8px 10px; }
+  .mr-stat { padding: 4px 10px; font-size: 12px; }
+  .mr-stat b { font-size: 15px; }
+  /* 手机上标题会折成两行（「一键刷新名称、描述与图标」12 个字），
+     字号降一档能少折一次；实在放不下就折，不再缩字号 */
+  .mr-copy .panel-title { font-size: 15px; }
 }
 
 /* ---------- 升级页：版本卡 ---------- */
@@ -1797,7 +1919,27 @@
   margin-bottom: 14px;
 }
 .gicon-head h2 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
-.gicon-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+/* 「共 N 个 · 可上下滚动」：贴标题右侧，把剩余空间吃掉，关闭键永远在最右 */
+.gicon-count {
+  flex: 1 1 auto;
+  margin-left: 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 图标从 15 个扩到 51 个：网格自己滚，头部的关闭键和底部的自定义输入
+   都留在视野里，不用滚到底才能换图标或贴地址。 */
+.gicon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-height: min(48vh, 350px);
+  overflow-y: auto;
+  padding-right: 2px;
+  overscroll-behavior: contain;
+}
 .gicon-opt {
   display: flex;
   flex-direction: column;
@@ -1818,6 +1960,31 @@
   color: var(--acc);
 }
 .gicon-name { font-size: 11px; line-height: 1; }
+
+/* 自定义图标：地址输入 + 抓取按钮 */
+.gicon-custom {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.gicon-custom .f-label { margin: 0 0 8px; }
+.gicon-url-row { display: flex; gap: 8px; }
+.gicon-url-row .f-input {
+  min-height: 38px;
+  padding: 8px 11px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+.gicon-url-row .btn-sm { min-height: 38px; flex: 0 0 auto; }
+.gicon-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+.gicon-note code { font-size: 11.5px; }
+/* 自定义图标是位图，方形按 contain 缩放，不要拉变形 */
+.gicon-img { object-fit: contain; border-radius: 4px; }
 
 /* ---------- 链接列表筛选栏 ---------- */
 /* 300 多条链接平铺时先筛再操作。
@@ -1925,6 +2092,65 @@
   color: var(--text-3);
 }
 .f-hint code { font-size: 11px; }
+
+/* ---------- 外观 → 基本信息：站点图标 ----------
+   左边一枚 56px 预览（当前在用的那张），右边是「上传 / 抓取外链 / 恢复默认」。
+   预览用真图而不是只写路径：图标这种东西，看一眼比读一串路径快十倍。 */
+.logo-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 2px 0 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.logo-preview {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-solid);
+  overflow: hidden;
+}
+.logo-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* 没设自定义图标时是内置勾形标记：给它强调色底，才看得出「这就是现在生效的那个」 */
+.logo-preview.is-default {
+  border-color: transparent;
+  background: linear-gradient(150deg, var(--acc-2), var(--acc));
+  color: var(--acc-ink);
+}
+.logo-main { flex: 1 1 auto; min-width: 0; }
+.logo-main .f-label { margin: 0; }
+.logo-main .f-hint { margin: 4px 0 10px; max-width: 64ch; }
+.logo-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.logo-url { display: flex; gap: 8px; flex: 1 1 260px; min-width: 0; }
+.logo-url .f-input {
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+.logo-url .btn-sm { flex: 0 0 auto; }
+.logo-or { font-size: 12px; color: var(--text-3); }
+.logo-clear {
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.logo-clear:hover { color: var(--text); }
+@media (max-width: 560px) {
+  .logo-field { gap: 12px; }
+  .logo-url { flex-basis: 100%; }
+}
 
 /* ---------- 数据源切换（网站默认 / 我的链接库） ----------
    侧栏高度是 100vh：品牌 + 8 个导航项 + 这块 + 底部统计。

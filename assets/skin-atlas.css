@@ -2127,13 +2127,16 @@ body.hp .gnav-link:hover {
   color: var(--at-accent);
   border-bottom-color: currentColor;
 }
-/* 版本与项目主页横排，省一行高度 */
-body.hp .gnav-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+/* 版本号并入第一行（跟在署名后面）后需要一枚间隔点：
+   比文字更淡、左右留 5px，只做分隔，不当装饰。
+   （原来的 .gnav-meta 那一行已撤，V1.2.1 起版本号回到署名同一行） */
+body.hp .gnav-dot {
+  margin: 0 5px;
+  opacity: .5;
 }
+/* 备案号与协议同属「附注」，和 .gnav-rights 一样压到 .72 ——
+   不压的话它会比上一行更黑，反倒是页脚里最抢眼的一行 */
+body.hp .gnav-beian { opacity: .72; }
 /* 库切换：站点库 / 我的库。
    放在页脚上方而不是顶栏 —— 它决定的是「这一页显示哪份数据」，
    和分组导航属于同一层语义，放进顶栏会和皮肤、布局这些「显示设置」混在一起。 */

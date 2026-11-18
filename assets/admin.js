@@ -379,6 +379,31 @@
   const giconModal = $('#giconModal');
   let giconRow = null, giconBtn = null;
 
+  /* 把分组按钮上的图标换成新的：内置图标克隆弹层里那颗 svg（统一缩到 18），
+     自定义图标用 <img>。两种形态都走 replaceChildren，不用 innerHTML 拼字符串。 */
+  function setGroupIconBtn(icon) {
+    if (!giconBtn) return;
+    giconBtn.dataset.icon = icon;
+    giconBtn.classList.toggle('is-auto', icon === '');
+    if (/^(data\/icons\/|https?:\/\/)/i.test(icon)) {
+      const img = document.createElement('img');
+      img.className = 'gicon-img';
+      img.src = icon;
+      img.width = 18;
+      img.height = 18;
+      img.alt = '';
+      giconBtn.replaceChildren(img);
+      return;
+    }
+    const src = giconModal?.querySelector('[data-pick="' + CSS.escape(icon || '') + '"] svg');
+    if (src) {
+      const svg = src.cloneNode(true);
+      svg.setAttribute('width', '18');
+      svg.setAttribute('height', '18');
+      giconBtn.replaceChildren(svg);
+    }
+  }
+
   function openGroupIcon(row, btn) {
     if (!giconModal) return;
     giconRow = row;
@@ -389,6 +414,11 @@
       o.classList.toggle('is-on', on);
       o.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    /* 回填输入框的只有**外链**。data/icons/… 是服务端抓完落盘的本地路径，
+       填进 type="url" 的框里既不是合法 URL、再点「抓取」也只会报错 ——
+       用户看到一串路径还以为自己填错了什么。 */
+    const urlInput = $('#giconUrl');
+    if (urlInput) urlInput.value = /^https?:\/\//i.test(cur) ? cur : '';
     giconModal.hidden = false;
     giconModal.querySelector('[data-pick].is-on')?.focus();
   }
@@ -404,14 +434,41 @@
     const icon = pick.dataset.pick || '';
     try {
       await api({ action: 'group_icon', id: Number(giconRow.dataset.id), icon });
-      giconBtn.dataset.icon = icon;
-      giconBtn.classList.toggle('is-auto', icon === '');
-      giconBtn.querySelector('svg').innerHTML = pick.querySelector('svg').innerHTML;
+      setGroupIconBtn(icon);
       giconModal.hidden = true;
       giconBtn.focus();
       toast(icon === '' ? '已恢复自动匹配' : '图标已更新');
     } catch (err) {
       toast(err.message, true);
+    }
+  });
+
+  /* 地址框里回车等同点「抓取并使用」—— 手不用离开键盘 */
+  $('#giconUrl')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#giconApply')?.click(); }
+  });
+  $('#giconApply')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    const urlInput = $('#giconUrl');
+    const url = (urlInput?.value || '').trim();
+    if (!url || !giconRow) { toast('先贴一个图片地址', true); urlInput?.focus(); return; }
+    const label = btn.querySelector('.btn-text');
+    const spin = btn.querySelector('.spinner');
+    btn.disabled = true;
+    if (spin) spin.hidden = false;
+    if (label) label.textContent = '抓取中';
+    try {
+      const d = await api({ action: 'group_icon', id: Number(giconRow.dataset.id), icon: url });
+      setGroupIconBtn(d.icon || '');
+      giconModal.hidden = true;
+      giconBtn?.focus();
+      toast('图标已保存到本站');
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      btn.disabled = false;
+      if (spin) spin.hidden = true;
+      if (label) label.textContent = '抓取并使用';
     }
   });
 
@@ -427,6 +484,8 @@
   if (lookForm) {
     const lookErr = $('#lookErr');
     const saveBtn = $('#saveLook');
+    const logoPrev = $('#logoPreview');
+    const logoClear = $('#logoClear');
 
     // 选中态视觉同步
     const syncLayouts = () => $$('.layout-radio').forEach(l => {
@@ -481,6 +540,108 @@
       } catch (err) { showErr(lookErr, err.message); }
       busy(saveBtn, false, '保存中', '保存外观');
     });
+
+    /* ---------------- 站点图标：上传 / 外链抓取 / 恢复默认 ----------------
+       三个动作都不走表单提交，也不进「保存外观」的 payload：
+       图标是个文件地址，不是一段配置文本；点完就得立刻看到结果，
+       攒到点保存才生效的话，用户会以为没成功。
+
+       上传走 multipart（api() 只会发 JSON），所以这里单独写一次 fetch；
+       action 放进 FormData，服务端 $_POST['action'] 取得到。 */
+    if (logoPrev) {
+      const pickBtn = $('#logoPick');
+      const applyBtn = $('#logoApply');
+      const urlInput = $('#logoUrl');
+      /* 默认标记与默认 favicon 由 PHP 单独给一份（<template> / data 属性）：
+         进这个页面时很可能已经在用自定义图标，此时的 DOM 是用户的图，
+         拿它当「恢复默认」的目标等于什么也没恢复。 */
+      const logoDefault = ($('#logoFallback')?.innerHTML || '').trim();
+      const faviconDefault = logoPrev.dataset.favicon || '';
+      const favicon = document.querySelector('link[rel="icon"]');
+
+      const paintLogo = (src) => {
+        if (src) {
+          logoPrev.classList.remove('is-default');
+          const img = new Image();
+          img.src = src;
+          img.alt = '当前站点图标';
+          img.width = 56;
+          img.height = 56;
+          img.decoding = 'async';
+          logoPrev.replaceChildren(img);
+        } else {
+          logoPrev.classList.add('is-default');
+          logoPrev.innerHTML = logoDefault;
+        }
+        if (logoClear) logoClear.hidden = !src;
+        // 标签页那个小图标也顺手换掉，否则改完要刷新才看得到
+        if (favicon) favicon.setAttribute('href', src || faviconDefault);
+      };
+
+      // 超 2 MB 前端先拦一道，省得把大图整个传上去再被服务端退回来
+      const sendLogo = async (fd) => {
+        const res = await fetch('api.php', {
+          method: 'POST',
+          headers: { 'X-CSRF': CSRF },
+          body: fd,
+          credentials: 'same-origin',
+        });
+        let d;
+        try { d = await res.json(); } catch { throw new Error('服务器返回异常'); }
+        if (!res.ok || !d.ok) throw new Error(d.error || '上传失败');
+        return d;
+      };
+
+      pickBtn?.addEventListener('click', () => logoFile?.click());
+
+      logoFile?.addEventListener('change', async e => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          toast('图片超过 2 MB，先压缩一下再传', true);
+          logoFile.value = '';
+          return;
+        }
+        const fd = new FormData();
+        fd.append('action', 'site_logo_upload');
+        fd.append('lib', LIB);
+        fd.append('logo', file);
+        busy(pickBtn, true, '上传中', '上传图片');
+        try {
+          const d = await sendLogo(fd);
+          paintLogo(d.logo);
+          toast('图标已存到本站');
+        } catch (err) { toast(err.message, true); }
+        busy(pickBtn, false, '上传中', '上传图片');
+        logoFile.value = '';   // 同一张图连传两次也要能触发 change
+      });
+
+      const applyUrl = async () => {
+        const url = (urlInput?.value || '').trim();
+        if (!url) { urlInput?.focus(); return; }
+        busy(applyBtn, true, '抓取中', '抓取');
+        try {
+          const d = await api({ action: 'site_logo', url });
+          paintLogo(d.logo);
+          if (urlInput) urlInput.value = '';
+          toast('已抓取并存到本站');
+        } catch (err) { toast(err.message, true); }
+        busy(applyBtn, false, '抓取中', '抓取');
+      };
+      applyBtn?.addEventListener('click', applyUrl);
+      urlInput?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); applyUrl(); }
+      });
+
+      logoClear?.addEventListener('click', async () => {
+        if (!confirm('恢复默认图标？当前这张图会从服务器上删掉。')) return;
+        try {
+          await api({ action: 'site_logo', url: '' });
+          paintLogo('');
+          toast('已恢复默认图标');
+        } catch (err) { toast(err.message, true); }
+      });
+    }
   }
 
   /* ================= 统计 ================= */
@@ -714,6 +875,35 @@
     const btnAll   = $('#metaRefreshAll');
     const btnMiss  = $('#metaRefreshMissing');
 
+    /* 默认收起（HTML 上就是 hidden），展开/收起只切 hidden 与 data-open。
+       不保存到 localStorage：这是个「要看一眼才展开」的临时动作，
+       记住上次的展开状态反而会让下次进页面又变成一屏高。 */
+    const mrBody   = $('#mrBody');
+    const mrToggle = $('#mrToggle');
+    const setOpen = open => {
+      if (!mrBody) return;
+      mrBody.hidden = !open;
+      panel.dataset.open = open ? '1' : '0';
+      mrToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const t = mrToggle?.querySelector('.mr-toggle-t');
+      if (t) t.textContent = open ? '收起' : '展开';
+    };
+    mrToggle?.addEventListener('click', () => setOpen(mrBody.hidden));
+
+    /* 上一次刷新刚跑完就重载了：把结论搬回来，顺便展开给用户看 */
+    let mrSaved = '';
+    try {
+      mrSaved = sessionStorage.getItem('vnavMrResult') || '';
+      if (mrSaved) sessionStorage.removeItem('vnavMrResult');
+    } catch {}
+    if (mrSaved) {
+      setOpen(true);
+      progWrap.hidden = false;
+      barFill.style.width = '100%';
+      statusEl.textContent = mrSaved;
+    }
+
+
     const setBusy = (busy, which) => {
       [btnAll, btnMiss].forEach(b => { if (b) b.disabled = busy; });
       const btn = which === 'missing' ? btnMiss : btnAll;
@@ -783,7 +973,10 @@
           statusEl.textContent += `；${errLines.slice(0, 3).join('、')}${errLines.length > 3 ? ' 等' : ''}`;
         }
 
-        // 刷完要让列表里的标题/图标跟着变，直接重载最省事
+        /* 刷完要让列表里的标题/图标跟着变，直接重载最省事。
+           重载会把面板收回收起态，所以把结论存一下、重载后还原，
+           否则「成功几条、失败几条」只在 900ms 里闪一下就没了。 */
+        try { sessionStorage.setItem('vnavMrResult', statusEl.textContent); } catch {}
         setTimeout(() => location.reload(), 900);
       } catch (err) {
         /* 出错时不清进度条、不改已处理的数字 ——

@@ -103,10 +103,38 @@ if ($tab === 'stats') {
     // 时间窗：默认 30 天，可用 ?days= 调
     $days = (int)($_GET['days'] ?? 30);
     if (!in_array($days, [1, 7, 30, 90, 365], true)) $days = 30;
-    $from = time() - $days * 86400;
+    /* 起点对齐到当天 00:00：原来用 time()-N*86400 会从「N 天前的这个时刻」
+       开始，日期显示出来是 31 天，与「近 30 天」对不上。 */
+    $from = strtotime('today') - ($days - 1) * 86400;
+    $to   = 0;                       // 0 = 不设上限（到此刻为止）
+    $rangeLabel = '近 ' . $days . ' 天';
+    $custom = false;
+
+    /* 自定义区间：?from=YYYY-MM-DD&to=YYYY-MM-DD（含两端）。
+       快捷按钮解决「看个大概」，具体某次故障或某天暴涨得靠这个 ——
+       也是唯一能查历史某段的方式，否则只能选 90 天再在明细里翻页。 */
+    $cFrom = trim((string)($_GET['from'] ?? ''));
+    $cTo   = trim((string)($_GET['to'] ?? ''));
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $cFrom)) {
+        $ts = strtotime($cFrom . ' 00:00:00');
+        if ($ts !== false) { $from = $ts; $custom = true; }
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $cTo)) {
+        $ts = strtotime($cTo . ' 23:59:59');
+        if ($ts !== false) { $to = $ts; $custom = true; }
+    }
+    if ($custom) {
+        /* 区间反了就换过来，别让用户对着负数发懵 */
+        if ($to > 0 && $to < $from) { [$from, $to] = [$to - 86399, $from + 86399]; }
+        /* 跨度兜底：最多画 366 根柱子，再多页面就成一条线了 */
+        $span = (int)ceil((($to > 0 ? $to : time()) - $from) / 86400);
+        $rangeLabel = date('Y-m-d', $from) . ' 至 ' . date('Y-m-d', $to > 0 ? $to : time());
+        $days = max(1, min(366, $span));
+    }
+    $toSql = $to > 0 ? ' AND at <= ' . $to : '';
 
     // 只统计前台访问：后台自己刷新的次数不该算进「访客」
-    $W = 'FROM visits WHERE is_admin = 0 AND at >= ' . $from;
+    $W = 'FROM visits WHERE is_admin = 0 AND at >= ' . $from . $toSql;
 
     $card = static function (PDO $p, string $sql, array $args = []) {
         $st = $p->prepare($sql);
@@ -123,14 +151,16 @@ if ($tab === 'stats') {
         'SELECT COUNT(DISTINCT ip_hash) FROM visits WHERE is_admin = 0 AND at >= ' . strtotime('today')
     )->fetchColumn();
 
-    // 逐日趋势：用 PHP 补齐没有访问的那几天，否则折线会跳
+    // 逐日趋势：按区间逐日铺满，没有访问的那天补 0，否则折线会跳
     $daily = [];
-    for ($i = $days - 1; $i >= 0; $i--) {
-        $daily[date('Y-m-d', strtotime("-$i day"))] = 0;
+    $dayStart = strtotime(date('Y-m-d', $from));
+    $dayEnd   = strtotime(date('Y-m-d', $to > 0 ? $to : time()));
+    for ($t = $dayStart; $t <= $dayEnd && count($daily) < 366; $t = strtotime('+1 day', $t)) {
+        $daily[date('Y-m-d', $t)] = 0;
     }
     foreach ($pdo->query(
         "SELECT date(at, 'unixepoch', 'localtime') d, COUNT(*) c
-           FROM visits WHERE is_admin = 0 AND at >= $from GROUP BY d"
+           FROM visits WHERE is_admin = 0 AND at >= $from$toSql GROUP BY d"
     ) as $r) {
         if (isset($daily[$r['d']])) $daily[$r['d']] = (int)$r['c'];
     }
@@ -138,11 +168,13 @@ if ($tab === 'stats') {
     // 点击榜：hits 是累计值，同时给出窗口内明细点击数
     $topLinks = $pdo->query(
         "SELECT l.id, l.title, l.url, l.hits, l.hidden,
-                (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id AND c.at >= $from) recent
+                (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id AND c.at >= $from"
+                . ($to > 0 ? " AND c.at <= $to" : '') . ") recent
            FROM links l ORDER BY recent DESC, l.hits DESC LIMIT 15"
     )->fetchAll();
 
-    $totalClicks = (int)$pdo->query('SELECT COUNT(*) FROM clicks WHERE at >= ' . $from)->fetchColumn();
+    $totalClicks = (int)$pdo->query('SELECT COUNT(*) FROM clicks WHERE at >= ' . $from
+        . ($to > 0 ? ' AND at <= ' . $to : ''))->fetchColumn();
 
     $refKinds = $pdo->query(
         "SELECT ref_kind, COUNT(*) c $W GROUP BY ref_kind ORDER BY c DESC"
@@ -184,7 +216,8 @@ if ($tab === 'stats') {
     $stats = compact(
         'days', 'pv', 'uv', 'pvToday', 'uvToday', 'daily', 'topLinks',
         'totalClicks', 'refKinds', 'refHosts', 'countries', 'visitorCountries',
-        'browsers', 'oses', 'devices', 'rows', 'page', 'pages', 'allVisits'
+        'browsers', 'oses', 'devices', 'rows', 'page', 'pages', 'allVisits',
+        'rangeLabel', 'custom', 'from', 'to'
     );
     $stats['geo'] = hp_geo_status();
 }
@@ -261,6 +294,16 @@ if ($tab === 'upgrade' || $tab === 'security') {
         'root_path' => HP_ROOT,
     ];
 }
+
+/* 内置图标（勾形）的两种形式，都放在这一处：
+   · $favDefault 给 <link rel="icon"> 与预览区的 data 属性（恢复默认时 JS 要读）
+   · $logoMarkup 是外观页预览用的那把 24 网格描边 svg
+   页面上可能已经在用自定义图标，那时 DOM 里渲染的是用户的图 ——
+   所以「默认长什么样」必须由 PHP 另存一份交给 JS，不能靠读当前 DOM。 */
+$favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    . "<rect width='32' height='32' rx='8' fill='%23F0B429'/>"
+    . "<path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' "
+    . "stroke-linecap='round' stroke-linejoin='round'/></svg>";
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="<?= h(hp_skin_safe(setting('theme', 'atlas'))) ?>" data-accent="<?= h(setting('accent', 'amber')) ?>">
@@ -274,13 +317,13 @@ if ($tab === 'upgrade' || $tab === 'security') {
          服务端据此决定 $U —— 前端不必在每个调用点手写。 */ ?>
 <meta name="adm-lib" content="<?= h($seqLib) ?>">
 <title>管理 · <?= h(setting('site_title', 'Vnav')) ?></title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F0B429'/><path d='M9 16.5l4.5 4.5L23 11' stroke='%23241500' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="icon" href="<?= hp_site_logo() !== '' ? h(hp_site_logo()) : h($favDefault) ?>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=46">
+<link rel="stylesheet" href="assets/app.css?v=47">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=54">
-<link rel="stylesheet" href="assets/admin.css?v=50">
+<link rel="stylesheet" href="assets/admin.css?v=57">
 </head>
 <body class="adm-body">
 
@@ -291,9 +334,16 @@ if ($tab === 'upgrade' || $tab === 'security') {
 
   <aside class="adm-side">
     <a class="adm-brand" href="./">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
-      </span>
+      <?php $__logo = hp_site_logo(); ?>
+      <?php if ($__logo !== ''): ?>
+        <span class="brand-mark brand-mark--logo">
+          <img src="<?= h($__logo) ?>" width="30" height="30" alt="" decoding="async">
+        </span>
+      <?php else: ?>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+        </span>
+      <?php endif; ?>
       <span>Vnav</span>
       <span class="adm-ver"><?= h(hp_version()) ?></span>
     </a>
@@ -382,47 +432,62 @@ if ($tab === 'upgrade' || $tab === 'security') {
       <?php /* 一键刷新元信息。
                放在链接页最上方而不是「安全」页里 —— 它改的是链接数据本身
                （标题/描述/图标），和「链接管理」是同一件事的两个粒度。
-               缺图标/缺描述的条数直接显示在按钮上，用户不用猜要不要刷。 */ ?>
-      <section class="adm-panel meta-refresh" id="metaRefreshPanel">
+
+               默认收起：这是个偶尔用一次的批量动作，展开着会占掉一屏多的高度，
+               把「新增/编辑表单」和真正的链接列表挤到下面看不见的地方。
+               收起时只留一条 44px 的标题行：名称 + 缺图标/缺描述条数 + 右侧展开按钮。
+               数字留在收起态是有意的 —— 用户能一眼看出「要不要刷」，不用先展开。 */ ?>
+      <section class="adm-panel meta-refresh" id="metaRefreshPanel" data-open="0">
         <div class="mr-head">
           <div class="mr-copy">
             <h2 class="panel-title">一键刷新名称、描述与图标</h2>
-            <p class="panel-hint">
-              逐条回到原站点重读页面信息，把标题、描述、logo 更新成最新。
-              站点改版、换了 logo、当初抓得不好看的，刷一遍就好。
-            </p>
+            <div class="mr-stats">
+              <span class="mr-stat">
+                <b><?= (int)$metaStats['no_icon'] ?></b> 条缺图标
+              </span>
+              <span class="mr-stat">
+                <b><?= (int)$metaStats['no_desc'] ?></b> 条缺描述
+              </span>
+            </div>
           </div>
-          <div class="mr-stats">
-            <span class="mr-stat">
-              <b><?= (int)$metaStats['no_icon'] ?></b> 条缺图标
-            </span>
-            <span class="mr-stat">
-              <b><?= (int)$metaStats['no_desc'] ?></b> 条缺描述
-            </span>
-          </div>
-        </div>
-
-        <div class="mr-progress" id="mrProgress" hidden>
-          <div class="mr-bar"><span class="mr-bar-fill" id="mrBarFill"></span></div>
-          <p class="mr-status" id="mrStatus" role="status" aria-live="polite"></p>
-        </div>
-
-        <div class="panel-actions" style="justify-content:flex-start;flex-wrap:wrap">
-          <button class="btn-primary" type="button" id="metaRefreshAll">
-            <span class="btn-text">全部刷新（<?= (int)$metaStats['total'] ?> 条）</span>
-            <span class="spinner" hidden aria-hidden="true"></span>
-          </button>
-          <button class="btn-ghost" type="button" id="metaRefreshMissing">
-            <span class="btn-text">只补缺失的</span>
-            <span class="spinner" hidden aria-hidden="true"></span>
+          <button class="btn-ghost btn-sm mr-toggle" id="mrToggle" type="button"
+                  aria-expanded="false" aria-controls="mrBody">
+            <span class="mr-toggle-t">展开</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
           </button>
         </div>
 
-        <ul class="adm-tips">
-          <li>「全部刷新」会<strong>覆盖</strong>你手工改过的名称和描述；「只补缺失的」只填空着的那几项，已写的不动。</li>
-          <li>要逐条访问对方站点，所以是分批跑的，进度条走完才算结束。中途可以去别的页，回来再点一次会接着刷。</li>
-          <li>抓不到的（对方站点没有、被墙、或做了防盗链）会跳过并计数，不会把原值清空。</li>
-        </ul>
+        <div class="mr-body" id="mrBody" hidden>
+          <p class="panel-hint">
+            逐条回到原站点重读页面信息，把标题、描述、logo 更新成最新。
+            站点改版、换了 logo、当初抓得不好看的，刷一遍就好。
+          </p>
+
+          <div class="mr-progress" id="mrProgress" hidden>
+            <div class="mr-bar"><span class="mr-bar-fill" id="mrBarFill"></span></div>
+            <p class="mr-status" id="mrStatus" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="panel-actions" style="justify-content:flex-start;flex-wrap:wrap">
+            <button class="btn-primary" type="button" id="metaRefreshAll">
+              <span class="btn-text">全部刷新（<?= (int)$metaStats['total'] ?> 条）</span>
+              <span class="spinner" hidden aria-hidden="true"></span>
+            </button>
+            <button class="btn-ghost" type="button" id="metaRefreshMissing">
+              <span class="btn-text">只补缺失的</span>
+              <span class="spinner" hidden aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <ul class="adm-tips">
+            <li>「全部刷新」会<strong>覆盖</strong>你手工改过的名称和描述；「只补缺失的」只填空着的那几项，已写的不动。</li>
+            <li>要逐条访问对方站点，所以是分批跑的，进度条走完才算结束。中途可以去别的页，回来再点一次会接着刷。</li>
+            <li>抓不到的（对方站点没有、被墙、或做了防盗链）会跳过并计数，不会把原值清空。</li>
+          </ul>
+        </div>
       </section>
 
       <!-- 新增/编辑表单 -->
@@ -682,7 +747,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
             <?php
             $gIcon = (string)($g['icon'] ?? '');
             // 没手动选过时，按钮显示「按名称自动匹配」的结果，并用虚线框表示"自动"
-            $gSvg  = hp_group_icon($g['name'], $gIcon);
+            $gMarkup = hp_group_icon_markup($g['name'], $gIcon, 18);
             $gN    = (int)($g['link_count'] ?? 0);
             ?>
             <div class="adm-group-row" data-id="<?= (int)$g['id'] ?>" data-name="<?= h($g['name']) ?>" data-count="<?= $gN ?>">
@@ -693,7 +758,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
               <button type="button" class="gicon-btn<?= $gIcon === '' ? ' is-auto' : '' ?>"
                       data-gact="icon" data-icon="<?= h($gIcon) ?>"
                       title="选择图标" aria-label="选择「<?= h($g['name']) ?>」的图标">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?= $gSvg ?></svg>
+                <?= $gMarkup ?>
               </button>
               <input class="f-input f-input-tight" value="<?= h($g['name']) ?>" maxlength="24" aria-label="分组名">
               <?php /* 链接数常驻可见：删除/合并前得知道这一组里到底有多少东西，
@@ -735,6 +800,9 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <div class="gicon-panel" role="dialog" aria-modal="true" aria-labelledby="giconTitle">
           <div class="gicon-head">
             <h2 id="giconTitle">选择图标</h2>
+            <?php /* 网格是可滚动的（最多 350px 高），必须写出来 ——
+                     否则用户只看到头几排，会以为图标就这几个。 */ ?>
+            <span class="gicon-count">共 <?= count(hp_group_icon_set()) + 1 ?> 个 · 可上下滚动</span>
             <button type="button" class="icon-btn" data-gicon-close aria-label="关闭">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
@@ -752,6 +820,25 @@ if ($tab === 'upgrade' || $tab === 'security') {
               </button>
             <?php endforeach; ?>
           </div>
+
+          <?php /* 自定义图标：内置的 51 个覆盖不到「公司内网系统」「这个博客」这类
+                   具体对象，所以留一个地址输入口。保存时服务端会下载并缓存，
+                   之后前台读本机文件，不回源、也不把访客 IP 交给图床。 */ ?>
+          <div class="gicon-custom">
+            <label class="f-label" for="giconUrl">或用自己的图标</label>
+            <div class="gicon-url-row">
+              <input class="f-input" id="giconUrl" type="url" inputmode="url"
+                     placeholder="https://example.com/logo.png" autocomplete="off" spellcheck="false">
+              <button class="btn-primary btn-sm" type="button" id="giconApply">
+                <span class="btn-text">抓取并使用</span>
+                <span class="spinner" hidden aria-hidden="true"></span>
+              </button>
+            </div>
+            <p class="gicon-note">
+              支持 PNG / JPG / GIF / WebP / ICO，不超过 2 MB。抓取后存到本站
+              <code>data/icons/</code>，不会每次回源。SVG 不落盘（同源可执行文件），请先导出成 PNG。
+            </p>
+          </div>
         </div>
       </div>
 
@@ -764,9 +851,57 @@ if ($tab === 'upgrade' || $tab === 'security') {
       </header>
 
       <form id="lookForm" class="adm-form" novalidate>
+        <?php $curLogo = hp_site_logo(); ?>
         <section class="adm-panel">
-          <h2 class="panel-title">文字</h2>
-          <p class="panel-hint">主页已经不放标题大字了，这里只保留浏览器标签页与书签用的名字。</p>
+          <h2 class="panel-title">基本信息</h2>
+          <p class="panel-hint">站点叫什么、用什么图标。图标会出现在浏览器标签页、主页左上角、后台侧栏和登录页。</p>
+
+          <?php /* 站点图标。
+                   两种来源（上传 / 外链）都不当场存外链地址：点「抓取」时
+                   服务端下载并落到 data/icons/，库里存的是本站路径。
+                   所以这一块不走表单提交 —— 保存按钮不管图标，改完立即生效。
+
+                   内置标记与默认 favicon 各留一份在 DOM / data 属性里：
+                   本页打开时可能已经在用自定义图标，那时「当前渲染的 HTML」
+                   是用户的图而不是默认标记，不能在 JS 里拿它当回退值。 */ ?>
+          <div class="logo-field">
+            <div class="logo-preview<?= $curLogo === '' ? ' is-default' : '' ?>" id="logoPreview" data-favicon="<?= h($favDefault) ?>">
+              <?php if ($curLogo !== ''): ?>
+                <img src="<?= h($curLogo) ?>" width="56" height="56" alt="当前站点图标" decoding="async">
+              <?php else: ?>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
+              <?php endif; ?>
+            </div>
+            <template id="logoFallback">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4 4L19 7"/></svg>
+            </template>
+            <div class="logo-main">
+              <p class="f-label">站点图标</p>
+              <p class="f-hint">
+                正方形最合适（256×256 以上）。位图会等比缩成透明底的方图存成本站 WebP，
+                横版 logo 不会被裁边；SVG 请先导出成 PNG —— 同源可执行文件不落盘。
+              </p>
+              <div class="logo-acts">
+                <button type="button" class="btn-ghost btn-sm" id="logoPick">
+                  <span class="btn-text">上传图片</span>
+                  <span class="spinner" hidden aria-hidden="true"></span>
+                </button>
+                <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon" hidden>
+                <span class="logo-or">或</span>
+                <div class="logo-url">
+                  <label class="sr-only" for="logoUrl">图片地址</label>
+                  <input class="f-input" id="logoUrl" type="url" placeholder="https://example.com/logo.png"
+                         autocomplete="off" spellcheck="false">
+                  <button type="button" class="btn-ghost btn-sm" id="logoApply">
+                    <span class="btn-text">抓取</span>
+                    <span class="spinner" hidden aria-hidden="true"></span>
+                  </button>
+                </div>
+                <button type="button" class="logo-clear" id="logoClear" <?= $curLogo === '' ? 'hidden' : '' ?>>恢复默认</button>
+              </div>
+            </div>
+          </div>
+
           <div class="f-row">
             <div class="f-col">
               <label class="f-label" for="sTitle">站点名称</label>
@@ -934,15 +1069,30 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <div>
           <h1 class="adm-title">统计分析</h1>
           <p class="adm-sub">
-            近 <?= (int)$stats['days'] ?> 天的访问与点击。后台自身的访问不计入 ——
+            <?= h($stats['rangeLabel']) ?> 的访问与点击。后台自身的访问不计入 ——
             否则你每刷新一次这里，数字就自己涨一格。
           </p>
         </div>
-        <div class="adm-range" role="group" aria-label="统计时间范围">
-          <?php foreach ([1 => '今天', 7 => '7 天', 30 => '30 天', 90 => '90 天', 365 => '一年'] as $d => $lb): ?>
-            <a class="adm-range-btn<?= (int)$stats['days'] === $d ? ' is-on' : '' ?>"
-               href="?tab=stats&amp;days=<?= $d ?>"><?= $lb ?></a>
-          <?php endforeach; ?>
+        <div class="adm-range-wrap">
+          <div class="adm-range" role="group" aria-label="统计时间范围">
+            <?php foreach ([1 => '今天', 7 => '7 天', 30 => '30 天', 90 => '90 天', 365 => '一年'] as $d => $lb): ?>
+              <a class="adm-range-btn<?= !$stats['custom'] && (int)$stats['days'] === $d ? ' is-on' : '' ?>"
+                 href="?tab=stats&amp;days=<?= $d ?>"><?= $lb ?></a>
+            <?php endforeach; ?>
+          </div>
+          <?php /* 自定义区间：两个原生 date 输入，不引日期库。
+                   快捷按钮解决「看个大概」，这里解决「就查那一天 / 那一段」。 */ ?>
+          <form class="adm-dates" method="get">
+            <input type="hidden" name="tab" value="stats">
+            <label class="sr-only" for="statFrom">开始日期</label>
+            <input class="adm-date" type="date" id="statFrom" name="from"
+                   value="<?= h(date('Y-m-d', $stats['from'])) ?>">
+            <span class="adm-dates-sep" aria-hidden="true">→</span>
+            <label class="sr-only" for="statTo">结束日期</label>
+            <input class="adm-date" type="date" id="statTo" name="to"
+                   value="<?= h(date('Y-m-d', $stats['to'] ?: time())) ?>">
+            <button class="btn-ghost adm-dates-go" type="submit">查看</button>
+          </form>
         </div>
       </header>
 
@@ -967,7 +1117,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <div class="stat-card">
           <p class="stat-num"><?= number_format($stats['totalClicks']) ?></p>
           <p class="stat-lab">链接点击</p>
-          <p class="stat-sub">近 <?= (int)$stats['days'] ?> 天</p>
+          <p class="stat-sub"><?= h($stats['rangeLabel']) ?></p>
         </div>
         <div class="stat-card">
           <p class="stat-num"><?= number_format($stats['visitorCountries']) ?></p>
@@ -982,7 +1132,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
       <section class="adm-panel">
         <h2 class="panel-title">每日访问</h2>
         <p class="panel-hint">柱子是当天的浏览量。鼠标悬停可看具体日期与数字。</p>
-        <div class="spark" role="img" aria-label="近 <?= (int)$stats['days'] ?> 天每日访问量柱状图">
+        <div class="spark" role="img" aria-label="<?= h($stats['rangeLabel']) ?> 每日访问量柱状图">
           <?php foreach ($stats['daily'] as $d => $c):
             $hh = max(2, (int)round($c / $maxDaily * 100));
             $isToday = $d === date('Y-m-d');
@@ -1003,7 +1153,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <section class="adm-panel">
           <h2 class="panel-title">点击榜</h2>
           <p class="panel-hint">
-            左边深色数字是近 <?= (int)$stats['days'] ?> 天的点击数，竖线右侧灰色是历史累计。
+            左边深色数字是<?= h($stats['rangeLabel']) ?>的点击数，竖线右侧灰色是历史累计。
           </p>
           <?php if (!$stats['topLinks']): ?>
             <p class="adm-hint">还没有点击记录。</p>
@@ -1127,10 +1277,23 @@ if ($tab === 'upgrade' || $tab === 'security') {
 
       <!-- 明细 -->
       <section class="adm-panel">
-        <h2 class="panel-title">访问明细</h2>
-        <p class="panel-hint">
-          共 <?= number_format($stats['allVisits']) ?> 条 · 第 <?= (int)$stats['page'] ?>/<?= (int)$stats['pages'] ?> 页
-        </p>
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">访问明细</h2>
+            <p class="panel-hint">
+              共 <?= number_format($stats['allVisits']) ?> 条 · 第 <?= (int)$stats['page'] ?>/<?= (int)$stats['pages'] ?> 页
+            </p>
+          </div>
+          <?php /* 维护动作放标题行右侧：以前压在表格最底下，得翻完整页才看见。 */ ?>
+          <div class="panel-head-act">
+            <button class="btn-ghost btn-sm" type="button" id="statsPrune">
+              清理 <?= (int)setting('stats_keep', '90') ?> 天前
+            </button>
+            <button class="btn-danger btn-sm" type="button" id="statsClear">
+              清空全部统计
+            </button>
+          </div>
+        </div>
         <?php if (!$stats['rows']): ?>
           <p class="adm-hint">还没有访问记录。用手机或换一个网络打开一次主页就能看到。</p>
         <?php else: ?>
@@ -1167,10 +1330,15 @@ if ($tab === 'upgrade' || $tab === 'security') {
           <?php if ($stats['pages'] > 1): ?>
             <nav class="pager" aria-label="分页">
               <?php
-              // 只需要翻页，所以只带 days 与 p 两个参数，别把会话里无关的东西拖进来
+              /* 翻页只带时间窗与页码，别把会话里无关的东西拖进来。
+                 自定义区间时带 from/to —— 否则一翻页就掉回近 30 天。 */
+              $win = $stats['custom']
+                  ? 'from=' . urlencode(date('Y-m-d', $stats['from']))
+                    . '&amp;to=' . urlencode(date('Y-m-d', $stats['to'] ?: time()))
+                  : 'days=' . (int)$stats['days'];
               $mk = static fn(int $p, string $lb, bool $on = false) =>
                   '<a class="pager-btn' . ($on ? ' is-on' : '') . '"'
-                  . ' href="?tab=stats&amp;days=' . (int)$stats['days'] . '&amp;p=' . $p . '"'
+                  . ' href="?tab=stats&amp;' . $win . '&amp;p=' . $p . '"'
                   . ($on ? ' aria-current="page"' : '') . '>' . $lb . '</a>';
               if ($stats['page'] > 1) echo $mk($stats['page'] - 1, '← 上一页');
               $lo = max(1, $stats['page'] - 2);
@@ -1182,15 +1350,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
           <?php endif; ?>
         <?php endif; ?>
 
-        <div class="panel-actions" style="margin-top:22px">
-          <button class="btn-ghost" type="button" id="statsPrune">
-            清理 <?= (int)setting('stats_keep', '90') ?> 天前的明细
-          </button>
-          <button class="btn-danger" type="button" id="statsClear">
-            清空全部统计
-          </button>
-        </div>
-        <p class="panel-hint" style="margin-top:10px">
+        <p class="panel-hint" style="margin-top:14px">
           清空会把链接的累计点击次数一起归零，否则这一页会出现两套互相矛盾的数字。
           明细里不用 Cookie：UV 按「IP 哈希」去重，同一出口 IP 算一个人。
         </p>
@@ -1376,7 +1536,7 @@ if ($tab === 'upgrade' || $tab === 'security') {
         <?php if (!$lockRows): ?>
           <p class="acl-empty">没有 IP 或账号处于锁定状态。</p>
         <?php else: ?>
-          <ul class="acl-list">
+          <ul class="acl-list acl-list--lock">
             <?php foreach ($lockRows as $r): ?>
               <?php
                 $k = (string)$r['k'];
@@ -1974,6 +2134,6 @@ if ($tab === 'upgrade' || $tab === 'security') {
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=29" defer></script>
+<script src="assets/admin.js?v=33" defer></script>
 </body>
 </html>
