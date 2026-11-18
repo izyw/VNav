@@ -576,7 +576,7 @@ html[data-theme^='frame'][data-layout='grid'] body.hp .link-icon {
 html[data-theme^='frame'] body.hp .search-wrap {
   width: clamp(300px, 32vw, 460px);
   min-height: 36px;
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid var(--fr-line);
   background: var(--fr-app);
   box-shadow: none;
@@ -592,8 +592,8 @@ html[data-theme^='frame'] body.hp .search input {
   /* 左侧只留 12px：放大镜在工作台里是隐藏的（见下一条），
      左边已经有引擎 logo 表达「这里能搜」，再放一个放大镜是重复的。
      上一版把放大镜留着、内距又只给 8px，于是它直接压在提示文字上。 */
-  padding: 0 100px 0 12px;
-  border-radius: 0 10px 10px 0;
+  padding: 0 72px 0 12px;
+  border-radius: 0 9px 9px 0;
   font-family: var(--fr-font);
   font-size: 14px;
   color: var(--fr-ink);
@@ -606,19 +606,11 @@ html[data-theme^='frame'] body.hp .search-icon { display: none; }
 html[data-theme^='frame'] body.hp .eng-btn {
   min-height: 34px;
   padding: 0 5px 0 11px;
-  border-radius: 10px 0 0 10px;
+  border-radius: 9px 0 0 9px;
   color: var(--fr-ink-2);
 }
 html[data-theme^='frame'] body.hp .eng-btn:hover { color: var(--fr-ink); }
 html[data-theme^='frame'] body.hp .eng-logo { width: 20px; height: 20px; }
-html[data-theme^='frame'] body.hp .search-kbd {
-  border-radius: 4px;
-  border: 1px solid var(--fr-line);
-  background: var(--fr-side);
-  color: var(--fr-ink-3);
-  font-size: 11px;
-  padding: 2px 6px;
-}
 
 /* ==========================================================================
    8. 工具按钮与下拉

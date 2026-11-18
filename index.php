@@ -228,7 +228,7 @@ hp_log_visit(false, '/');
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
           body.hp 之下 —— 作用域只在主页，后台零影响。 */ ?>
-<link rel="stylesheet" href="assets/home.css?v=54">
+<link rel="stylesheet" href="assets/home.css?v=56">
 <?php /* 皮肤 CSS 必须排在 home.css 之后：靠「特异性 +1 属性选择器」与
          「后加载」双重压过 home.css 的结构规则，顺序反了只能改色改不动结构。
 
@@ -237,14 +237,14 @@ hp_log_visit(false, '/');
          两套全下等于每次白费一套（gzip 后 13~30KB）。
          切到另一系时，ui.js 会动态补载对应 CSS（见下方 data-skin-css）。 */ ?>
 <?php $__skinCss = str_starts_with($theme, 'frame') ? 'frame' : 'atlas'; ?>
-<link rel="stylesheet" href="assets/skin-<?= $__skinCss ?>.css?v=<?= $__skinCss === 'frame' ? '58' : '62' ?>" data-skin-css="<?= $__skinCss ?>">
+<link rel="stylesheet" href="assets/skin-<?= $__skinCss ?>.css?v=<?= $__skinCss === 'frame' ? '59' : '63' ?>" data-skin-css="<?= $__skinCss ?>">
 <script>
 /* 记录当前已加载的皮肤系，供切换时判断是否要补载另一套。
    放在 body 之前，ui.js 执行时已可用。 */
 window.__VNAV_SKIN_CSS = <?= json_encode($__skinCss) ?>;
 window.__VNAV_SKIN_HREF = {
-  atlas: 'assets/skin-atlas.css?v=62',
-  frame: 'assets/skin-frame.css?v=58'
+  atlas: 'assets/skin-atlas.css?v=63',
+  frame: 'assets/skin-frame.css?v=59'
 };
 </script>
 <?php /* 登录态要判断 localStorage 里那份「67 条链接、9 个分组」究竟是不是
@@ -425,13 +425,14 @@ if ($__isAdmin) {
                  GET 提交会把 action 里的查询串整个丢掉，写死 q 等于让百度
                  去解析一个它不认识的参数 —— 结果就是用户看到的空白页。 */ ?>
         <input id="q" name="<?= h($engines[$engine]['param']) ?>" type="search" placeholder="搜索 <?= h($engines[$engine]['label']) ?>" autocomplete="off" enterkeyhint="search">
-        <?php /* 提交按钮与 Ctrl K 提示合成一个：常态显示键帽（也是个能点的按钮），
-                 悬停或输入时换成箭头。以前两者各占一块，右侧挤着两个东西。
-                 图标用箭头而不是放大镜 —— 左边已经有一个放大镜当装饰。 */ ?>
+        <?php /* 键帽从按钮里搬出来，独立成一行灰字：按钮是一枚实心方圆角，
+                 再往里塞 Ctrl K 就成了"字挤在色块里"，又小又糊。
+                 现在字只做提示，输入框一聚焦或一有内容就淡出，不挡视线。
+                 图标用箭头而不是放大镜 —— 放大镜在这条框里已经删掉了。 */ ?>
+        <span class="search-key" aria-hidden="true">Ctrl K</span>
         <button class="search-go" type="submit" title="搜索（Ctrl K）">
           <span class="sr-only">搜索</span>
-          <span class="go-kbd" aria-hidden="true">Ctrl K</span>
-          <svg class="go-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
+          <svg class="go-ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M12.5 6.5L18 12l-5.5 5.5"/></svg>
         </button>
       </form>
       <?php /* 搜索建议下拉。只是个空壳，内容由 ui.js 按需填 ——

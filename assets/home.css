@@ -330,14 +330,14 @@ body.hp .brand-mark svg { width: 16px; height: 16px; }
 /* ==========================================================================
    5. 搜索框
    --------------------------------------------------------------------------
-   胶囊形（圆角 999）。整站其他元素都是 10~15px 的方圆角，
-   只有搜索框是纯胶囊 —— 这是有意的：它是全页唯一「随时要打字」的地方，
-   形状上就该和卡片区分开，让人一眼找到入口。
+   方圆形（圆角 13px），不再是纯胶囊：胶囊是全站唯一的异形，和卡片、按钮
+   的方圆角对不上，看起来像从别处借来的一块。整套 UI 都用 10~14px 的方圆角，
+   搜索框跟上来反而更整齐；右侧再放一枚同圆角比例的实心按钮收边。
    ========================================================================== */
 body.hp .search-wrap {
   width: clamp(260px, 34vw, 460px);
   min-height: 44px;
-  border-radius: 999px;
+  border-radius: 13px;
   border: 1px solid var(--hp-card-line);
   background: var(--hp-card-bg);
   backdrop-filter: var(--hp-card-blur);
@@ -352,7 +352,7 @@ body.hp .search-wrap:focus-within {
 body.hp .eng-btn {
   min-height: 44px;
   padding: 0 6px 0 13px;
-  border-radius: 999px 0 0 999px;
+  border-radius: 13px 0 0 13px;
 }
 body.hp .eng-btn::after {
   height: 16px;
@@ -361,95 +361,106 @@ body.hp .eng-btn::after {
 }
 body.hp .search input {
   min-height: 42px;
-  /* 左边 16px：放大镜去掉了，原来的 32px 是给它让位的，留着会空一块 */
-  padding: 0 16px 0 16px;
-  border-radius: 0 999px 999px 0;
+  padding: 0 16px;
+  border-radius: 0 13px 13px 0;
   font-size: 15.5px;
 }
 
-/* 提交按钮 = Ctrl K 提示，两者合成一个元素。
-   常态是一枚键帽（它同时也是按钮，点一下就能搜）；悬停、或输入框聚焦时
-   换成主题色箭头。宽高不变，所以切换状态时搜索框不会抖。
-   图标用箭头而不是放大镜：左边那颗放大镜是装饰，两个并排分不清谁可点。 */
-/* 右侧只留「清除 X + 提交按钮」的宽度：以前留 100px，X 和按钮之间
-   空出一大块，看着像忘了放东西。56px 让 X 正好贴到按钮左边。 */
-body.hp .search-wrap form.search input { padding-right: 56px; }
+/* 右侧给「Ctrl K 灰字 + 实心按钮」腾位置；一旦聚焦或已经有字，
+   灰字淡出，文字区立刻收回 32px —— 空框时提示看得见，打字时不碍事。
+   ⚠️ 收起态的写法必须比常态「更具体」：常态是 .search-wrap + form + .search
+   三个类两级元素（0,3,3），如果只写 body.hp .search:focus-within input（0,3,2），
+   元素层级少一层，依然输给常态规则 —— 聚焦了半天内距不动，就是这个原因。 */
+body.hp .search-wrap form.search input { padding-right: 84px; }
+body.hp .search-wrap form.search:focus-within input,
+body.hp .search-wrap form.search:has(input:not(:placeholder-shown)) input { padding-right: 52px; }
 
-body.hp .search-go {
+/* 快捷键提示：一行灰字，不做键帽。以前它是个带描边的小方块，挤在按钮里
+   又小又糊；单独一行字反而更清楚，也不用为了它把按钮撑宽。 */
+body.hp .search-key {
   position: absolute;
-  right: 5px;
+  right: 44px;
   top: 50%;
   transform: translateY(-50%);
-  width: 52px;
-  height: 34px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-3);
+  opacity: .8;
+  pointer-events: none;
+  transition: opacity .16s;
+}
+body.hp .search:focus-within .search-key,
+body.hp .search:has(input:not(:placeholder-shown)) .search-key { opacity: 0; }
+
+/* 提交按钮：一枚实心方圆角，箭头居中。尺寸和圆角跟外面的搜索框同一套
+   （13px 外框 + 10px 按钮），看起来是框里嵌了一颗按钮，而不是框上贴了张标签。 */
+body.hp .search-go {
+  position: absolute;
+  /* 4px 四边等距：框高 40（38 + 上下边框）、按钮 32，上下各 4，右侧也留 4。
+     四边一样宽，看起来才是同一颗按钮嵌在框里，而不是贴着某一边。 */
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--line-hi);
-  border-radius: 999px;
-  background: var(--surface-hi);
-  color: var(--text-3);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: .02em;
-  cursor: pointer;
-  transition: background .16s, color .16s, border-color .16s;
-}
-body.hp .search-go .go-kbd { display: block; }
-body.hp .search-go .go-ico { display: none; }
-
-body.hp .search-go:hover,
-body.hp .search-wrap:focus-within .search-go {
+  border: 0;
+  border-radius: 10px;
   background: var(--acc);
-  border-color: var(--acc);
-  color: #fff;
+  color: var(--acc-ink);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(0 0 0 / .14);
+  transition: background .16s, transform .12s, box-shadow .16s;
 }
-body.hp .search-go:hover .go-kbd,
-body.hp .search-wrap:focus-within .search-go .go-kbd { display: none; }
-body.hp .search-go:hover .go-ico,
-body.hp .search-wrap:focus-within .search-go .go-ico { display: block; }
+body.hp .search-go .go-ico { display: block; }
+body.hp .search-go:hover {
+  background: color-mix(in srgb, var(--acc) 86%, #000);
+  box-shadow: 0 2px 6px rgb(0 0 0 / .18);
+}
+body.hp .search-go:active { transform: translateY(-50%) scale(.94); }
+body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
 
-body.hp .search-go:active { transform: translateY(-50%) scale(.95); }
-body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
-
-/* 工作台皮肤：方角、矮一档，日常是描边键帽，悬停变实心黑 */
-html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 50px; }
-html[data-theme^='frame'] body.hp .search-go {
-  width: 44px;
-  height: 26px;
-  border-radius: 7px;
-  border-color: var(--fr-line);
-  background: var(--fr-side);
-  color: var(--fr-ink-3);
+/* 工作台皮肤：方角更硬一档，按钮用近黑实心而不是主题色 */
+html[data-theme^='frame'] body.hp .search-wrap { border-radius: 9px; }
+html[data-theme^='frame'] body.hp .eng-btn { border-radius: 9px 0 0 9px; }
+html[data-theme^='frame'] body.hp .search input { border-radius: 0 9px 9px 0; }
+html[data-theme^='frame'] body.hp .search-wrap form.search input { padding-right: 72px; }
+html[data-theme^='frame'] body.hp .search-wrap form.search:focus-within input,
+html[data-theme^='frame'] body.hp .search-wrap form.search:has(input:not(:placeholder-shown)) input { padding-right: 44px; }
+html[data-theme^='frame'] body.hp .search-key {
+  right: 41px;
   font-size: 10px;
+  color: var(--fr-ink-3);
 }
-html[data-theme^='frame'] body.hp .search-go:hover,
-html[data-theme^='frame'] body.hp .search-wrap:focus-within .search-go {
+html[data-theme^='frame'] body.hp .search-go {
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   background: var(--fr-ink);
-  border-color: var(--fr-ink);
   color: var(--fr-app);
+  box-shadow: none;
+}
+html[data-theme^='frame'] body.hp .search-go:hover {
+  background: color-mix(in srgb, var(--fr-ink) 82%, var(--fr-app));
+  box-shadow: none;
 }
 
-/* 触屏 / 窄屏：没有物理键盘，Ctrl K 这两个字只占地方 —— 直接给主题色箭头 */
+/* 触屏 / 窄屏：没有物理键盘，Ctrl K 只占地方 —— 收起灰字，按钮占满右侧 */
 @media (max-width: 720px), (hover: none) {
-  body.hp .search-wrap form.search input { padding-right: 46px; }
-  body.hp .search-go {
-    width: 36px;
-    background: var(--acc);
-    border-color: var(--acc);
-    color: #fff;
-  }
-  body.hp .search-go .go-kbd { display: none; }
-  body.hp .search-go .go-ico { display: block; }
-  html[data-theme^='frame'] body.hp .search-go {
-    width: 30px;
-    height: 24px;
-    background: var(--fr-ink);
-    border-color: var(--fr-ink);
-    color: var(--fr-app);
-  }
+  body.hp .search-wrap form.search input,
+  body.hp .search-wrap form.search:focus-within input,
+  body.hp .search-wrap form.search:has(input:not(:placeholder-shown)) input { padding-right: 46px; }
+  body.hp .search-key { display: none; }
+  body.hp .search-go { width: 32px; height: 32px; border-radius: 9px; }
+  html[data-theme^='frame'] body.hp .search-wrap form.search input,
+  html[data-theme^='frame'] body.hp .search-wrap form.search:focus-within input { padding-right: 40px; }
+  html[data-theme^='frame'] body.hp .search-go { width: 28px; height: 28px; border-radius: 6px; }
 }
 
 /* 搜索建议下拉。贴在整条搜索框的下沿（左对齐引擎按钮、右对齐提交按钮），
