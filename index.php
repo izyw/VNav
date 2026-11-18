@@ -294,9 +294,11 @@ if ($__isAdmin) {
   /* guest.js 用它认出「localStorage 里那份只是默认库副本」，避免每次登录
      误报 67 条 / 9 个分组。游客态数组为空，不花首屏体积。 */
   window.__VNAV_DEFAULT = {
-    /* JSON_HEX_TAG/AMP/APOS/QUOT 不能省：这段是内联在 <script> 里的，
-       标题里只要出现 </script> 就会提前闭合标签，后面的内容变成可执行 HTML。
-       JSON_UNESCAPED_SLASHES 会把 / 原样输出，单靠它挡不住。 */
+    /* JSON_HEX_TAG/AMP/APOS/QUOT 不能省：这段是内联在 script 里的，
+       标题里只要出现 script 的结束标签，就会提前闭合本块，后面的内容
+       全部变成页面文本。JSON_UNESCAPED_SLASHES 会把 / 原样输出，单靠它挡不住。
+       ⚠ 连注释里都不许写出那个字面量：浏览器先按 HTML 解析 script 内容，
+       JS 注释对它没有约束力 —— 2026-11-18 首页顶部那段乱码就是这么来的。 */
     urls: <?= json_encode(array_column($__defLinks, 'url'), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
     titles: <?= json_encode(array_column($__defLinks, 'title'), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
     groups: <?= json_encode(array_column($__defGroups, 'name'), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>
