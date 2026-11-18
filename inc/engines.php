@@ -12,9 +12,13 @@ declare(strict_types=1);
 if (!defined('HP_ROOT')) { http_response_code(404); exit; } // 入口守卫：与 .htaccess 的 404 保持一致，直接访问不暴露路径存在
 
 /**
- * @return array<string, array{label:string, url:string, short:string, logo:string}>
+ * @return array<string, array{label:string, url:string, param:string, short:string, logo:string}>
  *   short 是纯文字兜底（logo 文件缺失时仍能显示一个字）
  *   logo  是本地图标文件，相对站点根目录
+ *   param 是查询参数名 —— 各家不一样：百度 wd、搜狗 query，其余都是 q。
+ *         GET 表单提交时 action 里自带的查询串会被整体丢弃（浏览器规范行为），
+ *         真正决定参数名的只有 input 的 name，所以必须逐家配，不能写死 q。
+ *         曾经写死 q，百度收到 /s?q=… 不认，直接落到空白页。
  *
  * 为什么用各家官方 logo 文件，而不是自己描一个近似标记：
  *   V1.4.0 之前这里是手绘的 SVG（四条 path 拼出来的 G、五个圆点拼出来的熊掌）。
@@ -38,36 +42,42 @@ function hp_engines(): array
             'short' => 'B',
             'logo'  => 'assets/engines/bing.svg',
             'url'   => 'https://www.bing.com/search?q=',
+            'param' => 'q',
         ],
         'google' => [
             'label' => 'Google',
             'short' => 'G',
             'logo'  => 'assets/engines/google.svg',
             'url'   => 'https://www.google.com/search?q=',
+            'param' => 'q',
         ],
         'baidu' => [
             'label' => '百度',
             'short' => '百',
             'logo'  => 'assets/engines/baidu.svg',
             'url'   => 'https://www.baidu.com/s?wd=',
+            'param' => 'wd',
         ],
         'ddg' => [
             'label' => 'DuckDuckGo',
             'short' => 'D',
             'logo'  => 'assets/engines/duckduckgo.svg',
             'url'   => 'https://duckduckgo.com/?q=',
+            'param' => 'q',
         ],
         'sogou' => [
             'label' => '搜狗',
             'short' => '搜',
             'logo'  => 'assets/engines/sogou.svg',
             'url'   => 'https://www.sogou.com/web?query=',
+            'param' => 'query',
         ],
         'so360' => [
             'label' => '360 搜索',
             'short' => '3',
             'logo'  => 'assets/engines/so360.png',
             'url'   => 'https://www.so.com/s?q=',
+            'param' => 'q',
         ],
     ];
 }

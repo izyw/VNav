@@ -245,7 +245,7 @@
   const searchForm = $('.search');
   const engState = { cur: '' };
 
-  function applyEngine(key, url, label) {
+  function applyEngine(key, url, label, param) {
     engState.cur = key;
     if (searchForm) searchForm.action = url;
 
@@ -272,7 +272,13 @@
       if (sr && label) sr.textContent = '切换搜索引擎，当前 ' + label;
     }
     const q = $('#q');
-    if (q && label) q.placeholder = '搜索 ' + label;
+    if (q) {
+      /* 参数名必须跟着引擎改：百度 wd、搜狗 query、其余 q。
+         只换 action 不换 name，等于把关键词交给一个对方不认识的参数名，
+         百度会直接回一个空结果页 —— 这就是「回车跳到空白网页」的成因。 */
+      if (param) q.name = param;
+      if (label) q.placeholder = '搜索 ' + label;
+    }
   }
 
   /* 把「站点默认引擎」的标记挂到对应选项上。
@@ -329,7 +335,7 @@
     const saved = localStorage.getItem(ENGINE_KEY);
     const opt = saved ? document.querySelector('[data-engine-set="' + saved + '"]') : null;
     if (opt) {
-      applyEngine(saved, opt.dataset.engineUrl, opt.querySelector('.tbo-name')?.textContent);
+      applyEngine(saved, opt.dataset.engineUrl, opt.querySelector('.tbo-name')?.textContent, opt.dataset.engineParam);
       $$('[data-engine-set]').forEach(b => {
         b.setAttribute('aria-selected', b.dataset.engineSet === saved ? 'true' : 'false');
       });
@@ -388,7 +394,7 @@
     if (!eb) return;
     const key = eb.dataset.engineSet;
     const label = eb.querySelector('.tbo-name')?.textContent || '';
-    applyEngine(key, eb.dataset.engineUrl, label);
+    applyEngine(key, eb.dataset.engineUrl, label, eb.dataset.engineParam);
     $$('[data-engine-set]').forEach(b => {
       b.setAttribute('aria-selected', b.dataset.engineSet === key ? 'true' : 'false');
     });

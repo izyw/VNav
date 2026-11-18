@@ -592,7 +592,7 @@ html[data-theme^='frame'] body.hp .search input {
   /* 左侧只留 12px：放大镜在工作台里是隐藏的（见下一条），
      左边已经有引擎 logo 表达「这里能搜」，再放一个放大镜是重复的。
      上一版把放大镜留着、内距又只给 8px，于是它直接压在提示文字上。 */
-  padding: 0 64px 0 12px;
+  padding: 0 100px 0 12px;
   border-radius: 0 10px 10px 0;
   font-family: var(--fr-font);
   font-size: 14px;

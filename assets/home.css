@@ -367,6 +367,46 @@ body.hp .search input {
 }
 body.hp .search-icon { left: 35px; }
 
+/* 提交按钮 —— 全页唯一一个「按下去才搜索」的出口。
+   在此之前只能按回车：触屏、用鼠标的人找不到触发点，只能猜。
+   图标用箭头而不是放大镜：左边那颗放大镜是装饰，两个并排会分不清谁可点。
+   定位挂在 .search-wrap（它是 relative）上，所以引擎按钮的宽度变化不影响右边距。 */
+body.hp .search-wrap form.search input { padding-right: 100px; }
+/* Ctrl K 键帽让位给按钮，仍留在按钮左侧；聚焦后本来就淡出（见皮肤文件） */
+body.hp .search-wrap form.search .search-kbd { right: 48px; }
+
+body.hp .search-go {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--acc);
+  color: #fff;
+  cursor: pointer;
+  transition: filter .16s, transform .16s, opacity .16s;
+}
+body.hp .search-go:hover { filter: brightness(1.08); }
+body.hp .search-go:active { transform: translateY(-50%) scale(.93); }
+body.hp .search-go:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* 工作台皮肤：跟旁边 34px 的工具按钮同族，方角、矮一档，不用主题色实心 */
+html[data-theme^='frame'] body.hp .search-go {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--fr-ink);
+  color: var(--fr-app);
+}
+html[data-theme^='frame'] body.hp .search-go:hover { filter: none; opacity: .86; }
+
 /* 引擎标志：26px 圆角方块。旧版 22px 太小，几个品牌符号在 15px 的
    SVG 视窗里糊成一团。26px 配 17px 的标记，形状辨识度明显好一档。 */
 body.hp .eng-logo {
