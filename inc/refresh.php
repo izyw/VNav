@@ -100,9 +100,24 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
     /* ---------- 阶段 0：先筛掉非法地址，别把它们塞进并发队列 ---------- */
     $todo = [];
     $urls = [];
+    $skipped = 0;
     foreach ($rows as $r) {
         $id  = (int)$r['id'];
         $url = (string)$r['url'];
+
+        /* 「直补缺失」下三样都齐的链接没有任何字段可写。原先照样给它抓
+           页面 + 抓图标，两个往返纯白等；这里直接跳过。覆盖模式不跳 ——
+           点「全部刷新」就是要重新看一遍站点有没有改版。 */
+        if (!$overwrite
+            && (string)$r['title'] !== ''
+            && (string)$r['descr'] !== ''
+            && (string)$r['icon'] !== ''
+            && (string)$r['icon_kind'] === 'file') {
+            $skipped++;
+            $ok++; // 计入成功：前端「本批一条都没成」的终止判断依赖 ok>0
+            continue;
+        }
+
         if (!MetaFetcher::isPublicUrl($url)) {
             $bad++;
             $errors[$id] = '内网或非法地址，已跳过';
@@ -138,15 +153,31 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
 
         $m = $fetcher->metaOnly((string)$p['body'], $urls[$id], (string)$p['finalUrl']);
         $metas[$id] = $m;
-        if ($m['icon'] !== '') {
+        /* 「直补缺失」下已经带着本地图标的，阶段 4 的 iconOk 条件本来就不写
+           图标字段（icon_kind 已是 file），这一趟下载纯属浪费 —— 不排进队列。 */
+        $needIcon = $overwrite
+            || (string)$r['icon'] === ''
+            || (string)$r['icon_kind'] !== 'file';
+        if ($m['icon'] !== '' && $needIcon) {
             $iconUrls[$id] = (string)$m['icon'];
         }
     }
 
-    /* ---------- 阶段 3：并发抓所有图标 ---------- */
+    /* ---------- 阶段 3：并发抓所有图标 ----------
+       同一个图标地址只下一份（一批站点常指向同一张 CDN favicon），
+       下载完按 id 复用字节。落盘文件名本来就按 host + 地址 md5 生成，
+       两条链接各存一份互不冲突，复用字节不改变任何结果。 */
     /* 图标更小、更少，超时和窗口都可以再紧一点：
        2 秒抓不回来的 favicon，再等也没意义。 */
-    $iconBins = $iconUrls ? MetaFetcher::multiGet($iconUrls, min(3, $timeout), count($iconUrls)) : [];
+    $iconSource = []; // 地址 => 代表 id
+    $iconFetch  = []; // 代表 id => 地址（真正送进并发队列的）
+    foreach ($iconUrls as $id => $u) {
+        if (!isset($iconSource[$u])) {
+            $iconSource[$u] = $id;
+            $iconFetch[$id] = $u;
+        }
+    }
+    $iconBins = $iconFetch ? MetaFetcher::multiGet($iconFetch, min(3, $timeout), count($iconFetch)) : [];
 
     /* ---------- 阶段 4：落盘 + 写库 ----------
        这一段是纯 CPU 与磁盘，没有网络等待，串行反而是最快的。 */
@@ -157,12 +188,14 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
         $newDescr = (string)($m['desc'] ?? '');
 
         $savedIcon = '';
-        if (isset($iconBins[$id]) && (string)$iconBins[$id]['body'] !== '') {
+        // 去重后字节存在代表 id 上；没进图标队列的条目落回自己（必然取不到）
+        $iconKey = isset($iconUrls[$id]) ? (int)($iconSource[$iconUrls[$id]] ?? $id) : $id;
+        if (isset($iconBins[$iconKey]) && (string)$iconBins[$iconKey]['body'] !== '') {
             $savedIcon = $fetcher->saveIconBin(
-                (string)$iconBins[$id]['body'],
+                (string)$iconBins[$iconKey]['body'],
                 $iconUrls[$id],
                 (string)($m['host'] ?? ''),
-                (string)$iconBins[$id]['mime']
+                (string)$iconBins[$iconKey]['mime']
             );
         }
         $iconOk = $savedIcon !== '' && preg_match('~^data/icons/[A-Za-z0-9._\-]+$~', $savedIcon) === 1;
@@ -240,6 +273,7 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
             'bad'     => $bad,
             'left'    => $left,
             'changed' => $changed,
+            'skipped' => $skipped,
             'cursor'  => 0,
             'done'    => $left === 0,
             'errors'  => $errors,
@@ -257,6 +291,7 @@ function hp_meta_refresh(int $limit = 24, bool $overwrite = true, int $cursor = 
         'bad'     => $bad,
         'left'    => $left,
         'changed' => $changed,
+        'skipped' => $skipped,
         'cursor'  => $nextCursor,
         'done'    => $left === 0,
         'errors'  => $errors,

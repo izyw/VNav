@@ -320,10 +320,10 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
 <link rel="icon" href="<?= hp_site_logo() !== '' ? h(hp_site_logo()) : h($favDefault) ?>">
 <link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/instrument.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/app.css?v=47">
+<link rel="stylesheet" href="assets/app.css?v=48">
 <link rel="stylesheet" href="assets/skin-atlas.css?v=56">
 <link rel="stylesheet" href="assets/skin-frame.css?v=54">
-<link rel="stylesheet" href="assets/admin.css?v=57">
+<link rel="stylesheet" href="assets/admin.css?v=58">
 </head>
 <body class="adm-body">
 
@@ -568,14 +568,22 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
         <?php endif; ?>
       <?php else: ?>
         <?php
-        // 按分组呈现，便于用户理解结构
+        // 按分组呈现，便于用户理解结构。
+        // 分组顺序必须与主页侧栏、分组管理一致（都按 groups.sort）。
+        // 不能只靠下面遍历 links 建 key —— links 是按链接自己的 sort 排的，
+        // 分组出现的先后就成了「组内第一条链接的 sort」，跟分组顺序对不上。
+        // 所以先用 $groups 预置好桶的顺序（未分组恒在最前），再把链接装进去。
         $gname = [];
         foreach ($groups as $g) { $gname[(int)$g['id']] = $g['name']; }
-        $bucket = [];
+        $bucket = [0 => []];
+        foreach ($groups as $g) { $bucket[(int)$g['id']] = []; }
         foreach ($links as $l) {
             $k = (int)($l['group_id'] ?? 0);
+            if (!isset($bucket[$k])) $bucket[$k] = []; // 兜底：指向已删分组的链接
             $bucket[$k][] = $l;
         }
+        // 空分组不占位：没有链接的组不在列表里显示（否则一堆空标题）
+        foreach ($bucket as $k => $items) { if (!$items) unset($bucket[$k]); }
         ?>
         <?php /* 筛选栏。
                  原来 300 多条平铺在一个页面上，想处理几条冷门链接得一路
@@ -620,12 +628,20 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
           <?php endif; ?>
           <button type="button" class="adm-mini is-danger" data-bulk="delete">删除</button>
         </div>
+        <?php /* 长列表右侧的分组导航：sticky 跟着滚，点一下直达对应分组，
+                 滚动到哪一组会高亮哪一项。分组少于 3 个时不显示，免得占地方。 */ ?>
+        <div class="adm-list-layout">
         <div class="adm-list" id="admList">
           <?php foreach ($bucket as $gid => $items): ?>
-            <div class="adm-list-group">
-              <?php /* 每个分组头上挂一个「选中本组」：
-                       要清理某个分组时，不必再一条条点 —— 这是最常用的一种批量。 */ ?>
+            <div class="adm-list-group" data-group-id="<?= (int)$gid ?>" id="grp-<?= (int)$gid ?>">
+              <?php /* 每个分组头上挂一个「选中本组」和展开/收回：
+                       要清理某个分组时，不必再一条条点 —— 这是最常用的一种批量。
+                       展开/收回默认展开，收起时只留标题行，长列表里好定位。 */ ?>
               <p class="adm-list-label" data-group="<?= (int)$gid ?>">
+                <button type="button" class="adm-grp-fold" data-grp-fold aria-expanded="true"
+                        title="收回本组" aria-label="收回「<?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?>」">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
                 <span class="adm-list-name"><?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?> · <?= count($items) ?></span>
                 <button type="button" class="adm-pick-group" data-pick-group="<?= (int)$gid ?>">选中本组</button>
               </p>
@@ -700,6 +716,16 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
               <?php endforeach; ?>
             </div>
           <?php endforeach; ?>
+        </div>
+        <?php if (count($bucket) >= 3): ?>
+          <nav class="adm-group-rail" id="groupRail" aria-label="分组快速导航">
+            <p class="agr-title">跳转分组</p>
+            <?php foreach ($bucket as $gid => $items): ?>
+              <a class="agr-item" href="#grp-<?= (int)$gid ?>" data-grp-jump="<?= (int)$gid ?>"
+                 title="<?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?>"><?= $gid ? h($gname[$gid] ?? '分组') : '未分组' ?></a>
+            <?php endforeach; ?>
+          </nav>
+        <?php endif; ?>
         </div>
       <?php endif; ?>
 
@@ -1693,91 +1719,6 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
         </ul>
       </section>
 
-      <section class="adm-panel">
-        <h2 class="panel-title">数据备份与导出</h2>
-        <p class="panel-hint">导出为 JSON，含全部分组、链接和设置。备份建议每月一次。</p>
-        <div class="panel-actions" style="justify-content: flex-start; margin-top: 14px;">
-          <a class="btn-primary" href="api.php?action=export&amp;csrf=<?= h(csrf_token()) ?>" download>
-            下载 JSON 备份
-          </a>
-        </div>
-        <ul class="adm-tips">
-          <li>SQLite 数据库文件在 <code>data/home.db</code>，直接拷贝也能备份，但需先停服务或用 <code>sqlite3 .backup</code>。</li>
-          <li>图标缓存 <code>data/icons/</code> 丢了不会报错，会自动降级为首字母色块。</li>
-        </ul>
-      </section>
-
-      <section class="adm-panel">
-        <h2 class="panel-title">重新安装</h2>
-        <p class="panel-hint">
-          安装程序 <code>install.php</code> 已随项目附带。它检测到站点已安装时会自动锁定，
-          防止有人重跑它重置你的管理员密码——这是有意的安全设计。
-        </p>
-        <p class="panel-hint">确实要从零重装，按下述顺序操作（<strong>会清空全部数据</strong>）：</p>
-        <ol class="adm-tips">
-          <li>先点上面的「下载 JSON 备份」留一份。</li>
-          <li>删除 <code>inc/config.php</code>。</li>
-          <li>删除 <code>data/home.db</code>（以及同目录的 <code>home.db-wal</code>、<code>home.db-shm</code>）。</li>
-          <li>浏览器打开 <code>/install.php</code>，重新设置账号密码。</li>
-        </ol>
-      </section>
-
-      <section class="adm-panel">
-        <h2 class="panel-title">图标缓存</h2>
-        <p class="panel-hint">
-          favicon 抓一次就落盘，之后主页直接读本地文件，不再逐条回源。
-          这一块是整个站点首屏最快的那一笔——省掉的是几十次外站请求。
-        </p>
-
-        <div class="icon-stat">
-          <div><span class="icon-stat-n"><?= (int)$iconStats['files'] ?></span><span class="icon-stat-l">个缓存文件</span></div>
-          <div><span class="icon-stat-n"><?= h(hp_bytes($iconStats['bytes'])) ?></span><span class="icon-stat-l">占用空间</span></div>
-          <div><span class="icon-stat-n"><?= (int)$iconStats['used'] ?></span><span class="icon-stat-l">条链接在用</span></div>
-          <div>
-            <span class="icon-stat-n <?= $iconStats['writable'] ? 'is-ok' : 'is-bad' ?>">
-              <?= $iconStats['writable'] ? '可写' : '不可写' ?>
-            </span>
-            <span class="icon-stat-l">data/icons</span>
-          </div>
-        </div>
-
-        <?php if ((int)$iconStats['files'] > 0): ?>
-          <p class="panel-hint" style="margin-top:4px">
-            最早一份
-            <?= h(date('Y-m-d H:i', (int)$iconStats['oldest'])) ?>，
-            最近一份
-            <?= h(date('Y-m-d H:i', (int)$iconStats['newest'])) ?>。
-          </p>
-        <?php endif; ?>
-
-        <div class="panel-actions" style="justify-content:flex-start;flex-wrap:wrap">
-          <button class="btn-ghost" type="button" id="iconSync">
-            <span class="btn-text">对齐缓存清单</span>
-            <span class="spinner" hidden aria-hidden="true"></span>
-          </button>
-          <button class="btn-ghost" type="button" id="iconRefill">
-            <span class="btn-text">补抓缺失图标</span>
-            <span class="spinner" hidden aria-hidden="true"></span>
-          </button>
-          <button class="btn-ghost" type="button" id="iconGc">清理无主文件</button>
-          <button class="btn-danger" type="button" id="iconPurge">清空缓存</button>
-        </div>
-
-        <ul class="adm-tips">
-          <li>「补抓缺失图标」一次最多处理 12 条，可反复点——慢是因为要逐个访问对方站点，不是本站的问题。抓取到的位图会自动压成 WebP（体积约降 80%），优化前留下的旧 png/ico 也会顺带一并转换，无需单独操作。</li>
-          <li>「清理无主文件」只删没有任何链接在用的图；删完会把对应链接的图标重置为自动识别，不会留下破图空框。</li>
-          <li>清空缓存<strong>不会</strong>删掉链接本身，下次打开主页会自动重新抓取，只是第一次会慢一点。</li>
-        </ul>
-      </section>
-
-      <section class="adm-panel">
-        <h2 class="panel-title">部署提醒</h2>
-        <ul class="adm-tips">
-          <li>装完后删掉 <code>install.php</code>，并确保 <code>inc/config.php</code> 不在 Web 可读路径下（本方案已在 <code>inc/</code> 内，Apache 请加 <code>Require all denied</code>，Nginx 请 <code>location ^~ /inc/ { deny all; }</code>）。</li>
-          <li><code>data/</code> 目录需要 PHP 可写（图标缓存与数据库都在这）。<strong>尤其要挡住 <code>data/home.db</code> 被直接下载</strong>，否则等于数据库全裸。</li>
-          <li>生产环境把 <code>inc/config.php</code> 里的 <code>debug</code> 改为 <code>false</code>，避免报错泄露路径。</li>
-        </ul>
-      </section>
     <?php elseif ($tab === 'upgrade'): ?>
       <header class="adm-head">
         <div>
@@ -1871,6 +1812,92 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
             <?php endforeach; ?>
           </ul>
         <?php endif; ?>
+      </section>
+
+      <section class="adm-panel">
+        <h2 class="panel-title">数据备份与导出</h2>
+        <p class="panel-hint">导出为 JSON，含全部分组、链接和设置。备份建议每月一次。</p>
+        <div class="panel-actions" style="justify-content: flex-start; margin-top: 14px;">
+          <a class="btn-primary" href="api.php?action=export&amp;csrf=<?= h(csrf_token()) ?>" download>
+            下载 JSON 备份
+          </a>
+        </div>
+        <ul class="adm-tips">
+          <li>SQLite 数据库文件在 <code>data/home.db</code>，直接拷贝也能备份，但需先停服务或用 <code>sqlite3 .backup</code>。</li>
+          <li>图标缓存 <code>data/icons/</code> 丢了不会报错，会自动降级为首字母色块。</li>
+        </ul>
+      </section>
+
+      <section class="adm-panel">
+        <h2 class="panel-title">重新安装</h2>
+        <p class="panel-hint">
+          安装程序 <code>install.php</code> 已随项目附带。它检测到站点已安装时会自动锁定，
+          防止有人重跑它重置你的管理员密码——这是有意的安全设计。
+        </p>
+        <p class="panel-hint">确实要从零重装，按下述顺序操作（<strong>会清空全部数据</strong>）：</p>
+        <ol class="adm-tips">
+          <li>先点上面的「下载 JSON 备份」留一份。</li>
+          <li>删除 <code>inc/config.php</code>。</li>
+          <li>删除 <code>data/home.db</code>（以及同目录的 <code>home.db-wal</code>、<code>home.db-shm</code>）。</li>
+          <li>浏览器打开 <code>/install.php</code>，重新设置账号密码。</li>
+        </ol>
+      </section>
+
+      <section class="adm-panel">
+        <h2 class="panel-title">图标缓存</h2>
+        <p class="panel-hint">
+          favicon 抓一次就落盘，之后主页直接读本地文件，不再逐条回源。
+          这一块是整个站点首屏最快的那一笔——省掉的是几十次外站请求。
+        </p>
+
+        <div class="icon-stat">
+          <div><span class="icon-stat-n"><?= (int)$iconStats['files'] ?></span><span class="icon-stat-l">个缓存文件</span></div>
+          <div><span class="icon-stat-n"><?= h(hp_bytes($iconStats['bytes'])) ?></span><span class="icon-stat-l">占用空间</span></div>
+          <div><span class="icon-stat-n"><?= (int)$iconStats['used'] ?></span><span class="icon-stat-l">条链接在用</span></div>
+          <div>
+            <span class="icon-stat-n <?= $iconStats['writable'] ? 'is-ok' : 'is-bad' ?>">
+              <?= $iconStats['writable'] ? '可写' : '不可写' ?>
+            </span>
+            <span class="icon-stat-l">data/icons</span>
+          </div>
+        </div>
+
+        <?php if ((int)$iconStats['files'] > 0): ?>
+          <p class="panel-hint" style="margin-top:4px">
+            最早一份
+            <?= h(date('Y-m-d H:i', (int)$iconStats['oldest'])) ?>，
+            最近一份
+            <?= h(date('Y-m-d H:i', (int)$iconStats['newest'])) ?>。
+          </p>
+        <?php endif; ?>
+
+        <div class="panel-actions" style="justify-content:flex-start;flex-wrap:wrap">
+          <button class="btn-ghost" type="button" id="iconSync">
+            <span class="btn-text">对齐缓存清单</span>
+            <span class="spinner" hidden aria-hidden="true"></span>
+          </button>
+          <button class="btn-ghost" type="button" id="iconRefill">
+            <span class="btn-text">补抓缺失图标</span>
+            <span class="spinner" hidden aria-hidden="true"></span>
+          </button>
+          <button class="btn-ghost" type="button" id="iconGc">清理无主文件</button>
+          <button class="btn-danger" type="button" id="iconPurge">清空缓存</button>
+        </div>
+
+        <ul class="adm-tips">
+          <li>「补抓缺失图标」一次最多处理 12 条，可反复点——慢是因为要逐个访问对方站点，不是本站的问题。抓取到的位图会自动压成 WebP（体积约降 80%），优化前留下的旧 png/ico 也会顺带一并转换，无需单独操作。</li>
+          <li>「清理无主文件」只删没有任何链接在用的图；删完会把对应链接的图标重置为自动识别，不会留下破图空框。</li>
+          <li>清空缓存<strong>不会</strong>删掉链接本身，下次打开主页会自动重新抓取，只是第一次会慢一点。</li>
+        </ul>
+      </section>
+
+      <section class="adm-panel">
+        <h2 class="panel-title">部署提醒</h2>
+        <ul class="adm-tips">
+          <li>装完后删掉 <code>install.php</code>，并确保 <code>inc/config.php</code> 不在 Web 可读路径下（本方案已在 <code>inc/</code> 内，Apache 请加 <code>Require all denied</code>，Nginx 请 <code>location ^~ /inc/ { deny all; }</code>）。</li>
+          <li><code>data/</code> 目录需要 PHP 可写（图标缓存与数据库都在这）。<strong>尤其要挡住 <code>data/home.db</code> 被直接下载</strong>，否则等于数据库全裸。</li>
+          <li>生产环境把 <code>inc/config.php</code> 里的 <code>debug</code> 改为 <code>false</code>，避免报错泄露路径。</li>
+        </ul>
       </section>
 
       <section class="adm-panel">
@@ -2134,6 +2161,6 @@ $favDefault = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBo
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/admin.js?v=33" defer></script>
+<script src="assets/admin.js?v=34" defer></script>
 </body>
 </html>

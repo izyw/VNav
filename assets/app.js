@@ -321,6 +321,8 @@
   if (hasPaste) {
     const fUrl = document.getElementById('pUrl');
     const fTitle = document.getElementById('pTitle');
+    const fDescr = document.getElementById('pDescr');
+    const fFetch = document.getElementById('pFetch');
     const fGroup = document.getElementById('pGroup');
     const fErr = document.getElementById('pasteError');
     const statusEl = document.getElementById('pasteStatus');
@@ -397,8 +399,8 @@
         if (m.title && fTitle.value.trim() === guess) {
           fTitle.value = String(m.title).slice(0, 60);
         }
-        if (m.desc && !hostEl.textContent.trim()) {
-          hostEl.textContent = String(m.desc).slice(0, 120);
+        if (m.desc && fDescr && !fDescr.value.trim()) {
+          fDescr.value = String(m.desc).slice(0, 200);
         }
         setStatus(m.title ? '已识别：' + m.title : '未能读取标题，已按域名生成', m.title ? 'ok' : 'warn');
       };
@@ -407,7 +409,7 @@
         const m = await identifyLink(url, applyLate);
         if (fUrl.value.trim() !== url) return;
         if (m.title) fTitle.value = String(m.title).slice(0, 60);
-        if (m.desc) hostEl.textContent = String(m.desc).slice(0, 120);
+        if (m.desc && fDescr && !fDescr.value.trim()) fDescr.value = String(m.desc).slice(0, 200);
         paintIcon(iconEl, m.icon || '', fTitle.value, hostEl.textContent);
         if (m.timedOut) {
           setStatus('服务器较慢，先用本机结果；标题稍后自动补上', 'warn');
@@ -428,11 +430,50 @@
       }
     }
 
+    /* 抓取按钮：与编辑浮层一致，按当前网址重读一次名称/图标/描述，
+       把抓到的值填回去。这次是用户主动点的，所以允许覆盖已填的字段。 */
+    const pFetchText = fFetch?.querySelector('.btn-fetch-text');
+    const pFetchSpin = fFetch?.querySelector('.spinner');
+    let pFetchBusy = false;
+    function setPFetchBusy(on, text) {
+      if (!fFetch) return;
+      pFetchBusy = on;
+      fFetch.disabled = on;
+      if (pFetchSpin) pFetchSpin.hidden = !on;
+      if (pFetchText) pFetchText.textContent = text || '抓取名称/图标/描述';
+    }
+    async function fetchPMeta() {
+      if (!fFetch || pFetchBusy || busy) return;
+      const url = fUrl.value.trim();
+      if (!url) { showError('请先填写网址'); fUrl.focus(); return; }
+      clearError();
+      setPFetchBusy(true, '抓取中');
+      setStatus('正在读取页面信息…', 'loading');
+      try {
+        const m = await identifyLink(url);
+        if (fUrl.value.trim() !== url) return; // 用户改了网址，丢弃过期结果
+        const filled = [];
+        if (m.title) { fTitle.value = String(m.title).slice(0, 60); filled.push('名称'); }
+        if (m.desc && fDescr) { fDescr.value = String(m.desc).slice(0, 200); filled.push('描述'); }
+        if (m.icon) { paintIcon(iconEl, String(m.icon), fTitle.value, hostEl.textContent); filled.push('图标'); }
+        setStatus(filled.length
+          ? '已抓取：' + filled.join('、') + '（仍可手动修改）'
+          : '页面没有可读取的信息，请手动填写', filled.length ? 'ok' : 'warn');
+      } catch (err) {
+        setStatus('抓取失败，请手动填写', 'bad');
+        showError(err.message || '抓取失败');
+      } finally {
+        setPFetchBusy(false);
+      }
+    }
+    fFetch?.addEventListener('click', fetchPMeta);
+
     function openBox(url) {
       lastFocus = document.activeElement;
       clearError();
       fUrl.value = url;
       fTitle.value = '';
+      if (fDescr) fDescr.value = '';
       try { hostEl.textContent = new URL(url).hostname.replace(/^www\./, ''); } catch { hostEl.textContent = ''; }
       paintIcon(iconEl, '', '', hostEl.textContent);
       setStatus('正在识别名称与图标…', 'loading');
@@ -453,6 +494,7 @@
       clearError();
       fUrl.value = '';
       fTitle.value = '';
+      if (fDescr) fDescr.value = '';
       hostEl.textContent = '';
       paintIcon(iconEl, '', '', '');
       setStatus(msg, '');
@@ -572,6 +614,7 @@
           action: 'add',
           url,
           title,
+          descr: fDescr ? fDescr.value.trim() : '',
           group_id: Number(fGroup.value || 0),
           icon: pasteIcon,
           ...(() => { const h = document.getElementById('pHidden'); return h ? { hidden: h.checked ? 1 : 0 } : {}; })(),
@@ -775,7 +818,7 @@
       if (!eFetch) return;
       eFetch.disabled = on;
       if (fetchSpin) fetchSpin.hidden = !on;
-      if (fetchText) fetchText.textContent = text || '抓取信息';
+      if (fetchText) fetchText.textContent = text || '抓取名称/图标/描述';
     }
     function resetFetchBtn() { setFetchBusy(false); }
 
@@ -2404,6 +2447,26 @@
       });
     };
 
+    /* 分组下拉（粘贴浮层 #pGroup / 编辑浮层 #eGroup）是页面加载时按旧 sort
+       渲染的。拖拽排序保存成功但不 reload，所以这里按侧栏新顺序把两个下拉
+       的 option 重排一遍，"未分组"恒在最前 —— 免得编辑链接时看到的分组
+       顺序和主页侧栏对不上。appendChild 移动已有节点，不丢选中值。 */
+    const syncGroupSelects = () => {
+      const order = $$('.gnav-item', track)
+        .map(n => Number(n.dataset.group || 0)).filter(n => n > 0);
+      if (!order.length) return;
+      const rank = new Map(order.map((id, i) => [id, i]));
+      for (const sel of [document.getElementById('pGroup'), document.getElementById('eGroup')]) {
+        if (!sel) continue;
+        const options = $$('option', sel);
+        const none = options.find(o => Number(o.value) === 0);
+        const rest = options.filter(o => Number(o.value) !== 0);
+        rest.sort((a, b) => (rank.get(Number(a.value)) ?? 1e9) - (rank.get(Number(b.value)) ?? 1e9));
+        if (none) sel.appendChild(none);
+        rest.forEach(o => sel.appendChild(o));
+      }
+    };
+
     /* 快照排除正在拖的项：它的位置是被我们改的那个，
        拿它当参照会自证式抖动（卡片拖拽踩过同一个坑）。 */
     const takeSnap = () => {
@@ -2534,6 +2597,7 @@
            同一顺序即可。#gN 锚点没动（data-gjump / section id 都没变），
            所以跳转依旧正确，不必像从前那样整页刷新去对齐。 */
         syncStageOrder();
+        syncGroupSelects();
         toast('分组顺序已保存', 'ok');
         el = null;
       } catch (err) {

@@ -228,7 +228,7 @@ hp_log_visit(false, '/');
          对 Bricolage 恒为 false —— 这两个字体从没被真正用上。
          @font-face 定义保留（后台等非皮肤页仍可能引用），但只有实际
          用到才会下载，preload 等于每次白下 71KB。 */ ?>
-<link rel="stylesheet" href="assets/app.css?v=55">
+<link rel="stylesheet" href="assets/app.css?v=56">
 <?php /* 主页视觉系统叠在 app.css 之后。app.css 是后台与登录页共用的底座
           （设计令牌 + 按钮 + 表单），不能在上面重写主页样式，否则会连带
           改坏后台。所以主页的推倒重来单独落在 home.css，全部规则挂在
@@ -940,10 +940,21 @@ if ($__isAdmin) {
     </div>
 
     <label class="f-label" for="pUrl">网址</label>
-    <input class="f-input" id="pUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
+    <?php /* 与编辑浮层保持一致：抓取按钮内嵌在网址框右侧。 */ ?>
+    <div class="url-field">
+      <input class="f-input" id="pUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
+      <button type="button" class="btn-fetch" id="pFetch" title="从网址重新抓取名称、图标和描述">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+        <span class="btn-fetch-text">抓取名称/图标/描述</span>
+        <span class="spinner" hidden aria-hidden="true"></span>
+      </button>
+    </div>
 
     <label class="f-label" for="pTitle">名称</label>
     <input class="f-input" id="pTitle" name="title" type="text" required maxlength="60" autocomplete="off">
+
+    <label class="f-label" for="pDescr">描述</label>
+    <textarea class="f-input f-textarea" id="pDescr" name="descr" rows="2" maxlength="200" autocomplete="off" placeholder="一句话说明这个站点是做什么的（可留空）"></textarea>
 
     <label class="f-label" for="pGroup">分组</label>
     <select class="f-input" id="pGroup" name="group_id">
@@ -1062,7 +1073,7 @@ if ($__isAdmin) {
       <input class="f-input" id="eUrl" name="url" type="url" inputmode="url" required autocomplete="off" spellcheck="false">
       <button type="button" class="btn-fetch" id="eFetch" title="从网址重新抓取名称、图标和描述">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
-        <span class="btn-fetch-text">抓取信息</span>
+        <span class="btn-fetch-text">抓取名称/图标/描述</span>
         <span class="spinner" hidden aria-hidden="true"></span>
       </button>
     </div>
@@ -1256,7 +1267,7 @@ if ($__isAdmin) {
      分组高亮和点击滚动全部失灵（实测坑）。三个都 defer，按文档顺序执行。 -->
 <script src="assets/guest.js?v=57" defer></script>
 <script src="assets/ui.js?v=53" defer></script>
-<script src="assets/app.js?v=55" defer></script>
+<script src="assets/app.js?v=56" defer></script>
 
 </body>
 </html>

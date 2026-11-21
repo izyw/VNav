@@ -2067,6 +2067,88 @@
   background: var(--surface-hi);
 }
 
+/* ---------- 分组展开/收回 + 右侧分组导航 ---------- */
+.adm-list-layout { display: flex; align-items: flex-start; gap: 20px; }
+.adm-list-layout > .adm-list { flex: 1 1 auto; min-width: 0; }
+
+/* 收回按钮：跟在组名前面，箭头朝下=展开、朝右=收回 */
+.adm-grp-fold {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color .16s, background .16s;
+}
+.adm-grp-fold:hover { color: var(--text-1); background: var(--surface-hi); }
+.adm-grp-fold svg { transition: transform .18s var(--ease-out); }
+/* 收回态：箭头转 -90°（朝右），组内的行整组隐藏。
+   筛选隐藏走 [hidden]，折叠走这里，两者互不干扰：
+   折叠只是把容器里的行藏起来，筛选仍按各自 [hidden] 生效。 */
+.adm-list-group.is-collapsed .adm-grp-fold svg { transform: rotate(-90deg); }
+.adm-list-group.is-collapsed .adm-row { display: none; }
+/* 收回后组标题不再有下边距撑空 */
+.adm-list-group.is-collapsed .adm-list-label { margin-bottom: 0; }
+
+/* 右侧 sticky 分组导航：跟着长列表滚，点一下直达对应分组 */
+.adm-group-rail {
+  position: sticky;
+  top: 18px;
+  flex: 0 0 auto;
+  width: 132px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.agr-title {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--text-3);
+}
+.agr-item {
+  display: block;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .16s, background .16s;
+}
+.agr-item:hover { color: var(--text-1); background: var(--surface-hi); }
+.agr-item.is-current { color: var(--acc); background: color-mix(in srgb, var(--acc) 10%, transparent); font-weight: 600; }
+/* 窄屏放不下右侧栏，收到列表上方成一排横向胶囊 */
+@media (max-width: 900px) {
+  .adm-list-layout { flex-direction: column; }
+  .adm-group-rail {
+    position: static;
+    width: 100%;
+    max-height: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .agr-title { flex: 0 0 100%; }
+}
+
 /* 分组行里的链接数：删除/合并前得知道这一组有多少东西 */
 .adm-group-n {
   flex: 0 0 auto;

@@ -2,8 +2,8 @@
 /**
  * 默认链接库与分组库。
  *
- * 这份数据是从正式站（2026-11-18）导出的「网站默认」那一份：9 个分组、
- * 67 条站点。安装时如果 links 表是空的，就灌进去 ——
+ * 这份数据是从正式站（2026-11-21）导出的「网站默认」那一份：10 个分组、
+ * 69 条站点。安装时如果 links 表是空的，就灌进去 ——
  * 新装的人一打开就有东西可点，而不是面对一个空页面从零加起。
  *
  * 种子**不带图标**。图标是各家站点的 favicon，商标归各站点所有，
@@ -31,45 +31,51 @@ function hp_seed_groups(): array
   ),
   2 => 
   array (
-    'name' => '资讯',
+    'name' => '云服务',
     'icon' => '',
     'sort' => 30,
   ),
   3 => 
   array (
-    'name' => 'AI 工具',
+    'name' => '资讯',
     'icon' => '',
     'sort' => 40,
   ),
   4 => 
   array (
-    'name' => '开发',
+    'name' => 'AI 工具',
     'icon' => '',
     'sort' => 50,
   ),
   5 => 
   array (
-    'name' => '游戏',
+    'name' => '开发',
     'icon' => '',
     'sort' => 60,
   ),
   6 => 
   array (
-    'name' => '生活',
+    'name' => '游戏',
     'icon' => '',
     'sort' => 70,
   ),
   7 => 
   array (
-    'name' => '效率',
+    'name' => '生活',
     'icon' => '',
     'sort' => 80,
   ),
   8 => 
   array (
-    'name' => '小说',
+    'name' => '效率',
     'icon' => '',
     'sort' => 90,
+  ),
+  9 => 
+  array (
+    'name' => '小说',
+    'icon' => '',
+    'sort' => 100,
   ),
 );
 }
@@ -80,45 +86,45 @@ function hp_seed_links(): array
   0 => 
   array (
     'g' => '常用',
-    'title' => '知乎 - 有问题，就会有答案',
-    'url' => 'https://www.zhihu.com',
-    'descr' => '知乎，中文互联网高质量的问答社区和创作者聚集的原创内容平台，于 2011 年 1 月正式上线，以「让人们更好的分享知识、经验和见解，找到自己的解答」为品牌使命。知乎凭借认真、专业、友善的社区氛围、独特的产品机制以及结构化和易获得的优质内容，',
+    'title' => 'Chat Deepseek',
+    'url' => 'https://chat.deepseek.com',
+    'descr' => '国产推理模型，免费',
     'icon' => '',
     'sort' => 1,
   ),
   1 => 
   array (
     'g' => '常用',
-    'title' => '百度一下，你就知道',
-    'url' => 'https://www.baidu.com',
-    'descr' => '全球领先的中文搜索引擎、致力于让网民更便捷地获取信息，找到所求。百度超过千亿的中文网页数据库，可以瞬间找到相关的搜索结果。',
+    'title' => '知乎 - 有问题，就会有答案',
+    'url' => 'https://www.zhihu.com',
+    'descr' => '知乎，中文互联网高质量的问答社区和创作者聚集的原创内容平台，于 2011 年 1 月正式上线，以「让人们更好的分享知识、经验和见解，找到自己的解答」为品牌使命。知乎凭借认真、专业、友善的社区氛围、独特的产品机制以及结构化和易获得的优质内容，',
     'icon' => '',
     'sort' => 2,
   ),
   2 => 
   array (
     'g' => '常用',
-    'title' => 'GitHub',
-    'url' => 'https://github.com',
-    'descr' => 'Join the world\'s most widely adopted, AI-powered developer platform where millions of developers, businesses, and the la',
+    'title' => '百度一下，你就知道',
+    'url' => 'https://www.baidu.com',
+    'descr' => '全球领先的中文搜索引擎、致力于让网民更便捷地获取信息，找到所求。百度超过千亿的中文网页数据库，可以瞬间找到相关的搜索结果。',
     'icon' => '',
     'sort' => 3,
   ),
   3 => 
   array (
     'g' => '常用',
-    'title' => 'ChatGPT',
-    'url' => 'https://chat.openai.com',
-    'descr' => 'OpenAI 的对话助手',
+    'title' => 'GitHub',
+    'url' => 'https://github.com',
+    'descr' => 'Join the world\'s most widely adopted, AI-powered developer platform where millions of developers, businesses, and the la',
     'icon' => '',
     'sort' => 4,
   ),
   4 => 
   array (
     'g' => '常用',
-    'title' => 'Chat Deepseek',
-    'url' => 'https://chat.deepseek.com',
-    'descr' => '国产推理模型，免费',
+    'title' => 'ChatGPT',
+    'url' => 'https://chat.openai.com',
+    'descr' => 'OpenAI 的对话助手',
     'icon' => '',
     'sort' => 5,
   ),
@@ -277,6 +283,24 @@ function hp_seed_links(): array
   ),
   22 => 
   array (
+    'g' => '云服务',
+    'title' => 'Gmail',
+    'url' => 'https://mail.google.com/mail/u/0/#inbox',
+    'descr' => '',
+    'icon' => '',
+    'sort' => 1,
+  ),
+  23 => 
+  array (
+    'g' => '云服务',
+    'title' => 'Mass VPS hosting on Enterprise equipment',
+    'url' => 'https://bandwagonhost.com/',
+    'descr' => 'Inexpensive VPS hosting on premium hardware with RAID-10 SAS disks and E5 CPUs. Premium Gigabit bandwidth.',
+    'icon' => '',
+    'sort' => 2,
+  ),
+  24 => 
+  array (
     'g' => '资讯',
     'title' => '百度贴吧',
     'url' => 'https://tieba.baidu.com',
@@ -284,7 +308,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  23 => 
+  25 => 
   array (
     'g' => '资讯',
     'title' => 'V2EX',
@@ -293,7 +317,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  24 => 
+  26 => 
   array (
     'g' => '资讯',
     'title' => '36Kr',
@@ -302,7 +326,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  25 => 
+  27 => 
   array (
     'g' => '资讯',
     'title' => '少数派 - 高效工作，品质生活',
@@ -311,7 +335,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  26 => 
+  28 => 
   array (
     'g' => '资讯',
     'title' => '今日头条',
@@ -320,7 +344,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 5,
   ),
-  27 => 
+  29 => 
   array (
     'g' => '资讯',
     'title' => '虎嗅网',
@@ -329,7 +353,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 6,
   ),
-  28 => 
+  30 => 
   array (
     'g' => '资讯',
     'title' => '东方财富网：财经门户，提供专业的财经、股票、行情、证券、基金、理财、银行、保险、',
@@ -338,7 +362,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 7,
   ),
-  29 => 
+  31 => 
   array (
     'g' => '资讯',
     'title' => '雪球 - 聪明的投资者都在这里',
@@ -347,7 +371,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 8,
   ),
-  30 => 
+  32 => 
   array (
     'g' => '资讯',
     'title' => '果壳 科技有意思',
@@ -356,7 +380,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 9,
   ),
-  31 => 
+  33 => 
   array (
     'g' => '资讯',
     'title' => '煎蛋 - 地球上没有新鲜事',
@@ -365,7 +389,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 10,
   ),
-  32 => 
+  34 => 
   array (
     'g' => 'AI 工具',
     'title' => '豆包 - 字节跳动旗下 AI 智能助手',
@@ -374,7 +398,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  33 => 
+  35 => 
   array (
     'g' => 'AI 工具',
     'title' => '即梦AI - 即刻造梦',
@@ -383,7 +407,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  34 => 
+  36 => 
   array (
     'g' => 'AI 工具',
     'title' => 'Kimi AI 官网：K3.1 Pro 上线，编程与智能体任务全面升级',
@@ -392,7 +416,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  35 => 
+  37 => 
   array (
     'g' => 'AI 工具',
     'title' => 'Perplexity Ai',
@@ -401,7 +425,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  36 => 
+  38 => 
   array (
     'g' => 'AI 工具',
     'title' => '‎Google Gemini',
@@ -410,7 +434,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 5,
   ),
-  37 => 
+  39 => 
   array (
     'g' => 'AI 工具',
     'title' => 'App unavailable in region',
@@ -419,7 +443,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 6,
   ),
-  38 => 
+  40 => 
   array (
     'g' => '开发',
     'title' => 'Cloudflare: Build for the agent era',
@@ -428,7 +452,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  39 => 
+  41 => 
   array (
     'g' => '开发',
     'title' => 'Docker Hub Container Image Library | App',
@@ -437,7 +461,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  40 => 
+  42 => 
   array (
     'g' => '开发',
     'title' => '阮一峰的网络日志',
@@ -446,7 +470,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  41 => 
+  43 => 
   array (
     'g' => '开发',
     'title' => '1Panel',
@@ -455,7 +479,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  42 => 
+  44 => 
   array (
     'g' => '开发',
     'title' => '菜鸟教程',
@@ -464,7 +488,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 5,
   ),
-  43 => 
+  45 => 
   array (
     'g' => '游戏',
     'title' => 'Taptap',
@@ -473,7 +497,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  44 => 
+  46 => 
   array (
     'g' => '游戏',
     'title' => 'Welcome to Steam',
@@ -482,7 +506,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  45 => 
+  47 => 
   array (
     'g' => '游戏',
     'title' => '游民星空',
@@ -491,7 +515,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  46 => 
+  48 => 
   array (
     'g' => '游戏',
     'title' => 'NGA玩家社区',
@@ -500,7 +524,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  47 => 
+  49 => 
   array (
     'g' => '生活',
     'title' => '携程旅行网:酒店预订,机票预订查询,旅游度假,商旅管理',
@@ -509,7 +533,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  48 => 
+  50 => 
   array (
     'g' => '生活',
     'title' => '酷安网',
@@ -518,7 +542,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  49 => 
+  51 => 
   array (
     'g' => '生活',
     'title' => '中国铁路12306网站',
@@ -527,7 +551,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  50 => 
+  52 => 
   array (
     'g' => '生活',
     'title' => '飞机票查询',
@@ -536,7 +560,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  51 => 
+  53 => 
   array (
     'g' => '生活',
     'title' => '机票查询预订，酒店预订，旅游团购，度假搜索，门票预订',
@@ -545,7 +569,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 5,
   ),
-  52 => 
+  54 => 
   array (
     'g' => '生活',
     'title' => 'Apple',
@@ -554,7 +578,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 6,
   ),
-  53 => 
+  55 => 
   array (
     'g' => '生活',
     'title' => '爱范儿',
@@ -563,7 +587,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 7,
   ),
-  54 => 
+  56 => 
   array (
     'g' => '效率',
     'title' => '飞书文档-可多人实时编辑的在线文档高效协同办公软件',
@@ -572,7 +596,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  55 => 
+  57 => 
   array (
     'g' => '效率',
     'title' => '腾讯文档',
@@ -581,7 +605,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  56 => 
+  58 => 
   array (
     'g' => '效率',
     'title' => '石墨文档官网',
@@ -590,7 +614,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  57 => 
+  59 => 
   array (
     'g' => '效率',
     'title' => '163网易免费邮-你的专业电子邮局',
@@ -599,7 +623,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  58 => 
+  60 => 
   array (
     'g' => '效率',
     'title' => 'Accounts Google',
@@ -608,7 +632,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 5,
   ),
-  59 => 
+  61 => 
   array (
     'g' => '效率',
     'title' => '腾讯会议官方——腾讯会议 会开会',
@@ -617,7 +641,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 6,
   ),
-  60 => 
+  62 => 
   array (
     'g' => '效率',
     'title' => '语雀，为每一个人提供优秀的文档和知识库工具 · 语雀',
@@ -626,7 +650,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 7,
   ),
-  61 => 
+  63 => 
   array (
     'g' => '效率',
     'title' => 'TinyPNG',
@@ -635,7 +659,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 8,
   ),
-  62 => 
+  64 => 
   array (
     'g' => '小说',
     'title' => 'Qidian',
@@ -644,7 +668,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 1,
   ),
-  63 => 
+  65 => 
   array (
     'g' => '小说',
     'title' => '小说,番茄小说网_好看的小说尽在番茄小说官网',
@@ -653,7 +677,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 2,
   ),
-  64 => 
+  66 => 
   array (
     'g' => '小说',
     'title' => '七猫中文网-全本免费小说-免费小说排行榜',
@@ -662,7 +686,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 3,
   ),
-  65 => 
+  67 => 
   array (
     'g' => '小说',
     'title' => '微信读书',
@@ -671,7 +695,7 @@ function hp_seed_links(): array
     'icon' => '',
     'sort' => 4,
   ),
-  66 => 
+  68 => 
   array (
     'g' => '小说',
     'title' => '刺猬猫阅读',

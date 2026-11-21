@@ -203,21 +203,12 @@ function safe_url(string $url): ?string
     if (isset($p['user']) || isset($p['pass'])) {
         return null;
     }
-    $host = strtolower($p['host']);
-    /* 只挡内网 / 回环 / 链路本地，公网 IP 放行。
-       一刀切拒绝所有 IP 会误伤正常需求 —— 自建服务、NAS、路由器后台
-       很多就是 https://1.2.3.4:8000/ 这种写法，它跟 SSRF 没关系：
-       加一条链接不会让服务器去访问任何东西。
-       真正的 SSRF 防护在 MetaFetcher::isPublicUrl()，那里会把域名
-       先解析成 IP 再判一次私网，比这里只看字面 host 严得多。 */
-    if (filter_var($host, FILTER_VALIDATE_IP)) {
-        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            return null;
-        }
-    } elseif (!str_contains($host, '.')) {
-        // 没有点又不是 IP：nas、intranet 这类内网短名，直接拒
-        return null;
-    }
+    /* 这里只做「字符串 → 合法 URL」的格式校验，不判断目标在不在公网。
+       内网 IP（10.x / 192.168.x）、NAS、路由器后台、无点短名都是导航站
+       的正常收藏；收藏一条链接不会让服务器去访问它。
+       真正会发请求的只有 MetaFetcher::fetch()，它每一跳都过
+       isPublicUrl()（含 302 重定向与 DNS rebinding 的 IP 钉死），
+       SSRF 在那儿挡，比这里只看字面 host 严得多。 */
     return $url;
 }
 

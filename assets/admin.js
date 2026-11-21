@@ -158,6 +158,52 @@
     $('#newLinkBtn2')?.addEventListener('click', () => $('#newLinkBtn')?.click());
     $('#cancelEdit')?.addEventListener('click', () => { editor.hidden = true; });
 
+    // 分组展开/收回：默认展开，点标题行左侧箭头切换整组可见性
+    $('#admList')?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-grp-fold]');
+      if (!btn) return;
+      const group = btn.closest('.adm-list-group');
+      if (!group) return;
+      const collapsed = group.classList.toggle('is-collapsed');
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.title = collapsed ? '展开本组' : '收回本组';
+      btn.setAttribute('aria-label', (collapsed ? '展开「' : '收回「')
+        + (group.querySelector('.adm-list-name')?.textContent || '分组') + '」');
+    });
+
+    // 右侧分组导航：点击平滑滚动到对应分组；滚动时高亮当前分组
+    const rail = $('#groupRail');
+    if (rail) {
+      rail.addEventListener('click', e => {
+        const a = e.target.closest('[data-grp-jump]');
+        if (!a) return;
+        e.preventDefault();
+        const target = document.getElementById('grp-' + a.dataset.grpJump);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $$('.agr-item', rail).forEach(n => n.classList.toggle('is-current', n === a));
+      });
+      // 滚动高亮：找出顶部最接近视口上沿的那个分组
+      const groups = $$('#admList .adm-list-group');
+      let ticking = false;
+      const highlight = () => {
+        ticking = false;
+        let current = null;
+        for (const g of groups) {
+          if (g.getBoundingClientRect().top <= 140) current = g;
+          else break;
+        }
+        if (!current && groups.length) current = groups[0];
+        const gid = current ? current.dataset.groupId : null;
+        $$('.agr-item', rail).forEach(n => n.classList.toggle('is-current', n.dataset.grpJump === gid));
+      };
+      window.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(highlight);
+      }, { passive: true });
+      highlight();
+    }
+
     // 行内按钮：编辑 / 删除 / 排序 / 隐藏开关
     $('#admList')?.addEventListener('click', async e => {
       const btn = e.target.closest('[data-act]');
@@ -921,7 +967,7 @@
       const total = Number(panel?.querySelector('.mr-stat b')?.textContent || 0) || 0;
       let cursor = 0;
       let doneCount = 0;
-      let okSum = 0, badSum = 0, changedSum = 0;
+      let okSum = 0, badSum = 0, changedSum = 0, skippedSum = 0;
       const errLines = [];
 
       progWrap.hidden = false;
@@ -944,6 +990,7 @@
           okSum      += x.ok || 0;
           badSum     += x.bad || 0;
           changedSum += x.changed || 0;
+          skippedSum += x.skipped || 0;
           cursor = x.cursor || cursor;
 
           if (x.errors && typeof x.errors === 'object') {
@@ -966,7 +1013,7 @@
         }
 
         barFill.style.width = '100%';
-        statusEl.textContent = `完成：成功 ${okSum} 条（其中 ${changedSum} 条有更新），失败 ${badSum} 条`;
+        statusEl.textContent = `完成：成功 ${okSum} 条（${changedSum} 条有更新${skippedSum ? '，' + skippedSum + ' 条本就齐全' : ''}），失败 ${badSum} 条`;
         toast(`刷新完成：${changedSum} 条有更新${badSum ? '，' + badSum + ' 条失败' : ''}`);
 
         if (errLines.length) {
@@ -974,10 +1021,11 @@
         }
 
         /* 刷完要让列表里的标题/图标跟着变，直接重载最省事。
-           重载会把面板收回收起态，所以把结论存一下、重载后还原，
-           否则「成功几条、失败几条」只在 900ms 里闪一下就没了。 */
+           结论已经存进 sessionStorage、重载后会原样搬回来并自动展开
+           （见上面的 vnavMrResult），不必为了「让用户看一眼」在这里干等 ——
+           900ms 纯延时直接缩到 200ms，两个按钮都快了近一秒。 */
         try { sessionStorage.setItem('vnavMrResult', statusEl.textContent); } catch {}
-        setTimeout(() => location.reload(), 900);
+        setTimeout(() => location.reload(), 200);
       } catch (err) {
         /* 出错时不清进度条、不改已处理的数字 ——
            用户能看到「跑到第几条挂的」，而不是一片空白。 */

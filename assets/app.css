@@ -1030,12 +1030,14 @@ html[data-gnav='tab'] .group { margin-bottom: 0; }
   transition: transform .22s var(--ease-out), border-color .22s, background .22s, box-shadow .22s;
   overflow: hidden;
 }
-/* 悬停时左上角透出一层强调色，不抢标题的可读性 */
+/* 悬停时左上角透出一层中性灰，不抢标题的可读性。
+   原先用的是强调色（默认蓝），跟整体灰度配色不搭；改用固定灰，
+   明暗皮肤下都是灰调，也不再随用户换强调色而变色。 */
 .link::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--acc-glow) / .14), transparent 62%);
+  background: radial-gradient(120% 100% at 0% 0%, rgba(122, 124, 130, .16), transparent 62%);
   opacity: 0;
   transition: opacity .26s;
   pointer-events: none;
